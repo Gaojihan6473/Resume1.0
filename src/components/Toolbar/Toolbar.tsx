@@ -238,7 +238,7 @@ export function Toolbar({ previewRef }: ToolbarProps) {
   const iconSize = 'w-3.5 h-3.5'
 
   return (
-    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center px-3 gap-2 shadow-sm">
+    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center px-3 gap-2 shadow-sm relative z-10">
       <div className="flex items-center gap-2 pr-3 border-r border-slate-200 mr-2 shrink-0">
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-sm">
           <Fish className="w-4 h-4 text-white" />
