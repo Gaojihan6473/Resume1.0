@@ -5,8 +5,10 @@ import { buildRichHtmlFromLines } from '../utils/richText'
 export async function parseFile(
   file: File,
   useAI: boolean = false,
-  apiKey: string = ''
+  apiKey: string = '',
+  signal?: AbortSignal
 ): Promise<ParsedResult> {
+  throwIfAborted(signal)
   const logs: string[] = []
   logs.push(`[parser] start: ${file.name}`)
   logs.push(`[parser] file size: ${file.size} bytes`)
@@ -15,13 +17,14 @@ export async function parseFile(
   logs.push(`[parser] api key provided: ${Boolean(apiKey?.trim())}`)
 
   const rawText = await extractText(file)
+  throwIfAborted(signal)
   logs.push(`[extract] text length: ${rawText.length}`)
   logs.push(`[extract] text preview: ${rawText.slice(0, 120).replace(/\s+/g, ' ') || '(empty)'}`)
 
   if (useAI && apiKey) {
     try {
       logs.push('[ai] request start')
-      const data = await parseByAI(rawText, apiKey)
+      const data = await parseByAI(rawText, apiKey, signal)
       logs.push('[ai] parse success')
       logs.push(
         `[result] sections: edu=${data.education?.length || 0}, intern=${data.internships?.length || 0}, proj=${data.projects?.length || 0}`
@@ -44,6 +47,7 @@ export async function parseFile(
   }
 
   logs.push('[rule] parser start')
+  throwIfAborted(signal)
   const { parseByRules } = await import('./ruleParser')
   const data = parseByRules(rawText)
   logs.push('[rule] parse completed')
@@ -153,10 +157,11 @@ function parseAiJson(content: string): ResumeData {
   throw lastError instanceof Error ? lastError : new Error('Failed to parse AI JSON.')
 }
 
-async function repairJsonByAI(rawContent: string, apiKey: string): Promise<string> {
+async function repairJsonByAI(rawContent: string, apiKey: string, signal?: AbortSignal): Promise<string> {
   const minimaxUrl = 'https://api.minimaxi.com/v1/chat/completions'
   const response = await fetch(minimaxUrl, {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey.trim()}`,
@@ -192,7 +197,8 @@ async function repairJsonByAI(rawContent: string, apiKey: string): Promise<strin
   return content
 }
 
-async function parseByAI(rawText: string, apiKey: string): Promise<ResumeData> {
+async function parseByAI(rawText: string, apiKey: string, signal?: AbortSignal): Promise<ResumeData> {
+  throwIfAborted(signal)
   const normalizedApiKey = apiKey.trim()
   const minimaxUrl = 'https://api.minimaxi.com/v1/chat/completions'
 
@@ -311,6 +317,7 @@ ${rawText.slice(0, 12000)}`
 
   const response = await fetch(minimaxUrl, {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${normalizedApiKey}`,
@@ -349,7 +356,7 @@ ${rawText.slice(0, 12000)}`
   try {
     parsed = parseAiJson(content)
   } catch {
-    const repaired = await repairJsonByAI(content, normalizedApiKey)
+    const repaired = await repairJsonByAI(content, normalizedApiKey, signal)
     parsed = parseAiJson(repaired)
   }
 
@@ -375,6 +382,12 @@ ${rawText.slice(0, 12000)}`
 
   fillSummaryFallbackFromRaw(safeData, rawText)
   return safeData
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new Error('Parse cancelled')
+  }
 }
 
 function fillSummaryFallbackFromRaw(data: ResumeData, rawText: string) {

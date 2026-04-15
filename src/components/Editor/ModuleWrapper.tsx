@@ -19,14 +19,16 @@ export function ModuleWrapper({
   const [isHovered, setIsHovered] = useState(false)
 
   return (
-    <div className="border border-gray-100 rounded-xl overflow-hidden mb-3 shadow-sm transition-shadow duration-200 hover:shadow-md">
+    <div
+      className="border border-gray-200 rounded-xl overflow-hidden mb-3 shadow-sm transition-all duration-200 hover:shadow-md"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div
         className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isHovered ? 'bg-gray-50' : 'bg-white'
+          isHovered ? 'bg-gray-50/80' : 'bg-white'
         }`}
         onClick={() => setExpanded(!expanded)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
         <div className="flex items-center gap-2.5">
           <div
@@ -54,7 +56,7 @@ export function ModuleWrapper({
           expanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
-        <div className="p-4 bg-gray-50/80">{children}</div>
+        <div className="p-4 bg-gray-50/50">{children}</div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
-﻿import type { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
-import type { StyleSettings } from '../../types/resume'
+import type { SectionId, StyleSettings } from '../../types/resume'
 import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
@@ -18,7 +18,7 @@ interface PreviewContentProps {
 
 export function PreviewContent({ style }: PreviewContentProps) {
   const { resumeData } = useResumeStore()
-  const { basic, education, internships, projects, summary, skills } = resumeData
+  const { basic, education, internships, projects, summary, skills, sectionOrder } = resumeData
 
   const fontFamily = FONT_FAMILIES[style.fontFamily]
   const bodyFontSize = style.fontSize
@@ -34,6 +34,140 @@ export function PreviewContent({ style }: PreviewContentProps) {
   const headerLineGapBottomPx = Math.max(1, Math.round(tightSpacingPx * 0.6))
   const bodyLetterSpacingPx = style.letterSpacing ?? 0
   const horizontalPaddingPx = Math.max(0, Math.round(style.pageHorizontalPadding ?? style.pagePadding))
+
+  const sectionProps = { titleFontSize, titleLineHeightPx, sectionSpacingPx: paragraphSpacingPx, tightSpacingPx, dividerToBodySpacingPx, bodyFontSize, style }
+
+  const sectionComponents: Record<SectionId, ReactNode> = {
+    education: education.length > 0 ? (
+      <Section key="education" title="教育经历" {...sectionProps}>
+        {education.map((edu) => (
+          <div key={edu.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
+            <div className="flex justify-between items-baseline gap-3">
+              <span className="font-medium">{edu.school}</span>
+              <span>{edu.startDate} - {edu.endDate}</span>
+            </div>
+            <div>
+              {edu.major}
+              {edu.degree && ` | ${edu.degree}`}
+              {edu.gpa && ` | GPA: ${edu.gpa}`}
+            </div>
+            {edu.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{edu.description}</div>}
+          </div>
+        ))}
+      </Section>
+    ) : null,
+
+    internships: internships.length > 0 ? (
+      <Section key="internships" title="实习经历" {...sectionProps}>
+        {internships.map((intern) => (
+          <div key={intern.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
+            <div className="flex justify-between items-baseline gap-3">
+              <span className="font-bold">{intern.company}</span>
+              <span>{intern.startDate} - {intern.endDate}</span>
+            </div>
+            <div>
+              {intern.position}
+              {intern.department && ` | ${intern.department}`}
+              {intern.location && ` | ${intern.location}`}
+            </div>
+            {intern.content ? (
+              <div
+                className="rich-content"
+                style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${intern.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
+                dangerouslySetInnerHTML={{ __html: intern.content }}
+              />
+            ) : (
+              intern.projects.map((proj) => (
+                <div key={proj.id} style={{ marginTop: `${tightSpacingPx}px` }}>
+                  {proj.title && <div className="font-medium">{proj.title}</div>}
+                  {proj.description && <div>{proj.description}</div>}
+                  {proj.bullets.length > 0 && (
+                    <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                      {proj.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+                    </ul>
+                  )}
+                  {proj.achievements.length > 0 && (
+                    <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        ))}
+      </Section>
+    ) : null,
+
+    projects: projects.length > 0 ? (
+      <Section key="projects" title="项目经历" {...sectionProps}>
+        {projects.map((proj) => (
+          <div key={proj.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
+            <div className="flex justify-between items-baseline gap-3">
+              <span className="font-bold">{proj.name}</span>
+              <span>{proj.startDate} - {proj.endDate}</span>
+            </div>
+            {proj.role && <div>{proj.role}</div>}
+            {proj.content ? (
+              <div
+                className="rich-content"
+                style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${proj.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
+                dangerouslySetInnerHTML={{ __html: proj.content }}
+              />
+            ) : (
+              <>
+                {proj.background && <div>{proj.background}</div>}
+                {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.description}</div>}
+                {proj.bullets.length > 0 && (
+                  <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                    {proj.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+                  </ul>
+                )}
+                {proj.achievements.length > 0 && (
+                  <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </Section>
+    ) : null,
+
+    summary: (summary.content || summary.text || summary.highlights.length > 0) ? (
+      <Section key="summary" title="个人总结" {...sectionProps}>
+        {summary.content ? (
+          <div
+            className="rich-content"
+            style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${summary.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((summary.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
+            dangerouslySetInnerHTML={{ __html: summary.content }}
+          />
+        ) : summary.mode === 'highlights' ? (
+          <ul className="list-disc list-inside space-y-0.5">
+            {summary.highlights.map((item, index) => <li key={index}>{item}</li>)}
+          </ul>
+        ) : (
+          <p className="whitespace-pre-wrap">{summary.text}</p>
+        )}
+      </Section>
+    ) : null,
+
+    skills: (skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0) ? (
+      <Section key="skills" title="技能证书" {...sectionProps}>
+        <div className="space-y-0.5">
+          {skills.technical.length > 0 && (
+            <div><span className="font-medium">技术技能：</span>{skills.technical.join('、')}</div>
+          )}
+          {skills.languages.length > 0 && (
+            <div><span className="font-medium">语言能力：</span>{skills.languages.join('、')}</div>
+          )}
+          {skills.certificates.length > 0 && (
+            <div><span className="font-medium">证书资格：</span>{skills.certificates.join('、')}</div>
+          )}
+          {skills.interests.length > 0 && (
+            <div><span className="font-medium">兴趣爱好：</span>{skills.interests.join('、')}</div>
+          )}
+        </div>
+      </Section>
+    ) : null,
+  }
 
   return (
     <div
@@ -56,260 +190,24 @@ export function PreviewContent({ style }: PreviewContentProps) {
             <h1 className="font-bold leading-tight" style={{ fontSize: style.fontSize * 1.7, letterSpacing: '0' }}>
               {basic.name || '姓名'}
             </h1>
-
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapTopPx}px` }}>
               {basic.phone && <span>{basic.phone}</span>}
-              {basic.email && (
-                <>
-                  {basic.phone && <span>|</span>}
-                  <span>{basic.email}</span>
-                </>
-              )}
-              {basic.location && (
-                <>
-                  {(basic.phone || basic.email) && <span>|</span>}
-                  <span>{basic.location}</span>
-                </>
-              )}
+              {basic.email && <>{basic.phone && <span>|</span>}<span>{basic.email}</span></>}
+              {basic.location && <>{((basic.phone || basic.email)) && <span>|</span>}<span>{basic.location}</span></>}
             </div>
-
-            <div
-              className="flex flex-wrap items-center gap-x-2 gap-y-1"
-              style={{ marginTop: `${headerLineGapBottomPx}px` }}
-            >
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapBottomPx}px` }}>
               {basic.targetTitle && <span>{basic.targetTitle}</span>}
-              {basic.targetLocation && (
-                <>
-                  {basic.targetTitle && <span>|</span>}
-                  <span>{basic.targetLocation}</span>
-                </>
-              )}
+              {basic.targetLocation && <>{basic.targetTitle && <span>|</span>}<span>{basic.targetLocation}</span></>}
             </div>
           </div>
-
           <div className="w-[65px] h-[81px] self-center shrink-0 flex items-center justify-center overflow-hidden">
-            <img
-              src={basic.avatarUrl || templateAvatar}
-              alt="头像"
-              className="block w-auto h-auto max-w-full max-h-full object-contain"
-            />
+            <img src={basic.avatarUrl || templateAvatar} alt="头像" className="block w-auto h-auto max-w-full max-h-full object-contain" />
           </div>
         </div>
       </div>
 
-      {education.length > 0 && (
-        <Section
-          title="教育经历"
-          titleFontSize={titleFontSize}
-          titleLineHeightPx={titleLineHeightPx}
-          sectionSpacingPx={paragraphSpacingPx}
-          tightSpacingPx={tightSpacingPx}
-          dividerToBodySpacingPx={dividerToBodySpacingPx}
-        >
-          {education.map((edu) => (
-            <div key={edu.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-              <div className="flex justify-between items-baseline gap-3">
-                <span className="font-medium">{edu.school}</span>
-                <span>
-                  {edu.startDate} - {edu.endDate}
-                </span>
-              </div>
-              <div>
-                {edu.major}
-                {edu.degree && ` | ${edu.degree}`}
-                {edu.gpa && ` | GPA: ${edu.gpa}`}
-              </div>
-              {edu.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{edu.description}</div>}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {internships.length > 0 && (
-        <Section
-          title="实习经历"
-          titleFontSize={titleFontSize}
-          titleLineHeightPx={titleLineHeightPx}
-          sectionSpacingPx={paragraphSpacingPx}
-          tightSpacingPx={tightSpacingPx}
-          dividerToBodySpacingPx={dividerToBodySpacingPx}
-        >
-          {internships.map((intern) => (
-            <div key={intern.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-              <div className="flex justify-between items-baseline gap-3">
-                <span className="font-bold">{intern.company}</span>
-                <span>
-                  {intern.startDate} - {intern.endDate}
-                </span>
-              </div>
-              <div>
-                {intern.position}
-                {intern.department && ` | ${intern.department}`}
-                {intern.location && ` | ${intern.location}`}
-              </div>
-
-              {intern.content ? (
-                <div
-                  className="rich-content"
-                  style={{
-                    marginTop: `${dividerToBodySpacingPx}px`,
-                    fontSize: `${intern.contentFontSize || bodyFontSize}px`,
-                    lineHeight: `${Math.max(
-                      1,
-                      Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight)
-                    )}px`,
-                  }}
-                  dangerouslySetInnerHTML={{ __html: intern.content }}
-                />
-              ) : (
-                intern.projects.map((proj) => (
-                  <div key={proj.id} style={{ marginTop: `${tightSpacingPx}px` }}>
-                    {proj.title && <div className="font-medium">{proj.title}</div>}
-                    {proj.description && <div>{proj.description}</div>}
-                    {proj.bullets.length > 0 && (
-                      <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                        {proj.bullets.map((bullet, index) => (
-                          <li key={index}>{bullet}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {proj.achievements.length > 0 && (
-                      <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {projects.length > 0 && (
-        <Section
-          title="项目经历"
-          titleFontSize={titleFontSize}
-          titleLineHeightPx={titleLineHeightPx}
-          sectionSpacingPx={paragraphSpacingPx}
-          tightSpacingPx={tightSpacingPx}
-          dividerToBodySpacingPx={dividerToBodySpacingPx}
-        >
-          {projects.map((proj) => (
-            <div key={proj.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-              <div className="flex justify-between items-baseline gap-3">
-                <span className="font-bold">{proj.name}</span>
-                <span>
-                  {proj.startDate} - {proj.endDate}
-                </span>
-              </div>
-              {proj.role && <div>{proj.role}</div>}
-
-              {proj.content ? (
-                <div
-                  className="rich-content"
-                  style={{
-                    marginTop: `${dividerToBodySpacingPx}px`,
-                    fontSize: `${proj.contentFontSize || bodyFontSize}px`,
-                    lineHeight: `${Math.max(
-                      1,
-                      Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight)
-                    )}px`,
-                  }}
-                  dangerouslySetInnerHTML={{ __html: proj.content }}
-                />
-              ) : (
-                <>
-                  {proj.background && <div>{proj.background}</div>}
-                  {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.description}</div>}
-                  {proj.bullets.length > 0 && (
-                    <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                      {proj.bullets.map((bullet, index) => (
-                        <li key={index}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {proj.achievements.length > 0 && (
-                    <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {(summary.content || summary.text || summary.highlights.length > 0) && (
-        <Section
-          title="个人总结"
-          titleFontSize={titleFontSize}
-          titleLineHeightPx={titleLineHeightPx}
-          sectionSpacingPx={paragraphSpacingPx}
-          tightSpacingPx={tightSpacingPx}
-          dividerToBodySpacingPx={dividerToBodySpacingPx}
-        >
-          {summary.content ? (
-            <div
-              className="rich-content"
-              style={{
-                marginTop: `${dividerToBodySpacingPx}px`,
-                fontSize: `${summary.contentFontSize || bodyFontSize}px`,
-                lineHeight: `${Math.max(
-                  1,
-                  Math.round((summary.contentFontSize || bodyFontSize) * style.lineHeight)
-                )}px`,
-              }}
-              dangerouslySetInnerHTML={{ __html: summary.content }}
-            />
-          ) : summary.mode === 'highlights' ? (
-            <ul className="list-disc list-inside space-y-0.5">
-              {summary.highlights.map((item, index) => (
-                <li key={index}>{item}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="whitespace-pre-wrap">{summary.text}</p>
-          )}
-        </Section>
-      )}
-
-      {(skills.technical.length > 0 ||
-        skills.languages.length > 0 ||
-        skills.certificates.length > 0 ||
-        skills.interests.length > 0) && (
-        <Section
-          title="技能证书"
-          titleFontSize={titleFontSize}
-          titleLineHeightPx={titleLineHeightPx}
-          sectionSpacingPx={paragraphSpacingPx}
-          tightSpacingPx={tightSpacingPx}
-          dividerToBodySpacingPx={dividerToBodySpacingPx}
-        >
-          <div className="space-y-0.5">
-            {skills.technical.length > 0 && (
-              <div>
-                <span className="font-medium">技术技能：</span>
-                {skills.technical.join('、')}
-              </div>
-            )}
-            {skills.languages.length > 0 && (
-              <div>
-                <span className="font-medium">语言能力：</span>
-                {skills.languages.join('、')}
-              </div>
-            )}
-            {skills.certificates.length > 0 && (
-              <div>
-                <span className="font-medium">证书资格：</span>
-                {skills.certificates.join('、')}
-              </div>
-            )}
-            {skills.interests.length > 0 && (
-              <div>
-                <span className="font-medium">兴趣爱好：</span>
-                {skills.interests.join('、')}
-              </div>
-            )}
-          </div>
-        </Section>
+      {(sectionOrder || ['education', 'internships', 'projects', 'summary', 'skills']).map((sectionId) =>
+        sectionComponents[sectionId as SectionId]
       )}
     </div>
   )
@@ -334,26 +232,10 @@ function Section({
 }) {
   return (
     <div style={{ marginBottom: `${sectionSpacingPx}px` }}>
-      <h2
-        className="font-bold"
-        style={{
-          marginBottom: `${tightSpacingPx}px`,
-          fontSize: `${titleFontSize}px`,
-          letterSpacing: '0',
-          lineHeight: `${titleLineHeightPx}px`,
-          color: SECTION_TITLE_COLOR,
-        }}
-      >
+      <h2 className="font-bold" style={{ marginBottom: `${tightSpacingPx}px`, fontSize: `${titleFontSize}px`, letterSpacing: '0', lineHeight: `${titleLineHeightPx}px`, color: SECTION_TITLE_COLOR }}>
         {title}
       </h2>
-      <div
-        data-section-divider="1"
-        style={{
-          marginBottom: `${dividerToBodySpacingPx}px`,
-          height: 0,
-          borderTop: `1px solid ${SECTION_DIVIDER_COLOR}`,
-        }}
-      />
+      <div data-section-divider="1" style={{ marginBottom: `${dividerToBodySpacingPx}px`, height: 0, borderTop: `1px solid ${SECTION_DIVIDER_COLOR}` }} />
       {children}
     </div>
   )

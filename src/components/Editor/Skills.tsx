@@ -1,5 +1,5 @@
 import { useResumeStore } from '../../store/resumeStore'
-import { ModuleWrapper } from './ModuleWrapper'
+import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { X, Code, Globe, Award, Heart } from 'lucide-react'
 
 function TagInput({
@@ -64,7 +64,7 @@ export function SkillsEditor() {
   const { skills } = resumeData
 
   return (
-    <ModuleWrapper title="技能与其他">
+    <SortableModuleWrapper id="skills" title="技能与其他">
       <div className="grid grid-cols-2 gap-5">
         <TagInput
           label="技术技能"
@@ -98,6 +98,6 @@ export function SkillsEditor() {
           color="bg-pink-50 text-pink-500"
         />
       </div>
-    </ModuleWrapper>
+    </SortableModuleWrapper>
   )
 }

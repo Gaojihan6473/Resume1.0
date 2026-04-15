@@ -1,4 +1,4 @@
-﻿export interface BasicInfo {
+export interface BasicInfo {
   name: string
   phone: string
   email: string
@@ -83,6 +83,8 @@ export interface StyleSettings {
   letterSpacing: number
 }
 
+export type SectionId = 'education' | 'internships' | 'projects' | 'summary' | 'skills'
+
 export interface ResumeData {
   basic: BasicInfo
   education: EducationItem[]
@@ -91,6 +93,7 @@ export interface ResumeData {
   summary: Summary
   skills: Skills
   style: StyleSettings
+  sectionOrder: SectionId[]
 }
 
 export interface ParsedResult {
@@ -117,11 +120,13 @@ export interface AppState {
   updateEducation: (id: string, item: Partial<EducationItem>) => void
   removeEducation: (id: string) => void
   moveEducation: (id: string, direction: 'up' | 'down') => void
+  reorderEducation: (fromIndex: number, toIndex: number) => void
 
   addInternship: () => void
   updateInternship: (id: string, item: Partial<InternshipItem>) => void
   removeInternship: (id: string) => void
   moveInternship: (id: string, direction: 'up' | 'down') => void
+  reorderInternship: (fromIndex: number, toIndex: number) => void
   addInternshipProject: (internshipId: string) => void
   updateInternshipProject: (internshipId: string, projectId: string, project: Partial<ProjectDetail>) => void
   removeInternshipProject: (internshipId: string, projectId: string) => void
@@ -130,9 +135,11 @@ export interface AppState {
   updateProject: (id: string, item: Partial<ProjectItem>) => void
   removeProject: (id: string) => void
   moveProject: (id: string, direction: 'up' | 'down') => void
+  reorderProject: (fromIndex: number, toIndex: number) => void
 
   updateSummary: (summary: Partial<Summary>) => void
   updateSkills: (skills: Partial<Skills>) => void
+  reorderSections: (fromIndex: number, toIndex: number) => void
 
   updateStyle: (style: Partial<StyleSettings>) => void
   resetStyle: () => void
@@ -145,6 +152,7 @@ export interface AppState {
   setIsAIEnabled: (enabled: boolean) => void
 
   parseFile: (file: File) => Promise<void>
+  cancelParse: () => void
   resetAll: () => void
 }
 
@@ -184,4 +192,5 @@ export const createDefaultResumeData = (): ResumeData => ({
     pageHorizontalPadding: 24,
     letterSpacing: 0,
   },
+  sectionOrder: ['education', 'internships', 'projects', 'summary', 'skills'],
 })

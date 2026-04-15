@@ -168,5 +168,6 @@ export function applyReferenceTemplate(data: ResumeData): ResumeData {
       interests: cleanList(data.skills.interests),
     },
     style: REFERENCE_STYLE,
+    sectionOrder: data.sectionOrder || ['education', 'internships', 'projects', 'summary', 'skills'],
   }
 }

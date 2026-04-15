@@ -4,6 +4,9 @@ import type { AppState } from '../types/resume'
 import { createDefaultResumeData } from '../types/resume'
 import { applyReferenceTemplate } from '../utils/template'
 
+let activeParseController: AbortController | null = null
+let parseRunId = 0
+
 export const useResumeStore = create<AppState>((set, get) => ({
   resumeData: createDefaultResumeData(),
   parseStatus: 'idle',
@@ -30,7 +33,6 @@ export const useResumeStore = create<AppState>((set, get) => ({
       resumeData: {
         ...state.resumeData,
         education: [
-          ...state.resumeData.education,
           {
             id: uuidv4(),
             school: '',
@@ -44,6 +46,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             description: '',
             gpa: '',
           },
+          ...state.resumeData.education,
         ],
       },
     })),
@@ -79,12 +82,20 @@ export const useResumeStore = create<AppState>((set, get) => ({
       }
     }),
 
+  reorderEducation: (fromIndex, toIndex) =>
+    set((state) => {
+      const items = [...state.resumeData.education]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
+      const [removed] = items.splice(fromIndex, 1)
+      items.splice(toIndex, 0, removed)
+      return { resumeData: { ...state.resumeData, education: items } }
+    }),
+
   addInternship: () =>
     set((state) => ({
       resumeData: {
         ...state.resumeData,
         internships: [
-          ...state.resumeData.internships,
           {
             id: uuidv4(),
             company: '',
@@ -97,6 +108,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             content: '',
             contentFontSize: 10,
           },
+          ...state.resumeData.internships,
         ],
       },
     })),
@@ -130,6 +142,15 @@ export const useResumeStore = create<AppState>((set, get) => ({
       return {
         resumeData: { ...state.resumeData, internships: items },
       }
+    }),
+
+  reorderInternship: (fromIndex, toIndex) =>
+    set((state) => {
+      const items = [...state.resumeData.internships]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
+      const [removed] = items.splice(fromIndex, 1)
+      items.splice(toIndex, 0, removed)
+      return { resumeData: { ...state.resumeData, internships: items } }
     }),
 
   addInternshipProject: (internshipId) =>
@@ -193,7 +214,6 @@ export const useResumeStore = create<AppState>((set, get) => ({
       resumeData: {
         ...state.resumeData,
         projects: [
-          ...state.resumeData.projects,
           {
             id: uuidv4(),
             name: '',
@@ -207,6 +227,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             content: '',
             contentFontSize: 10,
           },
+          ...state.resumeData.projects,
         ],
       },
     })),
@@ -242,6 +263,15 @@ export const useResumeStore = create<AppState>((set, get) => ({
       }
     }),
 
+  reorderProject: (fromIndex, toIndex) =>
+    set((state) => {
+      const items = [...state.resumeData.projects]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
+      const [removed] = items.splice(fromIndex, 1)
+      items.splice(toIndex, 0, removed)
+      return { resumeData: { ...state.resumeData, projects: items } }
+    }),
+
   updateSummary: (summary) =>
     set((state) => ({
       resumeData: {
@@ -249,6 +279,15 @@ export const useResumeStore = create<AppState>((set, get) => ({
         summary: { ...state.resumeData.summary, ...summary },
       },
     })),
+
+  reorderSections: (fromIndex, toIndex) =>
+    set((state) => {
+      const items = [...state.resumeData.sectionOrder]
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
+      const [removed] = items.splice(fromIndex, 1)
+      items.splice(toIndex, 0, removed)
+      return { resumeData: { ...state.resumeData, sectionOrder: items } }
+    }),
 
   updateSkills: (skills) =>
     set((state) => ({
@@ -282,13 +321,21 @@ export const useResumeStore = create<AppState>((set, get) => ({
   setIsAIEnabled: (enabled) => set({ isAIEnabled: enabled }),
 
   parseFile: async (file) => {
+    parseRunId += 1
+    const runId = parseRunId
+    if (activeParseController) {
+      activeParseController.abort()
+    }
+    const controller = new AbortController()
+    activeParseController = controller
     const startedAt = new Date().toISOString()
     set({ parseStatus: 'parsing', parseError: null })
     try {
       const { parseFile } = await import('../parsers')
-      const result = await parseFile(file, get().isAIEnabled, get().apiKey)
+      const result = await parseFile(file, get().isAIEnabled, get().apiKey, controller.signal)
+      if (runId !== parseRunId || controller.signal.aborted) return
       const endAt = new Date().toISOString()
-      const sectionLine = result.parseLog.find((line) => line.startsWith('[result] sections:'))
+      const sectionLine = result.parseLog.find((line: string) => line.startsWith('[result] sections:'))
       const summary = sectionLine ?? `text length=${result.rawText.length}`
       console.info(`[Resume Parser] success | file=${file.name} | ${summary} | start=${startedAt} | end=${endAt}`)
 
@@ -298,6 +345,9 @@ export const useResumeStore = create<AppState>((set, get) => ({
         parseStatus: 'success',
       })
     } catch (error) {
+      if (runId !== parseRunId || controller.signal.aborted) {
+        return
+      }
       const message = error instanceof Error ? error.message : 'Parse failed'
       console.groupCollapsed('[Resume Parser Debug]')
       console.debug(`[${startedAt}] Start parsing: ${file.name}`)
@@ -312,7 +362,20 @@ export const useResumeStore = create<AppState>((set, get) => ({
         parseError: message,
       })
       throw error
+    } finally {
+      if (runId === parseRunId) {
+        activeParseController = null
+      }
     }
+  },
+
+  cancelParse: () => {
+    parseRunId += 1
+    if (activeParseController) {
+      activeParseController.abort()
+      activeParseController = null
+    }
+    set({ parseStatus: 'idle', parseError: null })
   },
 
   resetAll: () =>

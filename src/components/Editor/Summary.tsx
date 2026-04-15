@@ -1,6 +1,6 @@
 ﻿import { useEffect } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
-import { ModuleWrapper } from './ModuleWrapper'
+import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { RichTextEditor } from './RichTextEditor'
 import { buildRichHtmlFromLines } from '../../utils/richText'
 
@@ -23,7 +23,7 @@ export function SummaryEditor() {
   }, [summary, updateSummary])
 
   return (
-    <ModuleWrapper title="个人总结">
+    <SortableModuleWrapper id="summary" title="个人总结">
       <div className="space-y-2">
         <label className="block text-xs text-gray-500">正文内容</label>
         <RichTextEditor
@@ -34,6 +34,6 @@ export function SummaryEditor() {
           placeholder="在这里输入个人总结，支持加粗、斜体、缩进、有序/无序列表。"
         />
       </div>
-    </ModuleWrapper>
+    </SortableModuleWrapper>
   )
 }

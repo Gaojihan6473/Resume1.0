@@ -506,6 +506,7 @@ export function parseByRules(rawText: string): ResumeData {
       interests: [],
     },
     style: DEFAULT_STYLE,
+    sectionOrder: ['education', 'internships', 'projects', 'summary', 'skills'],
   }
 
   data.basic = { ...data.basic, ...parseBasicInfo(cleanedText) }
