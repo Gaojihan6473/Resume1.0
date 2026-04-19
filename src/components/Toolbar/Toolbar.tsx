@@ -91,7 +91,7 @@ interface SelectProps {
 
 function Select({ value, options, onChange, icon, compact, label }: SelectProps) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -107,7 +107,7 @@ function Select({ value, options, onChange, icon, compact, label }: SelectProps)
   const handleOpen = () => {
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect()
-      setPos({ top: rect.bottom + 4, left: rect.left })
+      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
     }
     setOpen(!open)
   }
@@ -125,8 +125,8 @@ function Select({ value, options, onChange, icon, compact, label }: SelectProps)
       </button>
       {open && (
         <div
-          style={{ top: pos.top, left: pos.left }}
-          className="fixed py-1 bg-white rounded-xl border border-slate-200 shadow-xl z-[100] min-w-[80px] animate-in fade-in slide-in-from-top-1 duration-150"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
+          className="fixed py-1 bg-white rounded-xl border border-slate-200 shadow-xl z-[9999] animate-in fade-in slide-in-from-top-1 duration-150"
         >
           {options.map((opt) => (
             <button
@@ -317,7 +317,7 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar, onNavigateTo
   }
 
   return (
-    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center shadow-sm relative z-10 overflow-hidden min-w-0">
+    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center shadow-sm relative z-50 min-w-0">
       {/* 左侧 Logo - 固定不滚动 */}
       <div className="flex items-center gap-2 px-3 border-r border-slate-200 shrink-0">
         <button
