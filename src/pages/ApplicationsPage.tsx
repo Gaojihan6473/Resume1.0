@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Loader2, Fish, ChevronRight } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
@@ -10,6 +10,9 @@ import { toast } from '../components/Toast'
 import { ResumeSelector } from '../components/Application/ResumeSelector'
 import { ApplicationList } from '../components/Application/ApplicationList'
 import { ApplicationModal, type SaveData } from '../components/Application/ApplicationModal'
+import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
+import { JDParseModal } from '../components/Application/JDParseModal'
+import type { JDParsedResult } from '../types/application'
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
@@ -39,6 +42,32 @@ export function ApplicationsPage() {
   const [hasAppliedQuerySelection, setHasAppliedQuerySelection] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  const [showCreateDropdown, setShowCreateDropdown] = useState(false)
+  const [showJDModal, setShowJDModal] = useState(false)
+  const [aiParsedData, setAiParsedData] = useState<Partial<SaveData> | null>(null)
+  const createButtonRef = useRef<HTMLButtonElement | null>(null)
+  const closeDropdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleButtonMouseEnter = useCallback(() => {
+    if (closeDropdownTimeoutRef.current) {
+      clearTimeout(closeDropdownTimeoutRef.current)
+      closeDropdownTimeoutRef.current = null
+    }
+    setShowCreateDropdown(true)
+  }, [])
+
+  const handleButtonMouseLeave = useCallback(() => {
+    closeDropdownTimeoutRef.current = setTimeout(() => {
+      setShowCreateDropdown(false)
+    }, 200)
+  }, [])
+
+  const handleDropdownMouseEnter = useCallback(() => {
+    if (closeDropdownTimeoutRef.current) {
+      clearTimeout(closeDropdownTimeoutRef.current)
+      closeDropdownTimeoutRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     fetchApplications()
@@ -111,6 +140,31 @@ export function ApplicationsPage() {
     await deleteApplication(id)
     toast('删除成功', 'success')
     setShowDeleteConfirm(null)
+  }
+
+  const handleManualCreate = () => {
+    setAiParsedData(null)
+    setShowModal(true)
+  }
+
+  const handleAICreate = () => {
+    setAiParsedData(null)
+    setShowJDModal(true)
+  }
+
+  const handleJDParsed = (data: JDParsedResult) => {
+    setAiParsedData({
+      company: data.company === '-' ? '' : data.company,
+      position: data.position === '-' ? '' : data.position,
+      location: data.location === '-' ? '' : data.location,
+      salaryRange: data.salaryRange === '面议' ? '' : data.salaryRange,
+      jobDescription: data.jobDescription,
+      channel: '' as SaveData['channel'],
+      status: '' as SaveData['status'],
+      resume_id: selectedResumeId,
+      appliedAt: null,
+    })
+    setShowModal(true)
   }
 
   const handleGoHome = () => {
@@ -190,8 +244,10 @@ export function ApplicationsPage() {
               isLoading={isLoading}
               headerAction={
                 <button
-                  onClick={() => setShowModal(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all shadow-sm shadow-blue-200 flex items-center gap-2"
+                  ref={createButtonRef}
+                  onMouseEnter={handleButtonMouseEnter}
+                  onMouseLeave={handleButtonMouseLeave}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all duration-200 shadow-sm shadow-blue-200 flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   新建投递
@@ -207,10 +263,28 @@ export function ApplicationsPage() {
       {/* 新建投递 Modal */}
       <ApplicationModal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setAiParsedData(null) }}
         onSave={handleCreateApplication}
         application={null}
         resumes={resumes}
+        initialData={aiParsedData || undefined}
+      />
+
+      {/* 新建投递下拉菜单 */}
+      <CreateApplicationDropdown
+        visible={showCreateDropdown}
+        buttonRef={createButtonRef}
+        onManualCreate={handleManualCreate}
+        onAICreate={handleAICreate}
+        onClose={() => setShowCreateDropdown(false)}
+        onMouseEnter={handleDropdownMouseEnter}
+      />
+
+      {/* JD解析弹窗 */}
+      <JDParseModal
+        isOpen={showJDModal}
+        onClose={() => setShowJDModal(false)}
+        onParsed={handleJDParsed}
       />
 
       {/* 删除确认弹窗 */}

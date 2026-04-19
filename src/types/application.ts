@@ -40,6 +40,14 @@ export type CreateApplicationInput = Omit<Application, 'id' | 'user_id' | 'creat
 
 export type UpdateApplicationInput = Partial<Omit<Application, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
 
+export interface JDParsedResult {
+  company: string
+  position: string
+  location: string
+  salaryRange: string
+  jobDescription: string
+}
+
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   interested: '感兴趣',
   applied: '已投递',

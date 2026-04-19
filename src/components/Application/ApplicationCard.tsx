@@ -6,6 +6,7 @@ import {
   Save,
   Calendar,
   Trash2,
+  FileText,
 } from 'lucide-react'
 import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
 import type {
@@ -55,6 +56,8 @@ export function ApplicationCard({
     APPLICATION_CHANNEL_LABELS[application.channel as ApplicationChannel] ||
     application.channel
 
+  const linkedResume = resumes.find((r) => r.id === application.resume_id)
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return null
     const d = new Date(dateStr)
@@ -64,7 +67,7 @@ export function ApplicationCard({
   if (isExpanded) {
     return (
       <div
-        className={`relative rounded-xl transition-all duration-300 ease-out ${
+        className={`relative rounded-xl ${
           isHighlighted
             ? 'shadow-md shadow-indigo-200/50'
             : 'shadow-sm'
@@ -225,10 +228,10 @@ export function ApplicationCard({
   return (
     <div
       onClick={onToggle}
-      className="relative rounded-xl cursor-pointer transition-all duration-300 ease-out"
+      className="relative rounded-xl cursor-pointer"
     >
       <div
-        className={`bg-white rounded-xl transition-colors ${
+        className={`bg-white rounded-xl ${
           isHighlighted
             ? 'ring-2 ring-inset ring-indigo-400'
             : 'ring-1 ring-inset ring-slate-200 hover:bg-slate-50'
@@ -254,10 +257,17 @@ export function ApplicationCard({
                     {application.location}
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <Briefcase className="w-3 h-3" />
-                  {channelLabel}
-                </span>
+                {linkedResume ? (
+                  <span className="flex items-center gap-1 text-slate-500">
+                    <FileText className="w-3 h-3" />
+                    {linkedResume.title}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />
+                    {channelLabel}
+                  </span>
+                )}
                 {application.appliedAt && (
                   <span className="flex items-center gap-1 text-slate-500">
                     <Calendar className="w-3 h-3" />
@@ -292,8 +302,9 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
     rejected: { bg: 'bg-red-50', text: 'text-red-600' },
     ghosted: { bg: 'bg-slate-100', text: 'text-slate-500' },
   }
-  const { bg, text } = statusStyles[status]
-  const label = APPLICATION_STATUS_LABELS[status]
+  const fallback = { bg: 'bg-slate-100', text: 'text-slate-500' }
+  const { bg, text } = statusStyles[status] ?? fallback
+  const label = APPLICATION_STATUS_LABELS[status] ?? '未知'
 
   return (
     <span

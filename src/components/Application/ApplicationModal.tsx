@@ -12,6 +12,7 @@ interface Props {
   onSave: (data: SaveData) => Promise<void>
   application?: Application | null
   resumes: Resume[]
+  initialData?: Partial<SaveData>
 }
 
 export interface SaveData {
@@ -38,7 +39,7 @@ const defaultData: SaveData = {
   appliedAt: null,
 }
 
-export function ApplicationModal({ isOpen, onClose, onSave, application, resumes }: Props) {
+export function ApplicationModal({ isOpen, onClose, onSave, application, resumes, initialData }: Props) {
   const [data, setData] = useState<SaveData>(defaultData)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -56,9 +57,9 @@ export function ApplicationModal({ isOpen, onClose, onSave, application, resumes
         appliedAt: application.appliedAt || null,
       })
     } else {
-      setData(defaultData)
+      setData({ ...defaultData, ...initialData })
     }
-  }, [application, isOpen])
+  }, [application, isOpen, initialData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
