@@ -13,6 +13,12 @@ const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
 const UNIFIED_TEXT_COLOR = SECTION_TITLE_COLOR
 const SCHOOL_TAG_OPTIONS = ['985', '211']
 
+function isHtmlEmpty(html: string | undefined | null): boolean {
+  if (!html) return true
+  const stripped = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+  return stripped === ''
+}
+
 interface PreviewContentProps {
   style: StyleSettings
 }
@@ -94,7 +100,7 @@ export function PreviewContent({ style }: PreviewContentProps) {
               {intern.department && ` | ${intern.department}`}
               {intern.location && ` | ${intern.location}`}
             </div>
-            {intern.content ? (
+            {!isHtmlEmpty(intern.content) ? (
               <div
                 className="rich-content"
                 style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${intern.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
@@ -130,7 +136,7 @@ export function PreviewContent({ style }: PreviewContentProps) {
               <span>{proj.startDate} - {proj.endDate}</span>
             </div>
             {proj.role && <div>{proj.role}</div>}
-            {proj.content ? (
+            {!isHtmlEmpty(proj.content) ? (
               <div
                 className="rich-content"
                 style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${proj.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
@@ -154,9 +160,9 @@ export function PreviewContent({ style }: PreviewContentProps) {
       </Section>
     ) : null,
 
-    summary: (summary.content || summary.text || summary.highlights.length > 0) ? (
+    summary: (!isHtmlEmpty(summary.content) || summary.text || summary.highlights.length > 0) ? (
       <Section key="summary" title="个人总结" {...sectionProps}>
-        {summary.content ? (
+        {!isHtmlEmpty(summary.content) ? (
           <div
             className="rich-content"
             style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${summary.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((summary.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
