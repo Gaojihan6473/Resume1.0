@@ -1,5 +1,5 @@
 {
   "framework": "vite",
-  "buildCommand": "yarn build",
+  "buildCommand": "vite build",
   "installCommand": "yarn install"
 }
