@@ -1,5 +1,5 @@
 {
   "framework": "vite",
-  "buildCommand": "yarn install --check-files && vite build",
-  "installCommand": "yarn install --check-files"
+  "buildCommand": "yarn add @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities && vite build",
+  "installCommand": "yarn install"
 }
