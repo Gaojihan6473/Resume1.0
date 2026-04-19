@@ -15,10 +15,32 @@ export const useResumeStore = create<AppState>((set, get) => ({
   zoom: 1,
   showMultiPage: true,
   isAIEnabled: true,
-  apiKey:
-    'sk-cp-6TDsbjMBKXB3KNlJJ1Y1RP8zxUZys89thF5IkAkjFXn5jYlPqtVQubpWOdt8LO_OzHFEX3eU0eQF2LY9R8BvjEcUWN8rfF5srt0HLXFX2gxnG79UxJq6AIE',
+  apiKey: import.meta.env.VITE_MINIMAX_API_KEY as string || '',
+  currentResumeId: null,
+  isDirty: false,
+  currentFile: null,
 
-  setResumeData: (data) => set({ resumeData: data }),
+  // 简历列表缓存
+  cachedResumes: [],
+  cachedResumesLastFetched: null,
+
+  setCachedResumes: (resumes, fetchedAt) =>
+    set({ cachedResumes: resumes, cachedResumesLastFetched: fetchedAt }),
+
+  clearCachedResumes: () =>
+    set({ cachedResumes: [], cachedResumesLastFetched: null }),
+
+  setCurrentFile: (file) => set({ currentFile: file }),
+
+  clearCurrentFile: () => set({ currentFile: null }),
+
+  setResumeData: (data, title) => set({
+    resumeData: {
+      ...createDefaultResumeData(),
+      ...data,
+      resumeTitle: title ?? data.resumeTitle ?? '',
+    }
+  }),
 
   updateBasic: (basic) =>
     set((state) => ({
@@ -26,6 +48,13 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         basic: { ...state.resumeData.basic, ...basic },
       },
+      isDirty: true,
+    })),
+
+  setResumeTitle: (title) =>
+    set((state) => ({
+      resumeData: { ...state.resumeData, resumeTitle: title },
+      isDirty: true,
     })),
 
   addEducation: () =>
@@ -49,6 +78,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
           ...state.resumeData.education,
         ],
       },
+      isDirty: true,
     })),
 
   updateEducation: (id, item) =>
@@ -59,6 +89,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
           e.id === id ? { ...e, ...item } : e
         ),
       },
+      isDirty: true,
     })),
 
   removeEducation: (id) =>
@@ -67,6 +98,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         education: state.resumeData.education.filter((e) => e.id !== id),
       },
+      isDirty: true,
     })),
 
   moveEducation: (id, direction) =>
@@ -106,11 +138,12 @@ export const useResumeStore = create<AppState>((set, get) => ({
             endDate: '',
             projects: [],
             content: '',
-            contentFontSize: 10,
+            contentFontSize: 9,
           },
           ...state.resumeData.internships,
         ],
       },
+      isDirty: true,
     })),
 
   updateInternship: (id, item) =>
@@ -121,6 +154,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
           i.id === id ? { ...i, ...item } : i
         ),
       },
+      isDirty: true,
     })),
 
   removeInternship: (id) =>
@@ -129,6 +163,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         internships: state.resumeData.internships.filter((i) => i.id !== id),
       },
+      isDirty: true,
     })),
 
   moveInternship: (id, direction) =>
@@ -175,6 +210,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             : i
         ),
       },
+      isDirty: true,
     })),
 
   updateInternshipProject: (internshipId, projectId, project) =>
@@ -192,6 +228,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             : i
         ),
       },
+      isDirty: true,
     })),
 
   removeInternshipProject: (internshipId, projectId) =>
@@ -207,6 +244,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
             : i
         ),
       },
+      isDirty: true,
     })),
 
   addProject: () =>
@@ -220,16 +258,16 @@ export const useResumeStore = create<AppState>((set, get) => ({
             role: '',
             startDate: '',
             endDate: '',
-            background: '',
             description: '',
             bullets: [],
             achievements: [],
             content: '',
-            contentFontSize: 10,
+            contentFontSize: 9,
           },
           ...state.resumeData.projects,
         ],
       },
+      isDirty: true,
     })),
 
   updateProject: (id, item) =>
@@ -240,6 +278,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
           p.id === id ? { ...p, ...item } : p
         ),
       },
+      isDirty: true,
     })),
 
   removeProject: (id) =>
@@ -248,6 +287,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         projects: state.resumeData.projects.filter((p) => p.id !== id),
       },
+      isDirty: true,
     })),
 
   moveProject: (id, direction) =>
@@ -278,6 +318,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         summary: { ...state.resumeData.summary, ...summary },
       },
+      isDirty: true,
     })),
 
   reorderSections: (fromIndex, toIndex) =>
@@ -295,6 +336,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         skills: { ...state.resumeData.skills, ...skills },
       },
+      isDirty: true,
     })),
 
   updateStyle: (style) =>
@@ -303,6 +345,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         style: { ...state.resumeData.style, ...style },
       },
+      isDirty: true,
     })),
 
   resetStyle: () =>
@@ -319,6 +362,8 @@ export const useResumeStore = create<AppState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
   setRawText: (text) => set({ rawText: text }),
   setIsAIEnabled: (enabled) => set({ isAIEnabled: enabled }),
+  setCurrentResumeId: (id) => set({ currentResumeId: id }),
+  setIsDirty: (dirty) => set({ isDirty: dirty }),
 
   parseFile: async (file) => {
     parseRunId += 1
@@ -384,5 +429,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       parseStatus: 'idle',
       parseError: null,
       rawText: '',
+      currentResumeId: null,
+      isDirty: false,
     }),
 }))

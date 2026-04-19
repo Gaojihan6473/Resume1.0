@@ -6,6 +6,8 @@ interface ModuleWrapperProps {
   title: string
   children: ReactNode
   defaultExpanded?: boolean
+  expanded?: boolean
+  onToggle?: () => void
   action?: ReactNode
 }
 
@@ -13,10 +15,23 @@ export function ModuleWrapper({
   title,
   children,
   defaultExpanded = true,
+  expanded: controlledExpanded,
+  onToggle,
   action,
 }: ModuleWrapperProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
   const [isHovered, setIsHovered] = useState(false)
+
+  const isControlled = controlledExpanded !== undefined
+  const expanded = isControlled ? controlledExpanded : internalExpanded
+
+  const handleToggle = () => {
+    if (isControlled) {
+      onToggle?.()
+    } else {
+      setInternalExpanded(!expanded)
+    }
+  }
 
   return (
     <div
@@ -28,7 +43,7 @@ export function ModuleWrapper({
         className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered ? 'bg-gray-50/80' : 'bg-white'
         }`}
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
       >
         <div className="flex items-center gap-2.5">
           <div

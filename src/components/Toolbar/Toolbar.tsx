@@ -1,6 +1,10 @@
 ﻿import { useState, useRef, useEffect } from 'react'
 import type { RefObject } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../../store/resumeStore'
+import { useAuthStore } from '../../store/authStore'
+import { updateResume, createResume, uploadResumeFile, uploadResumePreview, updateResumePreviewUrl } from '../../lib/api'
+import { toast } from '../../components/Toast'
 import type { StyleSettings } from '../../types/resume'
 import {
   Type,
@@ -13,18 +17,20 @@ import {
   RotateCcw,
   Save,
   FileDown,
-  FileText,
-  Upload,
   ChevronDown,
   Check,
   Fish,
   ChevronRight,
+  User,
+  Send,
 } from 'lucide-react'
 
 interface ToolbarProps {
   previewRef: RefObject<HTMLDivElement | null>
   sidebarOpen: boolean
   onToggleSidebar: () => void
+  onAuthRequired?: (action: 'new' | 'upload') => void
+  onNavigateToMe?: () => void
 }
 
 const FONT_OPTIONS = [
@@ -184,19 +190,27 @@ function CardButton({
   )
 }
 
-export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar }: ToolbarProps) {
+export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar, onNavigateToMe }: ToolbarProps) {
+  const navigate = useNavigate()
   const {
     resumeData,
     zoom,
     showMultiPage,
+    currentResumeId,
+    isDirty,
+    currentFile,
     setZoom,
     setShowMultiPage,
     updateStyle,
     resetStyle,
     parseStatus,
-    setParseStatus,
-    setParseError,
+    setCurrentResumeId,
+    setIsDirty,
+    cachedResumes,
+    setCachedResumes,
+    clearCurrentFile,
   } = useResumeStore()
+  useAuthStore()
 
   const handleExportPdf = async () => {
     if (!previewRef.current) return
@@ -211,34 +225,96 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar }: ToolbarPro
     await exportToWord(resumeData, fileName)
   }
 
-  const handleSaveDraft = () => {
-    localStorage.setItem('resume_draft', JSON.stringify(resumeData))
-    alert('草稿已保存')
-  }
+  const [isSaving, setIsSaving] = useState(false)
+  const canNavigateToApplications = !!currentResumeId && !isDirty && !isSaving
 
-  const handleLoadDraft = () => {
-    const data = localStorage.getItem('resume_draft')
-    if (!data) {
-      alert('没有可加载的草稿')
-      return
-    }
+  const handleSaveDraft = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+
+    const title = resumeData.resumeTitle || resumeData.basic.name || '我的简历'
+
     try {
-      useResumeStore.getState().setResumeData(JSON.parse(data))
-      setParseError(null)
-      setParseStatus('success')
-      alert('草稿已加载')
-    } catch {
-      alert('加载草稿失败')
-    }
-  }
+      let resumeId = currentResumeId
 
-  const handleNewResume = () => {
-    if (confirm('确认新建简历？当前未保存内容会丢失。')) {
-      useResumeStore.getState().resetAll()
+      if (currentResumeId) {
+        const result = await updateResume(currentResumeId, title, resumeData as unknown as Record<string, unknown>)
+        if (!result.success) {
+          toast(result.error || '保存失败', 'error')
+          setIsSaving(false)
+          return
+        }
+        if (result.resume) {
+          const updatedResumes = cachedResumes.map(r =>
+            r.id === currentResumeId ? { ...r, ...result.resume } : r
+          )
+          setCachedResumes(updatedResumes, Date.now())
+        }
+      } else {
+        let fileUrl: string | null = null
+        if (currentFile) {
+          const uploadResult = await uploadResumeFile(currentFile)
+          if (uploadResult.success && uploadResult.fileUrl) {
+            fileUrl = uploadResult.fileUrl
+          }
+        }
+        const result = await createResume(title, resumeData as unknown as Record<string, unknown>, 'cloud', fileUrl)
+        if (result.success && result.resume) {
+          resumeId = result.resume.id
+          setCurrentResumeId(result.resume.id)
+          clearCurrentFile()
+          const updatedResumes = [result.resume, ...cachedResumes]
+          setCachedResumes(updatedResumes, Date.now())
+        } else {
+          toast(result.error || '保存失败', 'error')
+          setIsSaving(false)
+          return
+        }
+      }
+
+      // 生成并上传预览图
+      if (resumeId && previewRef.current) {
+        console.log('[Preview] Starting preview generation for resume:', resumeId)
+        const { generatePreviewImage } = await import('../../utils/exporters')
+        const previewBlob = await generatePreviewImage(previewRef.current)
+        console.log('[Preview] Blob generated:', previewBlob ? `${previewBlob.size} bytes` : 'NULL')
+        if (previewBlob) {
+          const uploadResult = await uploadResumePreview(previewBlob, resumeId)
+          console.log('[Preview] Upload result:', uploadResult)
+          if (uploadResult.success && uploadResult.previewUrl) {
+            const previewUrl = uploadResult.previewUrl
+            await updateResumePreviewUrl(resumeId, previewUrl)
+            // 更新缓存中的 preview_url
+            const updatedResumes = cachedResumes.map(r =>
+              r.id === resumeId ? { ...r, preview_url: previewUrl } : r
+            )
+            setCachedResumes(updatedResumes, Date.now())
+          } else {
+            console.error('[Preview] Upload failed:', uploadResult.error)
+          }
+        } else {
+          console.error('[Preview] Blob generation returned null')
+        }
+      } else {
+        console.log('[Preview] Skipped - resumeId:', resumeId, 'previewRef:', previewRef.current ? 'exists' : 'null')
+      }
+
+      setIsDirty(false)
+      toast('保存成功', 'success')
+    } catch (err) {
+      console.error('Save error:', err)
+      toast('保存失败，请重试', 'error')
     }
+
+    setIsSaving(false)
   }
 
   const iconSize = 'w-3.5 h-3.5'
+
+  const handleGoToApplications = () => {
+    if (!currentResumeId || isDirty || isSaving) return
+    navigate(`/applications?resumeId=${currentResumeId}`)
+  }
 
   return (
     <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center px-3 gap-2 shadow-sm relative z-10">
@@ -315,10 +391,9 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar }: ToolbarPro
 
       <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
 
-      <CardButton onClick={handleNewResume} icon={<Upload className={iconSize} />} label="新建" title="新建简历" />
       <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
-      <CardButton onClick={handleSaveDraft} icon={<Save className={iconSize} />} label="保存" title="保存草稿" />
-      <CardButton onClick={handleLoadDraft} icon={<FileText className={iconSize} />} label="加载" title="加载草稿" />
+      <CardButton onClick={handleSaveDraft} disabled={isSaving} icon={<Save className={iconSize} />} label={isSaving ? '保存中' : '保存'} title="保存到云端" />
+      <CardButton onClick={onNavigateToMe} icon={<User className={iconSize} />} label="我的" title="我的简历" />
 
       <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
 
@@ -338,20 +413,22 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar }: ToolbarPro
         label="Word"
         title="Export Word"
       />
+      <CardButton
+        onClick={handleGoToApplications}
+        disabled={!canNavigateToApplications}
+        icon={<Send className={iconSize} />}
+        label="投递"
+        title={canNavigateToApplications ? '进入投递页' : '请先保存最新更改'}
+      />
 
       <div
         className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${
-          parseStatus === 'idle' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'
+          isDirty ? 'bg-amber-50 text-amber-600' : parseStatus === 'idle' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'
         }`}
       >
-        <div className={`w-1.5 h-1.5 rounded-full ${parseStatus === 'idle' ? 'bg-slate-400' : 'bg-emerald-500'}`} />
-        {parseStatus === 'idle' ? '未解析' : '已就绪'}
+        <div className={`w-1.5 h-1.5 rounded-full ${isDirty ? 'bg-amber-500' : parseStatus === 'idle' ? 'bg-slate-400' : 'bg-emerald-500'}`} />
+        {isDirty ? '未保存' : parseStatus === 'idle' ? '未解析' : '已就绪'}
       </div>
     </div>
   )
 }
-
-
-
-
-

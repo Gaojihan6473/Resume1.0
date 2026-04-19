@@ -1,3 +1,5 @@
+import type { Resume } from '../lib/api'
+
 export interface BasicInfo {
   name: string
   phone: string
@@ -50,7 +52,6 @@ export interface ProjectItem {
   role: string
   startDate: string
   endDate: string
-  background: string
   description: string
   bullets: string[]
   achievements: string[]
@@ -86,6 +87,7 @@ export interface StyleSettings {
 export type SectionId = 'education' | 'internships' | 'projects' | 'summary' | 'skills'
 
 export interface ResumeData {
+  resumeTitle: string
   basic: BasicInfo
   education: EducationItem[]
   internships: InternshipItem[]
@@ -113,9 +115,17 @@ export interface AppState {
   showMultiPage: boolean
   isAIEnabled: boolean
   apiKey: string
+  currentResumeId: string | null
+  isDirty: boolean
+  currentFile: File | null
 
-  setResumeData: (data: ResumeData) => void
+  // 简历列表缓存
+  cachedResumes: Resume[]
+  cachedResumesLastFetched: number | null
+
+  setResumeData: (data: ResumeData, title?: string) => void
   updateBasic: (basic: Partial<BasicInfo>) => void
+  setResumeTitle: (title: string) => void
   addEducation: () => void
   updateEducation: (id: string, item: Partial<EducationItem>) => void
   removeEducation: (id: string) => void
@@ -150,13 +160,20 @@ export interface AppState {
   setParseError: (error: string | null) => void
   setRawText: (text: string) => void
   setIsAIEnabled: (enabled: boolean) => void
+  setCurrentResumeId: (id: string | null) => void
+  setIsDirty: (dirty: boolean) => void
 
   parseFile: (file: File) => Promise<void>
   cancelParse: () => void
   resetAll: () => void
+  setCachedResumes: (resumes: Resume[], fetchedAt: number) => void
+  clearCachedResumes: () => void
+  setCurrentFile: (file: File | null) => void
+  clearCurrentFile: () => void
 }
 
 export const createDefaultResumeData = (): ResumeData => ({
+  resumeTitle: '',
   basic: {
     name: '',
     phone: '',
@@ -175,7 +192,7 @@ export const createDefaultResumeData = (): ResumeData => ({
     text: '',
     highlights: [],
     content: '',
-    contentFontSize: 10,
+    contentFontSize: 9,
   },
   skills: {
     technical: [],
@@ -185,7 +202,7 @@ export const createDefaultResumeData = (): ResumeData => ({
   },
   style: {
     fontFamily: 'system',
-    fontSize: 10,
+    fontSize: 9,
     lineHeight: 1.2,
     paragraphSpacing: 8,
     pagePadding: 24,

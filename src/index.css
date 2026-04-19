@@ -279,29 +279,26 @@ body {
   font-style: italic;
 }
 
-/* ========== Custom Scrollbars ========== */
+/* ========== Global Hidden Scrollbars ========== */
 
 /* Webkit browsers (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  width: 0;
+  height: 0;
 }
 
 /* Firefox */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-width: none;
+}
+
+/* Hide scrollbar but keep scroll behavior */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }

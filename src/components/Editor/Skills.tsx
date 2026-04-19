@@ -59,12 +59,12 @@ function TagInput({
   )
 }
 
-export function SkillsEditor() {
+export function SkillsEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const { resumeData, updateSkills } = useResumeStore()
   const { skills } = resumeData
 
   return (
-    <SortableModuleWrapper id="skills" title="技能与其他">
+    <SortableModuleWrapper id="skills" title="技能与其他" expanded={expanded} onToggle={onToggle}>
       <div className="grid grid-cols-2 gap-5">
         <TagInput
           label="技术技能"

@@ -11,6 +11,7 @@ const FONT_FAMILIES = {
 const SECTION_TITLE_COLOR = '#1f2937'
 const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
 const UNIFIED_TEXT_COLOR = SECTION_TITLE_COLOR
+const SCHOOL_TAG_OPTIONS = ['985', '211']
 
 interface PreviewContentProps {
   style: StyleSettings
@@ -24,6 +25,7 @@ export function PreviewContent({ style }: PreviewContentProps) {
   const bodyFontSize = style.fontSize
   const titleFontSize = style.fontSize + 1
   const bodyLineHeightPx = Math.max(1, Math.round(bodyFontSize * style.lineHeight))
+  const schoolTagHeightPx = Math.max(10, bodyLineHeightPx)
   const titleLineHeightPx = Math.max(1, Math.round(titleFontSize * style.lineHeight))
   const paragraphSpacingPx = Math.max(6, Math.round(style.paragraphSpacing))
   const itemSpacingPx = Math.max(2, Math.round(paragraphSpacingPx * 0.65))
@@ -42,16 +44,38 @@ export function PreviewContent({ style }: PreviewContentProps) {
       <Section key="education" title="教育经历" {...sectionProps}>
         {education.map((edu) => (
           <div key={edu.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-            <div className="flex justify-between items-baseline gap-3">
-              <span className="font-medium">{edu.school}</span>
-              <span>{edu.startDate} - {edu.endDate}</span>
+            <div className="flex justify-between items-start gap-3">
+              <span className="min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5" style={{ lineHeight: `${bodyLineHeightPx}px` }}>
+                <span className="font-medium" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.school}</span>
+                {(edu.schoolTags || [])
+                  .filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
+                  .map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center justify-center self-center rounded border font-medium"
+                      style={{
+                        borderColor: '#bfdbfe',
+                        backgroundColor: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: `${Math.max(6, bodyFontSize - 2)}px`,
+                        lineHeight: 1,
+                        height: `${schoolTagHeightPx}px`,
+                        padding: '0 3px',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+              </span>
+              <span className="shrink-0" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.startDate} - {edu.endDate}</span>
             </div>
             <div>
               {edu.major}
               {edu.degree && ` | ${edu.degree}`}
               {edu.gpa && ` | GPA: ${edu.gpa}`}
             </div>
-            {edu.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{edu.description}</div>}
+            {edu.description && <div style={{ marginTop: `${tightSpacingPx}px`, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: edu.description.replace(/\n/g, '<br/>') }} />}
           </div>
         ))}
       </Section>
@@ -114,7 +138,6 @@ export function PreviewContent({ style }: PreviewContentProps) {
               />
             ) : (
               <>
-                {proj.background && <div>{proj.background}</div>}
                 {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.description}</div>}
                 {proj.bullets.length > 0 && (
                   <ul className="list-disc list-inside mt-0.5 space-y-0.5">

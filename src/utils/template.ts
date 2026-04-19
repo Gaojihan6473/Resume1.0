@@ -9,7 +9,7 @@ import { buildRichHtmlFromLines, normalizeRichHtml } from './richText'
 
 const REFERENCE_STYLE: ResumeData['style'] = {
   fontFamily: 'sans-serif',
-  fontSize: 10,
+  fontSize: 9,
   lineHeight: 1.2,
   paragraphSpacing: 8,
   pagePadding: 24,
@@ -91,7 +91,6 @@ function projectContent(item: ProjectItem): string {
   if (explicit) return explicit
 
   const lines: string[] = []
-  lines.push(...splitNonEmptyLines(item.background))
   lines.push(...splitNonEmptyLines(item.description))
   lines.push(...cleanList(item.bullets))
   lines.push(...cleanList(item.achievements))
@@ -121,7 +120,6 @@ function normalizeProject(item: ProjectItem): ProjectItem {
     role: cleanText(item.role),
     startDate: cleanText(item.startDate),
     endDate: cleanText(item.endDate),
-    background: cleanMultilineText(item.background),
     description: cleanMultilineText(item.description),
     bullets: [],
     achievements: [],

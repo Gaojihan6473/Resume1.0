@@ -17,7 +17,7 @@ interface RichTextEditorProps {
   placeholder?: string
 }
 
-const FONT_SIZE_OPTIONS = [10, 11, 12, 13, 14, 16]
+const FONT_SIZE_OPTIONS = [9, 10, 11, 12, 13, 14, 16]
 
 export function RichTextEditor({
   value,
@@ -129,7 +129,7 @@ export function RichTextEditor({
         suppressContentEditableWarning
         onInput={(e) => onChange((e.currentTarget as HTMLDivElement).innerHTML)}
         className="rich-content min-h-[120px] max-h-[280px] overflow-y-auto px-3 py-2 text-gray-700 focus:outline-none"
-        style={{ fontSize: `${fontSize}px`, lineHeight: 1.55 }}
+        style={{ fontSize: '14px', lineHeight: 1.55 }}
         data-placeholder={placeholder || ''}
       />
     </div>

@@ -45,6 +45,7 @@ const MM_PER_INCH = 25.4
 const CSS_PX_PER_INCH = 96
 const A4_WIDTH_MM = 210
 const PREVIEW_TO_PRINT_SCALE = (A4_WIDTH_MM / MM_PER_INCH) * CSS_PX_PER_INCH / PREVIEW_A4_WIDTH_PX
+const SCHOOL_TAG_OPTIONS = ['985', '211']
 
 function richTextToLines(html: string): string[] {
   if (!html) return []
@@ -62,6 +63,35 @@ function richTextToLines(html: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+}
+
+export async function generatePreviewImage(
+  element: HTMLElement
+): Promise<Blob | null> {
+  const html2canvas = (await import('html2canvas')).default
+
+  try {
+    console.log('[generatePreviewImage] Starting html2canvas capture, element:', element.offsetWidth, 'x', element.offsetHeight)
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      width: PREVIEW_A4_WIDTH_PX,
+      windowWidth: PREVIEW_A4_WIDTH_PX,
+    })
+    console.log('[generatePreviewImage] Canvas created:', canvas.width, 'x', canvas.height)
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        console.log('[generatePreviewImage] Blob result:', blob ? `${blob.size} bytes, ${blob.type}` : 'NULL')
+        resolve(blob)
+      }, 'image/png', 1.0)
+    })
+  } catch (error) {
+    console.error('Generate preview error:', error)
+    return null
+  }
 }
 
 export async function exportToPdf(
@@ -194,7 +224,11 @@ export async function exportToWord(
   if (education.length > 0) {
     children.push(new Paragraph({ text: '教育经历', heading: HeadingLevel.HEADING_2 }))
     for (const edu of education) {
-      const eduLine = `${edu.school} | ${edu.major} | ${edu.degree || ''} | ${edu.startDate}-${edu.endDate}`
+      const schoolTags = (edu.schoolTags || [])
+        .filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
+        .join('/')
+      const schoolName = schoolTags ? `${edu.school} ${schoolTags}` : edu.school
+      const eduLine = `${schoolName} | ${edu.major} | ${edu.degree || ''} | ${edu.startDate}-${edu.endDate}`
       children.push(new Paragraph({ children: [new TextRun({ text: eduLine, bold: true, size: 20 })] }))
       if (edu.description) {
         children.push(new Paragraph({ children: [new TextRun({ text: edu.description, size: 20 })] }))

@@ -278,7 +278,6 @@ Schema to output:
       "role": "",
       "startDate": "",
       "endDate": "",
-      "background": "",
       "description": "",
       "bullets": [],
       "achievements": [],
@@ -301,7 +300,7 @@ Schema to output:
   },
   "style": {
     "fontFamily": "system",
-    "fontSize": 10,
+    "fontSize": 9,
     "lineHeight": 1.2,
     "paragraphSpacing": 8,
     "pagePadding": 24,

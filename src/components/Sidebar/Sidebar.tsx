@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { Layout, Lock, Home } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { Layout, Lock, Home, User, Briefcase } from 'lucide-react'
+import { useAuthStore } from '../../store/authStore'
+import { useResumeStore } from '../../store/resumeStore'
 
 interface SidebarProps {
   open: boolean
@@ -9,11 +12,24 @@ interface SidebarProps {
   /** 遮罩层距离页面顶部的偏移量，默认同 topOffset */
   backdropTop?: number
   onGoHome?: () => void
+  onNavigateToMe?: () => void
+  onNavigateToApplications?: () => void
+  onNavigateToLogin?: () => void
 }
 
-export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome }: SidebarProps) {
+export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToLogin }: SidebarProps) {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const effectiveBackdropTop = backdropTop ?? topOffset
+  const location = useLocation()
+  const { isAuthenticated } = useAuthStore()
+  const { parseStatus } = useResumeStore()
+
+  // 判断当前页面
+  // 编辑页：parseStatus === 'success' 且有 currentResumeId
+  // 首页：仅上传页（parseStatus === 'idle'）
+  const isUploadPage = location.pathname === '/' && parseStatus === 'idle'
+  const isMePage = location.pathname === '/me'
+  const isApplicationsPage = location.pathname === '/applications'
 
   // ESC 键关闭
   useEffect(() => {
@@ -58,18 +74,31 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome }:
         >
           {/* 顶部导航组 */}
           <nav className="flex flex-col gap-0.5 px-2 pt-3 pb-2">
-            {/* 首页 */}
+            {/* 首页 - 仅上传页（parseStatus === 'idle'）显示活跃状态 */}
             <button
               onClick={onGoHome}
               className="group relative flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
               title="返回首页"
             >
-              {/* 左侧活跃指示条 */}
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 opacity-0 group-hover:opacity-100 group-[&:active]:opacity-100 transition-opacity duration-150" />
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 opacity-100" />
+              {/* 左侧活跃指示条 - 仅在上传页显示 */}
+              <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isUploadPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
               <Home className="w-4 h-4 shrink-0 text-blue-500" />
               <span>首页</span>
             </button>
+
+            {/* 投递 */}
+            {isAuthenticated && (
+              <button
+                onClick={onNavigateToApplications}
+                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
+                title="投递记录"
+              >
+                {/* 左侧活跃指示条 */}
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isApplicationsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                <Briefcase className="w-4 h-4 shrink-0 text-blue-500" />
+                <span>投递</span>
+              </button>
+            )}
 
             {/* 模板 */}
             <button
@@ -87,16 +116,30 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome }:
           <div className="mx-3 mb-2 border-t border-slate-100/60" />
 
           {/* 底部固定区 */}
-          <div className="mt-auto px-2 pb-3">
-            {/* 登录 */}
-            <button
-              disabled
-              className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-400 cursor-default"
-              title="即将上线"
-            >
-              <Lock className="w-4 h-4 shrink-0" />
-              <span>登录</span>
-            </button>
+          <div className="mt-auto px-2 pb-3 flex flex-col gap-0.5">
+            {isAuthenticated ? (
+              <button
+                onClick={onNavigateToMe}
+                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
+                title="我的简历"
+              >
+                {/* 左侧活跃指示条 */}
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isMePage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                <User className="w-4 h-4 shrink-0 text-indigo-500" />
+                <span>我的</span>
+              </button>
+            ) : (
+              <button
+                onClick={onNavigateToLogin}
+                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
+                title="登录"
+              >
+                {/* 左侧活跃指示条 */}
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${location.pathname === '/login' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                <Lock className="w-4 h-4 shrink-0" />
+                <span>登录</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

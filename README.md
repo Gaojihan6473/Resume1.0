@@ -27,6 +27,7 @@ npm run dev
 npm run lint
 npm run build
 npm run preview
+npm run check:encoding
 ```
 
 ## Notes

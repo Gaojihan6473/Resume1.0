@@ -1,14 +1,17 @@
 ﻿import { useState, useRef, useCallback } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
+import { useAuthStore } from '../../store/authStore'
 import { Upload as UploadIcon, X, File, Sparkles } from 'lucide-react'
 
 interface UploadProps {
   embedded?: boolean
   showBottomHint?: boolean
+  onAuthRequired?: () => void
 }
 
-export function Upload({ embedded = false, showBottomHint = true }: UploadProps) {
-  const { parseFile, cancelParse, parseStatus, parseError } = useResumeStore()
+export function Upload({ embedded = false, showBottomHint = true, onAuthRequired }: UploadProps) {
+  const { parseFile, cancelParse, parseStatus, parseError, setCurrentFile } = useResumeStore()
+  const { isAuthenticated } = useAuthStore()
 
   const [file, setFile] = useState<File | null>(null)
   const [isDragActive, setIsDragActive] = useState(false)
@@ -16,7 +19,8 @@ export function Upload({ embedded = false, showBottomHint = true }: UploadProps)
 
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile)
-  }, [])
+    setCurrentFile(selectedFile)
+  }, [setCurrentFile])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -68,6 +72,7 @@ export function Upload({ embedded = false, showBottomHint = true }: UploadProps)
       cancelParse()
     }
     setFile(null)
+    setCurrentFile(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -116,6 +121,10 @@ export function Upload({ embedded = false, showBottomHint = true }: UploadProps)
       <div
         className={`group border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
         onClick={() => {
+          if (!isAuthenticated && onAuthRequired) {
+            onAuthRequired()
+            return
+          }
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
             fileInputRef.current.click()

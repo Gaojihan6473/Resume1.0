@@ -24,7 +24,7 @@ const EMAIL_REGEX = /[\w.-]+@[\w.-]+\.\w+/g
 
 const DEFAULT_STYLE: ResumeData['style'] = {
   fontFamily: 'system',
-  fontSize: 10,
+  fontSize: 9,
   lineHeight: 1.2,
   paragraphSpacing: 8,
   pagePadding: 24,
@@ -367,7 +367,6 @@ function parseProject(text: string): ProjectItem[] {
       role: current.role || '',
       startDate: current.startDate || '',
       endDate: current.endDate || '',
-      background: current.background || '',
       description: current.description || '',
       bullets: current.bullets || [],
       achievements: current.achievements || [],
@@ -479,6 +478,7 @@ export function parseByRules(rawText: string): ResumeData {
   const sections = identifySection(cleanedText.split('\n'))
 
   const data: ResumeData = {
+    resumeTitle: '',
     basic: {
       name: '',
       phone: '',
@@ -540,7 +540,6 @@ export function parseByRules(rawText: string): ResumeData {
 
   return data
 }
-
 
 
 

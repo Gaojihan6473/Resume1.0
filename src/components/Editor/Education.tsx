@@ -4,6 +4,8 @@ import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { Plus, Trash2, ChevronUp, ChevronDown, GraduationCap } from 'lucide-react'
 import type { EducationItem } from '../../types/resume'
 
+const SCHOOL_TAG_OPTIONS = ['985', '211']
+
 function EducationCard({
   item,
   index,
@@ -22,12 +24,21 @@ function EducationCard({
   onMoveDown: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const schoolTags = (item.schoolTags || []).filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
 
   const inputClass = `
     w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
     transition-all duration-200 input-glow
     focus:border-blue-400 focus:bg-white bg-gray-50 hover:bg-gray-100
   `
+
+  const toggleSchoolTag = (tag: string) => {
+    const nextTags = schoolTags.includes(tag)
+      ? schoolTags.filter((item) => item !== tag)
+      : [...schoolTags, tag]
+
+    onUpdate(item.id, { schoolTags: nextTags })
+  }
 
   return (
     <div
@@ -143,6 +154,30 @@ function EducationCard({
         </div>
 
         <div className="col-span-2">
+          <label className="block text-xs text-gray-500 mb-1.5">院校标签</label>
+          <div className="flex flex-wrap gap-2">
+            {SCHOOL_TAG_OPTIONS.map((tag) => {
+              const selected = schoolTags.includes(tag)
+
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleSchoolTag(tag)}
+                  className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-all duration-200 btn-press ${
+                    selected
+                      ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
+                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+                  }`}
+                >
+                  {tag}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="col-span-2">
           <label className="block text-xs text-gray-500 mb-1.5">补充说明</label>
           <textarea
             value={item.description}
@@ -157,7 +192,7 @@ function EducationCard({
   )
 }
 
-export function EducationEditor() {
+export function EducationEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const {
     resumeData,
     addEducation,
@@ -171,6 +206,8 @@ export function EducationEditor() {
     <SortableModuleWrapper
       id="education"
       title="教育经历"
+      expanded={expanded}
+      onToggle={onToggle}
       action={
         <button
           onClick={addEducation}

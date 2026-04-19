@@ -137,7 +137,7 @@ function InternshipCard({
           <RichTextEditor
             value={item.content || ''}
             onChange={(content) => onUpdate(item.id, { content })}
-            fontSize={item.contentFontSize || 10}
+            fontSize={item.contentFontSize || 9}
             onFontSizeChange={(contentFontSize) =>
               onUpdate(item.id, { contentFontSize })
             }
@@ -149,7 +149,7 @@ function InternshipCard({
   )
 }
 
-export function InternshipEditor() {
+export function InternshipEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const {
     resumeData,
     addInternship,
@@ -163,6 +163,8 @@ export function InternshipEditor() {
     <SortableModuleWrapper
       id="internships"
       title="实习经历"
+      expanded={expanded}
+      onToggle={onToggle}
       action={
         <button
           onClick={addInternship}

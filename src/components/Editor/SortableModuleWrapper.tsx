@@ -10,6 +10,8 @@ interface SortableModuleWrapperProps {
   id: SectionId
   title: string
   defaultExpanded?: boolean
+  expanded?: boolean
+  onToggle?: () => void
   action?: ReactNode
   children: ReactNode
 }
@@ -18,18 +20,31 @@ export function SortableModuleWrapper({
   id,
   title,
   defaultExpanded = false,
+  expanded: controlledExpanded,
+  onToggle,
   action,
   children,
 }: SortableModuleWrapperProps) {
   const parseStatus = useResumeStore((s) => s.parseStatus)
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
   const [isHovered, setIsHovered] = useState(false)
+
+  const isControlled = controlledExpanded !== undefined
+  const expanded = isControlled ? controlledExpanded : internalExpanded
+
+  const handleToggle = () => {
+    if (isControlled) {
+      onToggle?.()
+    } else {
+      setInternalExpanded(!expanded)
+    }
+  }
 
   useEffect(() => {
     if (parseStatus !== 'idle') {
-      setExpanded(false)
+      if (!isControlled) setInternalExpanded(false)
     }
-  }, [parseStatus])
+  }, [parseStatus, isControlled])
 
   const {
     attributes,
@@ -59,7 +74,7 @@ export function SortableModuleWrapper({
         className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered && !isDragging ? 'bg-gray-50/80' : 'bg-white'
         }`}
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
       >
         <div className="flex items-center gap-2.5">
           <button

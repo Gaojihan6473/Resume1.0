@@ -110,23 +110,12 @@ function ProjectCard({
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-gray-500 mb-1.5">背景</label>
-          <input
-            type="text"
-            value={item.background}
-            onChange={(e) => onUpdate(item.id, { background: e.target.value })}
-            placeholder="业务增长需求"
-            className={inputClass}
-          />
-        </div>
-
         <div className="col-span-2">
           <label className="block text-xs text-gray-500 mb-1.5">正文内容</label>
           <RichTextEditor
             value={item.content || ''}
             onChange={(content) => onUpdate(item.id, { content })}
-            fontSize={item.contentFontSize || 10}
+            fontSize={item.contentFontSize || 9}
             onFontSizeChange={(contentFontSize) => onUpdate(item.id, { contentFontSize })}
             placeholder="在这里统一输入该项目经历正文，支持加粗、斜体、缩进、有序/无序列表。"
           />
@@ -136,7 +125,7 @@ function ProjectCard({
   )
 }
 
-export function ProjectEditor() {
+export function ProjectEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const {
     resumeData,
     addProject,
@@ -150,6 +139,8 @@ export function ProjectEditor() {
     <SortableModuleWrapper
       id="projects"
       title="项目经历"
+      expanded={expanded}
+      onToggle={onToggle}
       action={
         <button
           onClick={addProject}

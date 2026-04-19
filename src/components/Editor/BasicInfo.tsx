@@ -12,7 +12,7 @@ import {
   Upload,
 } from 'lucide-react'
 
-export function BasicInfoEditor() {
+export function BasicInfoEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const { resumeData, updateBasic } = useResumeStore()
   const { basic } = resumeData
   const [focusedField, setFocusedField] = useState<string | null>(null)
@@ -37,7 +37,7 @@ export function BasicInfoEditor() {
   }
 
   return (
-    <ModuleWrapper title="基本信息">
+    <ModuleWrapper title="基本信息" expanded={expanded} onToggle={onToggle}>
       <div className="grid grid-cols-2 gap-4">
         <div className="flex items-center gap-2 animate-slide-in stagger-1">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 ${focusedField === 'name' ? 'scale-110 bg-blue-100' : 'bg-blue-50'}`}>
