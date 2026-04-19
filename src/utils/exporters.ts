@@ -22,6 +22,49 @@ function waitForImages(images: HTMLCollectionOf<HTMLImageElement>): Promise<void
   return Promise.all(tasks).then(() => undefined)
 }
 
+function waitForStylesheets(doc: Document): Promise<void> {
+  const links = Array.from(
+    doc.querySelectorAll('link[rel="stylesheet"]')
+  ) as HTMLLinkElement[]
+
+  const tasks = links.map((link) => {
+    if (link.sheet) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+
+      link.addEventListener('load', done, { once: true })
+      link.addEventListener('error', done, { once: true })
+      setTimeout(done, 8000)
+    })
+  })
+
+  return Promise.all(tasks).then(() => undefined)
+}
+
+function absolutizeStylesheetHref(link: HTMLLinkElement): void {
+  const href = link.getAttribute('href')
+  if (!href) return
+
+  try {
+    link.href = new URL(href, window.location.href).toString()
+  } catch {
+    // Keep original href when URL normalization fails.
+  }
+}
+
+function waitForPrintLayout(win: Window): Promise<void> {
+  return new Promise((resolve) => {
+    win.requestAnimationFrame(() => {
+      win.requestAnimationFrame(() => resolve())
+    })
+  })
+}
+
 function createPrintIframe(): Promise<HTMLIFrameElement> {
   return new Promise((resolve, reject) => {
     const iframe = document.createElement('iframe')
@@ -146,7 +189,11 @@ export async function exportToPdf(
   printDoc.head.innerHTML = ''
   printDoc.body.innerHTML = ''
   styleNodes.forEach((node) => {
-    printDoc.head.appendChild(node.cloneNode(true))
+    const clonedNode = node.cloneNode(true) as HTMLElement
+    if (clonedNode instanceof HTMLLinkElement) {
+      absolutizeStylesheetHref(clonedNode)
+    }
+    printDoc.head.appendChild(clonedNode)
   })
   printDoc.head.appendChild(printOverrides)
   printDoc.body.appendChild(wrapper)
@@ -154,10 +201,12 @@ export async function exportToPdf(
   document.title = printTitle
 
   try {
+    await waitForStylesheets(printDoc)
     if ('fonts' in printDoc) {
       await (printDoc as Document & { fonts?: FontFaceSet }).fonts?.ready
     }
     await waitForImages(printDoc.images)
+    await waitForPrintLayout(printWindow)
 
     await new Promise<void>((resolve) => {
       let settled = false
