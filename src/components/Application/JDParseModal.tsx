@@ -20,7 +20,8 @@ export function JDParseModal({ isOpen, onClose, onParsed }: Props) {
   const [isParsing, setIsParsing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { apiKey } = useResumeStore()
+  const { apiKey: userApiKey } = useResumeStore()
+  const apiKey = (import.meta.env.VITE_MINIMAX_API_KEY as string)?.trim() || userApiKey
 
   const handleModeSelect = (selectedMode: 'image' | 'text') => {
     setMode(selectedMode)
