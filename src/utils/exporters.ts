@@ -114,9 +114,11 @@ export async function exportToPdf(
   const previewClone = element.cloneNode(true) as HTMLElement
   const wrapper = printDoc.createElement('div')
   wrapper.setAttribute('data-print-root', '1')
-  previewClone.style.width = `${PREVIEW_A4_WIDTH_PX}px`
-  previewClone.style.zoom = `${PREVIEW_TO_PRINT_SCALE}`
-  previewClone.style.transformOrigin = 'top left'
+  wrapper.style.width = `${PREVIEW_A4_WIDTH_PX}px`
+  wrapper.style.transform = `scale(${PREVIEW_TO_PRINT_SCALE})`
+  wrapper.style.transformOrigin = 'top left'
+  wrapper.style.overflow = 'hidden'
+  previewClone.style.width = '100%'
   wrapper.appendChild(previewClone)
 
   const printOverrides = printDoc.createElement('style')
@@ -132,7 +134,7 @@ export async function exportToPdf(
       print-color-adjust: exact;
     }
     [data-print-root="1"] {
-      width: ${(A4_WIDTH_MM / MM_PER_INCH) * CSS_PX_PER_INCH}px;
+      width: ${PREVIEW_A4_WIDTH_PX}px;
       margin: 0;
       overflow: hidden;
     }
