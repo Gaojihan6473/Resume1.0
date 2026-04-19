@@ -224,7 +224,7 @@ export function PreviewContent({ style }: PreviewContentProps) {
             </div>
           </div>
           <div className="w-[65px] h-[81px] self-center shrink-0 flex items-center justify-center overflow-hidden">
-            <img src={basic.avatarUrl || templateAvatar} alt="头像" className="block w-auto h-auto max-w-full max-h-full object-contain" />
+            <img src={basic.avatarUrl || templateAvatar} alt="头像" className="block object-contain" style={{ maxWidth: '65px', maxHeight: '81px' }} />
           </div>
         </div>
       </div>
