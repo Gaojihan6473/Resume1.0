@@ -113,15 +113,15 @@ function Select({ value, options, onChange, icon, compact, label }: SelectProps)
   }
 
   return (
-    <div ref={ref} className="relative flex flex-col">
-      {label && <span className="text-[10px] text-slate-400 mb-0.5 ml-0.5">{label}</span>}
+    <div ref={ref} className="relative flex flex-col shrink-0">
+      {label && <span className="text-[10px] text-slate-400 mb-0.5 ml-0.5 whitespace-nowrap">{label}</span>}
       <button
         onClick={handleOpen}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-xs font-medium text-slate-600 transition-all duration-150 ${compact ? 'h-7' : 'h-8'}`}
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-xs font-medium text-slate-600 transition-all duration-150 whitespace-nowrap ${compact ? 'h-7' : 'h-8'}`}
       >
-        {icon && <span className="text-slate-400">{icon}</span>}
-        <span>{selected?.label}</span>
-        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
+        <span className="whitespace-nowrap">{selected?.label}</span>
+        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div
@@ -168,8 +168,8 @@ function CardButton({
   variant = 'default',
   className = '',
 }: CardButtonProps) {
-  const base = 'inline-flex items-center justify-center h-8 rounded-xl text-xs font-medium transition-all duration-150 btn-press'
-  const sizing = label ? 'gap-1.5 px-2.5' : 'w-8'
+  const base = 'inline-flex items-center justify-center h-8 rounded-xl text-xs font-medium transition-all duration-150 btn-press shrink-0'
+  const sizing = label ? 'gap-1.5 px-2.5 whitespace-nowrap' : 'w-8'
   const variants = {
     default: 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300',
     primary: 'border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-300',
@@ -184,8 +184,8 @@ function CardButton({
       title={title}
       className={`${base} ${sizing} ${variants[variant]} ${active ? variants.primary : ''} ${disabledClass} ${className}`}
     >
-      {icon}
-      {label && <span>{label}</span>}
+      <span className="shrink-0">{icon}</span>
+      {label && <span className="whitespace-nowrap">{label}</span>}
     </button>
   )
 }
@@ -317,8 +317,9 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar, onNavigateTo
   }
 
   return (
-    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center px-3 gap-2 shadow-sm relative z-10">
-      <div className="flex items-center gap-2 pr-3 border-r border-slate-200 mr-2 shrink-0">
+    <div className="h-14 shrink-0 border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50/80 backdrop-blur flex items-center shadow-sm relative z-10 overflow-hidden min-w-0">
+      {/* 左侧 Logo - 固定不滚动 */}
+      <div className="flex items-center gap-2 px-3 border-r border-slate-200 shrink-0">
         <button
           onClick={onToggleSidebar}
           className="flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-slate-100 transition-colors duration-200"
@@ -331,103 +332,107 @@ export function Toolbar({ previewRef, sidebarOpen, onToggleSidebar, onNavigateTo
         </button>
       </div>
 
-      <Select
-        value={resumeData.style.fontFamily}
-        options={FONT_OPTIONS}
-        onChange={(v) => updateStyle({ fontFamily: v as StyleSettings['fontFamily'] })}
-        icon={<Type className={iconSize} />}
-      />
+      {/* 中间区域 - 可滚动 */}
+      <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar min-w-0 gap-1 px-2">
+        <Select
+          value={resumeData.style.fontFamily}
+          options={FONT_OPTIONS}
+          onChange={(v) => updateStyle({ fontFamily: v as StyleSettings['fontFamily'] })}
+          icon={<Type className={iconSize} />}
+        />
 
-      <Select
-        value={resumeData.style.lineHeight}
-        options={LINE_HEIGHT_OPTIONS}
-        onChange={(v) => updateStyle({ lineHeight: v as number })}
-        icon={<AlignVerticalJustifyCenter className={iconSize} />}
-      />
+        <Select
+          value={resumeData.style.lineHeight}
+          options={LINE_HEIGHT_OPTIONS}
+          onChange={(v) => updateStyle({ lineHeight: v as number })}
+          icon={<AlignVerticalJustifyCenter className={iconSize} />}
+        />
 
-      <Select
-        value={resumeData.style.paragraphSpacing}
-        options={SPACING_OPTIONS}
-        onChange={(v) => updateStyle({ paragraphSpacing: v as number })}
-        icon={<AlignVerticalJustifyCenter className={`${iconSize} rotate-180`} />}
-      />
+        <Select
+          value={resumeData.style.paragraphSpacing}
+          options={SPACING_OPTIONS}
+          onChange={(v) => updateStyle({ paragraphSpacing: v as number })}
+          icon={<AlignVerticalJustifyCenter className={`${iconSize} rotate-180`} />}
+        />
 
-      <Select
-        value={resumeData.style.pagePadding}
-        options={PADDING_OPTIONS}
-        onChange={(v) => updateStyle({ pagePadding: v as number })}
-        icon={<Scissors className={iconSize} />}
-      />
+        <Select
+          value={resumeData.style.pagePadding}
+          options={PADDING_OPTIONS}
+          onChange={(v) => updateStyle({ pagePadding: v as number })}
+          icon={<Scissors className={iconSize} />}
+        />
 
-      <Select
-        value={resumeData.style.pageHorizontalPadding ?? resumeData.style.pagePadding}
-        options={HORIZONTAL_PADDING_OPTIONS}
-        onChange={(v) => updateStyle({ pageHorizontalPadding: v as number })}
-        icon={<Scissors className={`${iconSize} rotate-90`} />}
-      />
+        <Select
+          value={resumeData.style.pageHorizontalPadding ?? resumeData.style.pagePadding}
+          options={HORIZONTAL_PADDING_OPTIONS}
+          onChange={(v) => updateStyle({ pageHorizontalPadding: v as number })}
+          icon={<Scissors className={`${iconSize} rotate-90`} />}
+        />
 
-      <Select
-        value={resumeData.style.letterSpacing ?? 0}
-        options={LETTER_SPACING_OPTIONS}
-        onChange={(v) => updateStyle({ letterSpacing: v as number })}
-        icon={<Type className={iconSize} />}
-      />
+        <Select
+          value={resumeData.style.letterSpacing ?? 0}
+          options={LETTER_SPACING_OPTIONS}
+          onChange={(v) => updateStyle({ letterSpacing: v as number })}
+          icon={<Type className={iconSize} />}
+        />
 
-      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+        <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
 
-      <CardButton
-        onClick={() => setShowMultiPage(!showMultiPage)}
-        active={showMultiPage}
-        icon={showMultiPage ? <Minimize2 className={iconSize} /> : <Maximize2 className={iconSize} />}
-        label={showMultiPage ? '多页' : '单页'}
-        title={showMultiPage ? '切换到单页预览' : '切换到多页预览'}
-      />
+        <CardButton
+          onClick={() => setShowMultiPage(!showMultiPage)}
+          active={showMultiPage}
+          icon={showMultiPage ? <Minimize2 className={iconSize} /> : <Maximize2 className={iconSize} />}
+          label={showMultiPage ? '多页' : '单页'}
+          title={showMultiPage ? '切换到单页预览' : '切换到多页预览'}
+        />
 
-      <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg border border-slate-200 bg-white">
-        <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="缩小" variant="ghost" />
-        <span className="text-xs font-mono w-10 text-center text-slate-700">{Math.round(zoom * 100)}%</span>
-        <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(1.5, zoom + 0.1))} title="放大" variant="ghost" />
+        <div className="flex items-center gap-0.5 px-1.5 rounded-xl border border-slate-200 bg-white shrink-0 h-8">
+          <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="缩小" variant="ghost" />
+          <span className="text-xs font-mono w-10 text-center text-slate-700">{Math.round(zoom * 100)}%</span>
+          <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(1.5, zoom + 0.1))} title="放大" variant="ghost" />
+        </div>
       </div>
 
-      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+      {/* 右侧操作区 - 固定不滚动 */}
+      <div className="flex items-center gap-1 px-3 border-l border-slate-200 shrink-0">
+        <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
+        <CardButton onClick={handleSaveDraft} disabled={isSaving} icon={<Save className={iconSize} />} label={isSaving ? '保存中' : '保存'} title="保存到云端" />
+        <CardButton onClick={onNavigateToMe} icon={<User className={iconSize} />} label="我的" title="我的简历" />
+        <CardButton
+          onClick={handleGoToApplications}
+          disabled={!canNavigateToApplications}
+          icon={<Send className={iconSize} />}
+          label="投递"
+          title={canNavigateToApplications ? '进入投递页' : '请先保存最新更改'}
+        />
 
-      <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
-      <CardButton onClick={handleSaveDraft} disabled={isSaving} icon={<Save className={iconSize} />} label={isSaving ? '保存中' : '保存'} title="保存到云端" />
-      <CardButton onClick={onNavigateToMe} icon={<User className={iconSize} />} label="我的" title="我的简历" />
+        <div className="w-px h-6 bg-slate-200 mx-1" />
 
-      <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
+        <CardButton
+          onClick={handleExportPdf}
+          disabled={parseStatus === 'idle'}
+          icon={<FileDown className={iconSize} />}
+          label="PDF"
+          title="Export PDF"
+          variant="primary"
+          className="bg-slate-800 border-slate-800 text-white hover:bg-slate-700"
+        />
+        <CardButton
+          onClick={handleExportWord}
+          disabled={parseStatus === 'idle'}
+          icon={<FileDown className={iconSize} />}
+          label="Word"
+          title="Export Word"
+        />
 
-      <CardButton
-        onClick={handleExportPdf}
-        disabled={parseStatus === 'idle'}
-        icon={<FileDown className={iconSize} />}
-        label="PDF"
-        title="Export PDF"
-        variant="primary"
-        className="bg-slate-800 border-slate-800 text-white hover:bg-slate-700"
-      />
-      <CardButton
-        onClick={handleExportWord}
-        disabled={parseStatus === 'idle'}
-        icon={<FileDown className={iconSize} />}
-        label="Word"
-        title="Export Word"
-      />
-      <CardButton
-        onClick={handleGoToApplications}
-        disabled={!canNavigateToApplications}
-        icon={<Send className={iconSize} />}
-        label="投递"
-        title={canNavigateToApplications ? '进入投递页' : '请先保存最新更改'}
-      />
-
-      <div
-        className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 ${
-          isDirty ? 'bg-amber-50 text-amber-600' : parseStatus === 'idle' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'
-        }`}
-      >
-        <div className={`w-1.5 h-1.5 rounded-full ${isDirty ? 'bg-amber-500' : parseStatus === 'idle' ? 'bg-slate-400' : 'bg-emerald-500'}`} />
-        {isDirty ? '未保存' : parseStatus === 'idle' ? '未解析' : '已就绪'}
+        <div
+          className={`ml-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+            isDirty ? 'bg-amber-50 text-amber-600' : parseStatus === 'idle' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-600'
+          }`}
+        >
+          <div className={`w-1.5 h-1.5 rounded-full ${isDirty ? 'bg-amber-500' : parseStatus === 'idle' ? 'bg-slate-400' : 'bg-emerald-500'}`} />
+          {isDirty ? '未保存' : parseStatus === 'idle' ? '未解析' : '已就绪'}
+        </div>
       </div>
     </div>
   )
