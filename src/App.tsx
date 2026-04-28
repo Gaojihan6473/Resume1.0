@@ -10,6 +10,7 @@ import { Sidebar } from './components/Sidebar/Sidebar'
 import { LoginPage } from './pages/LoginPage'
 import { MePage } from './pages/MePage'
 import { ApplicationsPage } from './pages/ApplicationsPage'
+import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
@@ -52,7 +53,7 @@ function AppContent() {
 
   // Dirty state navigation handlers
   const handleGoHome = () => {
-    if (isDirty || currentResumeId === null) {
+    if (isDirty) {
       setDirtyNavTarget('home')
       setShowDirtyModal(true)
     } else {
@@ -71,9 +72,14 @@ function AppContent() {
     }
   }
 
-  const handleNavigateToApplications = () => {
+const handleNavigateToApplications = () => {
     setSidebarOpen(false)
     navigate('/applications')
+  }
+
+    const handleNavigateToAnalytics = () => {
+    setSidebarOpen(false)
+    navigate('/analytics')
   }
 
   const handleNavigateToLogin = () => {
@@ -119,6 +125,16 @@ function AppContent() {
           }
         />
 
+        {/* Analytics Page - protected */}
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedRoute>
+              <AnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Home/Editor Page */}
         <Route
           path="/"
@@ -158,6 +174,7 @@ function AppContent() {
                       onGoHome={handleGoHome}
                       onNavigateToMe={handleNavigateToMe}
                       onNavigateToApplications={handleNavigateToApplications}
+                      onNavigateToAnalytics={handleNavigateToAnalytics}
                       onNavigateToLogin={handleNavigateToLogin}
                     />
 

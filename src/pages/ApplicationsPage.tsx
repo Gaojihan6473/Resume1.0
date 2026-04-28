@@ -167,10 +167,15 @@ export function ApplicationsPage() {
     setShowModal(true)
   }
 
-  const handleGoHome = () => {
+const handleGoHome = () => {
     useResumeStore.getState().resetAll()
     setSidebarOpen(false)
     navigate('/')
+  }
+
+  const handleNavigateToAnalytics = () => {
+    setSidebarOpen(false)
+    navigate('/analytics')
   }
 
   const handleEditResume = (resume: Resume) => {
@@ -210,6 +215,7 @@ export function ApplicationsPage() {
           onGoHome={handleGoHome}
           onNavigateToMe={() => navigate('/me')}
           onNavigateToApplications={() => navigate('/applications')}
+          onNavigateToAnalytics={handleNavigateToAnalytics}
         />
 
         {/* 主内容区 - 左右分栏 */}

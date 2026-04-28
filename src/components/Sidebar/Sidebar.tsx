@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Layout, Lock, Home, User, Briefcase } from 'lucide-react'
+import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeStore } from '../../store/resumeStore'
 
@@ -14,10 +14,11 @@ interface SidebarProps {
   onGoHome?: () => void
   onNavigateToMe?: () => void
   onNavigateToApplications?: () => void
+  onNavigateToAnalytics?: () => void
   onNavigateToLogin?: () => void
 }
 
-export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToLogin }: SidebarProps) {
+export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToLogin }: SidebarProps) {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const effectiveBackdropTop = backdropTop ?? topOffset
   const location = useLocation()
@@ -30,6 +31,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
   const isUploadPage = location.pathname === '/' && parseStatus === 'idle'
   const isMePage = location.pathname === '/me'
   const isApplicationsPage = location.pathname === '/applications'
+  const isAnalyticsPage = location.pathname === '/analytics'
 
   // ESC 键关闭
   useEffect(() => {
@@ -55,7 +57,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
       {/* 侧边栏 */}
       <div
         ref={sidebarRef}
-        className="absolute left-0 flex flex-col w-40 z-10 pointer-events-none"
+        className="absolute left-0 flex flex-col w-40 z-10"
         style={{
           top: `${topOffset}px`,
           bottom: 0,
@@ -97,6 +99,20 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
                 <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isApplicationsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                 <Briefcase className="w-4 h-4 shrink-0 text-blue-500" />
                 <span>投递</span>
+              </button>
+            )}
+
+            {/* 分析 */}
+            {isAuthenticated && (
+              <button
+                onClick={onNavigateToAnalytics}
+                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
+                title="分析页"
+              >
+                {/* 左侧活跃指示条 */}
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isAnalyticsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                <BarChart2 className="w-4 h-4 shrink-0 text-blue-500" />
+                <span>分析</span>
               </button>
             )}
 

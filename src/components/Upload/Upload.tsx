@@ -90,20 +90,20 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
     : ''
   const dropzoneHeightClass = embedded
     ? embeddedHasFile
-      ? 'min-h-[206px]'
-      : 'min-h-[267px] flex-1'
+      ? 'min-h-[188px]'
+      : 'min-h-[248px] h-full'
     : ''
   const dropzonePaddingClass = embedded
     ? embeddedHasFile
       ? 'px-5 py-4 md:px-6 md:py-5'
-      : 'p-7 md:p-8'
+      : 'p-6'
     : 'p-10'
   const dropzoneVisualClass = embedded
     ? hasFile
-      ? 'border-dashed border-slate-200 bg-white/80 hover:bg-white hover:border-blue-300 hover:shadow-lg hover:shadow-blue-100/50'
+      ? 'rounded-[28px] border-blue-200/80 bg-white/85 shadow-[0_18px_55px_rgba(37,99,235,0.10)] hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.15)]'
       : isDragActive
-      ? 'upload-drag-active border-blue-400 bg-blue-50/60'
-      : 'border-dashed border-slate-200 bg-white/80 hover:bg-white hover:border-blue-300'
+      ? 'rounded-[28px] upload-drag-active border-blue-400 bg-blue-50/80 shadow-[0_24px_70px_rgba(37,99,235,0.18)]'
+      : 'rounded-[28px] border-blue-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.84)_56%,rgba(219,234,254,0.92))] shadow-[0_18px_55px_rgba(37,99,235,0.13)] hover:-translate-y-1 hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.18)]'
     : hasFile
     ? 'border-green-300 bg-green-50/50'
     : isDragActive
@@ -119,7 +119,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
       onDragLeave={handleDragLeave}
     >
       <div
-        className={`group border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
+        className={`group relative overflow-hidden border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
         onClick={() => {
           if (!isAuthenticated && onAuthRequired) {
             onAuthRequired()
@@ -176,16 +176,50 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
               </span>
             </div>
           </div>
+        ) : embedded ? (
+          <>
+            <div className="pointer-events-none absolute left-7 top-7 grid grid-cols-5 gap-2 opacity-35">
+              {Array.from({ length: 25 }).map((_, index) => (
+                <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
+              ))}
+            </div>
+            <div className="pointer-events-none absolute -right-4 bottom-5 h-24 w-32 rotate-[-24deg] rounded-[40px] border-4 border-blue-100/90" />
+            <div className="pointer-events-none absolute bottom-7 right-9 h-16 w-20 rotate-[-16deg] border-b-8 border-r-8 border-blue-100/80" />
+
+            <div className="relative z-[1] grid h-full w-full items-center gap-6 md:grid-cols-[170px_1fr]">
+              <div className="flex items-center justify-center">
+                <div className="relative">
+                  <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-blue-200/45 blur-sm" />
+                  <div className="absolute -bottom-5 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] border border-blue-200 bg-white/45" />
+                  <div className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-[24px] bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 text-white shadow-xl shadow-blue-300/80 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-105'}`}>
+                    <UploadIcon className={`h-9 w-9 transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center md:text-left">
+                <h2 className="text-xl font-bold text-slate-900">
+                  {isDragActive ? '松开即可上传' : '点击或拖拽文件到这里'}
+                </h2>
+                <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
+                  支持 PDF、DOCX、DOC、TXT 文件
+                </p>
+                <span className="mt-6 inline-flex h-11 min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:shadow-xl group-hover:shadow-blue-300">
+                  上传简历
+                </span>
+              </div>
+            </div>
+          </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-5">
             <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-blue-200 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-110'}`}>
               <UploadIcon className={`w-8 h-8 text-white transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
             </div>
             <div className="min-h-[62px] text-center">
-              <p className={embedded ? 'text-lg font-semibold text-slate-700 leading-7' : 'text-gray-700 font-medium mb-1'}>
+              <p className="text-gray-700 font-medium mb-1">
                 {isDragActive ? '拖拽以上传文件' : '点击或拖拽文件到这里'}
               </p>
-              <p className={`text-sm leading-6 ${embedded ? 'text-slate-500 whitespace-nowrap' : 'text-gray-400'}`}>
+              <p className="text-sm leading-6 text-gray-400">
                 支持 PDF、DOCX、DOC、TXT 文件
               </p>
             </div>

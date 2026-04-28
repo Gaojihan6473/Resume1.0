@@ -31,11 +31,26 @@ import {
 
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
 
+function hasResumeContent(data: ResumeData) {
+  const hasBasic = Object.values(data.basic).some((value) =>
+    Array.isArray(value) ? value.length > 0 : Boolean(String(value).trim())
+  )
+  const hasSummary = Boolean(data.summary.text.trim() || data.summary.content.trim() || data.summary.highlights.length > 0)
+  const hasSkills = Object.values(data.skills).some((items) => items.length > 0)
+
+  return hasBasic ||
+    data.education.length > 0 ||
+    data.internships.length > 0 ||
+    data.projects.length > 0 ||
+    hasSummary ||
+    hasSkills
+}
+
 export function MePage() {
   const navigate = useNavigate()
   const { user, signOut } = useAuthStore()
   const {
-    resumeData, setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty,
+    resumeData, setResumeData, setParseStatus, setParseError, currentResumeId, setCurrentResumeId, setIsDirty,
     cachedResumes, setCachedResumes, clearCachedResumes
   } = useResumeStore()
 
@@ -150,18 +165,27 @@ export function MePage() {
     setSyncStatus('syncing')
     setError(null)
 
-    const existingCloudResume = resumes.find((r) => r.source !== 'local')
+    if (!hasResumeContent(resumeData)) {
+      setError('当前简历为空，已阻止覆盖云端数据')
+      setSyncStatus('error')
+      toast('当前简历为空，已阻止覆盖云端数据', 'error')
+      return
+    }
 
-    if (existingCloudResume) {
+    const currentCloudResume = currentResumeId
+      ? resumes.find((r) => r.id === currentResumeId && r.source !== 'local')
+      : null
+
+    if (currentCloudResume) {
       const result = await updateResume(
-        existingCloudResume.id,
-        existingCloudResume.title,
+        currentCloudResume.id,
+        resumeData.resumeTitle || currentCloudResume.title || resumeData.basic.name || '我的简历',
         resumeData as unknown as Record<string, unknown>
       )
 
       if (result.success) {
         const updatedResumes = resumes.map((r) =>
-          r.id === existingCloudResume.id ? { ...r, ...result.resume } : r
+          r.id === currentCloudResume.id ? { ...r, ...result.resume } : r
         )
         setResumes(updatedResumes)
         setCachedResumes(updatedResumes, Date.now())
@@ -288,6 +312,7 @@ export function MePage() {
           onGoHome={handleGoHome}
           onNavigateToMe={() => navigate('/me')}
           onNavigateToApplications={handleNavigateToApplications}
+          onNavigateToAnalytics={() => navigate('/analytics')}
         />
 
         {/* 主内容区 */}
