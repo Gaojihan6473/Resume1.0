@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Loader2, Sparkles, Lightbulb, AlertCircle, FileText, Target } from 'lucide-react'
 import type { Application } from '../../types/application'
 import {
@@ -12,6 +13,7 @@ import {
 } from '../../types/analytics'
 import type { ResumeData } from '../../types/resume'
 import { useResumeStore } from '../../store/resumeStore'
+import { fetchResumes } from '../../lib/api'
 import { CustomSelect } from '../Application/CustomSelect'
 import { MatchScore } from './MatchScore'
 import { Suggestions } from './Suggestions'
@@ -21,16 +23,46 @@ interface JDAnalyzerProps {
 }
 
 export function JDAnalyzer({ applications }: JDAnalyzerProps) {
+  const [searchParams] = useSearchParams()
+  const resumeIdFromQuery = searchParams.get('resumeId') || ''
+  const attemptedResumeLoadRef = useRef<string | null>(null)
   const [jdText, setJdText] = useState('')
   const [selectedResumeId, setSelectedResumeId] = useState<string>('')
   const [selectedJobId, setSelectedJobId] = useState<string>('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<JDAnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { apiKey: userApiKey, cachedResumes } = useResumeStore()
+  const { apiKey: userApiKey, cachedResumes, setCachedResumes } = useResumeStore()
   const apiKey = (import.meta.env.VITE_MINIMAX_API_KEY as string)?.trim() || userApiKey
 
   const applicationsWithJD = applications.filter((app) => app.jobDescription?.trim())
+
+  useEffect(() => {
+    if (resumeIdFromQuery) {
+      setSelectedResumeId(resumeIdFromQuery)
+    }
+  }, [resumeIdFromQuery])
+
+  useEffect(() => {
+    if (!resumeIdFromQuery || cachedResumes.some((resume) => resume.id === resumeIdFromQuery)) return
+    if (attemptedResumeLoadRef.current === resumeIdFromQuery) return
+
+    let cancelled = false
+    attemptedResumeLoadRef.current = resumeIdFromQuery
+
+    async function loadResumes() {
+      const result = await fetchResumes()
+      if (!cancelled && result.success && result.resumes) {
+        setCachedResumes(result.resumes, Date.now())
+      }
+    }
+
+    loadResumes()
+
+    return () => {
+      cancelled = true
+    }
+  }, [cachedResumes, resumeIdFromQuery, setCachedResumes])
 
   const handleJobSelect = (jobId: string) => {
     setSelectedJobId(jobId)

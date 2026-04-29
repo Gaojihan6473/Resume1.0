@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Loader2, Fish, ChevronRight } from 'lucide-react'
+import { Plus, Loader2, Fish, ChevronsRight } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { fetchResumes, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
 import type { ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
+import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { toast } from '../components/Toast'
 import { ResumeSelector } from '../components/Application/ResumeSelector'
 import { ApplicationList } from '../components/Application/ApplicationList'
@@ -35,7 +36,7 @@ export function ApplicationsPage() {
     deleteApplication,
   } = useApplicationStore()
 
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const [resumes, setResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(true)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
@@ -106,8 +107,27 @@ export function ApplicationsPage() {
   }, [fetchApplications, cachedResumes, setCachedResumes])
 
   useEffect(() => {
-    if (hasAppliedQuerySelection || resumes.length === 0) return
+    if (hasAppliedQuerySelection) return
     const resumeIdFromQuery = searchParams.get('resumeId')
+    const applicationIdFromQuery = searchParams.get('applicationId')
+
+    if (applicationIdFromQuery) {
+      const applicationFromQuery = applications.find((app) => app.id === applicationIdFromQuery)
+
+      if (!applicationFromQuery) {
+        if (isLoading) return
+        setHasAppliedQuerySelection(true)
+        return
+      }
+
+      if (applicationFromQuery.resume_id) {
+        setSelectedResumeId(applicationFromQuery.resume_id)
+      }
+      setHasAppliedQuerySelection(true)
+      return
+    }
+
+    if (resumes.length === 0) return
     if (!resumeIdFromQuery) return
 
     const exists = resumes.some((resume) => resume.id === resumeIdFromQuery)
@@ -115,7 +135,7 @@ export function ApplicationsPage() {
       setSelectedResumeId(resumeIdFromQuery)
     }
     setHasAppliedQuerySelection(true)
-  }, [hasAppliedQuerySelection, resumes, searchParams])
+  }, [applications, hasAppliedQuerySelection, isLoading, resumes, searchParams])
 
   const handleCreateApplication = async (data: SaveData) => {
     await createApplication(data as import('../types/application').CreateApplicationInput)
@@ -169,12 +189,12 @@ export function ApplicationsPage() {
 
 const handleGoHome = () => {
     useResumeStore.getState().resetAll()
-    setSidebarOpen(false)
+    closeSidebar()
     navigate('/')
   }
 
   const handleNavigateToAnalytics = () => {
-    setSidebarOpen(false)
+    closeSidebar()
     navigate('/analytics')
   }
 
@@ -188,19 +208,21 @@ const handleGoHome = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
+    <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
       {/* 顶部栏 */}
-      <header className="h-14 shrink-0 flex items-center px-4 border-b border-slate-100/80 bg-white/80 backdrop-blur-sm">
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors duration-200"
+      <header className="app-topbar h-14 shrink-0 flex items-center px-4">
+        <div
+          ref={triggerRef}
+          onMouseEnter={openSidebar}
+          onMouseLeave={scheduleCloseSidebar}
+          className="flex items-center gap-2 px-2 py-1.5"
         >
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
             <Fish className="w-4 h-4 text-white" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${sidebarOpen ? 'rotate-180' : ''}`} />
-        </button>
+          <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
+        </div>
 
       </header>
 
@@ -209,7 +231,10 @@ const handleGoHome = () => {
         {/* 左侧边栏 */}
         <Sidebar
           open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          sidebarRef={sidebarRef}
+          onClose={closeSidebar}
+          onMouseEnter={openSidebar}
+          onMouseLeave={scheduleCloseSidebar}
           topOffset={0}
           backdropTop={56}
           onGoHome={handleGoHome}
@@ -219,7 +244,7 @@ const handleGoHome = () => {
         />
 
         {/* 主内容区 - 左右分栏 */}
-        <main className="flex-1 flex overflow-hidden">
+        <main className="relative flex-1 flex overflow-hidden home-login-bg">
           {/* 左侧：简历选择区域 */}
           <div className="w-[35%] shrink-0 border-r border-slate-200/80 bg-white/50 p-4 overflow-y-auto hide-scrollbar">
             {isLoadingResumes ? (
@@ -248,6 +273,7 @@ const handleGoHome = () => {
               resumes={resumes}
               selectedResumeId={selectedResumeId}
               isLoading={isLoading}
+              initialExpandedId={searchParams.get('applicationId')}
               headerAction={
                 <button
                   ref={createButtonRef}
@@ -256,7 +282,7 @@ const handleGoHome = () => {
                   className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all duration-200 shadow-sm shadow-blue-200 flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  新建投递
+                  新建岗位
                 </button>
               }
               onSave={handleUpdateApplication}

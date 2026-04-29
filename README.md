@@ -8,6 +8,9 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Rule-based section extraction (basic info, education, internships, projects, summary, skills)
 - Visual editor + A4 preview
 - Save/load local draft
+- Track applications and jump from a saved resume to JD analysis
+- JD analysis can preselect the source resume from the editor
+- Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
 - Export to PDF / DOCX
 
 ## Tech Stack

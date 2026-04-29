@@ -7,6 +7,7 @@ import { Editor } from './components/Editor/Editor'
 import { Preview } from './components/Preview/Preview'
 import { HomePage } from './pages/HomePage'
 import { Sidebar } from './components/Sidebar/Sidebar'
+import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
 import { LoginPage } from './pages/LoginPage'
 import { MePage } from './pages/MePage'
 import { ApplicationsPage } from './pages/ApplicationsPage'
@@ -16,16 +17,18 @@ import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
 
+type DirtyNavTarget = 'home' | 'me' | 'analytics-jd'
+
 function AppContent() {
   const { parseStatus, isDirty, currentResumeId } = useResumeStore()
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [pendingAction, setPendingAction] = useState<'new' | 'upload' | 'me' | null>(null)
   const [showDirtyModal, setShowDirtyModal] = useState(false)
-  const [dirtyNavTarget, setDirtyNavTarget] = useState<'home' | 'me' | null>(null)
+  const [dirtyNavTarget, setDirtyNavTarget] = useState<DirtyNavTarget | null>(null)
 
   // Initialize auth session on app load
   useEffect(() => {
@@ -58,12 +61,12 @@ function AppContent() {
       setShowDirtyModal(true)
     } else {
       useResumeStore.getState().resetAll()
-      setSidebarOpen(false)
+      closeSidebar()
     }
   }
 
   const handleNavigateToMe = () => {
-    setSidebarOpen(false)
+    closeSidebar()
     if (isDirty || currentResumeId === null) {
       setDirtyNavTarget('me')
       setShowDirtyModal(true)
@@ -72,18 +75,34 @@ function AppContent() {
     }
   }
 
-const handleNavigateToApplications = () => {
-    setSidebarOpen(false)
+  const getAnalyticsJDPath = (resumeId: string | null) => {
+    const params = new URLSearchParams({ tab: 'jd' })
+    if (resumeId) params.set('resumeId', resumeId)
+    return `/analytics?${params.toString()}`
+  }
+
+  const handleNavigateToApplications = () => {
+    closeSidebar()
     navigate('/applications')
   }
 
-    const handleNavigateToAnalytics = () => {
-    setSidebarOpen(false)
+  const handleNavigateToAnalytics = () => {
+    closeSidebar()
     navigate('/analytics')
   }
 
+  const handleNavigateToAnalysis = () => {
+    closeSidebar()
+    if (isDirty || currentResumeId === null) {
+      setDirtyNavTarget('analytics-jd')
+      setShowDirtyModal(true)
+    } else {
+      navigate(getAnalyticsJDPath(currentResumeId))
+    }
+  }
+
   const handleNavigateToLogin = () => {
-    setSidebarOpen(false)
+    closeSidebar()
     navigate('/login')
   }
 
@@ -143,7 +162,11 @@ const handleNavigateToApplications = () => {
               {parseStatus === 'idle' || parseStatus === 'parsing' ? (
                 <HomePage
                   sidebarOpen={sidebarOpen}
-                  onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                  sidebarTriggerRef={triggerRef}
+                  sidebarRef={sidebarRef}
+                  onOpenSidebar={openSidebar}
+                  onScheduleCloseSidebar={scheduleCloseSidebar}
+                  onCloseSidebar={closeSidebar}
                   onAuthRequired={(action) => {
                     setPendingAction(action)
                     setShowAuthModal(true)
@@ -154,13 +177,14 @@ const handleNavigateToApplications = () => {
                   {/* 工具栏 */}
                   <Toolbar
                     previewRef={previewRef}
-                    sidebarOpen={sidebarOpen}
-                    onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                    sidebarTriggerRef={triggerRef}
+                    onOpenSidebar={openSidebar}
+                    onScheduleCloseSidebar={scheduleCloseSidebar}
                     onAuthRequired={(action) => {
                       setPendingAction(action)
                       setShowAuthModal(true)
                     }}
-                    onNavigateToMe={handleNavigateToMe}
+                    onNavigateToAnalysis={handleNavigateToAnalysis}
                   />
 
                   {/* 侧边栏 + 主内容，放在同一 relative 容器中 */}
@@ -168,7 +192,10 @@ const handleNavigateToApplications = () => {
                     {/* 侧边栏：topOffset=0 因为父容器已在 toolbar 下方；backdropTop=56 对齐 toolbar 底部 */}
                     <Sidebar
                       open={sidebarOpen}
-                      onClose={() => setSidebarOpen(false)}
+                      sidebarRef={sidebarRef}
+                      onClose={closeSidebar}
+                      onMouseEnter={openSidebar}
+                      onMouseLeave={scheduleCloseSidebar}
                       topOffset={0}
                       backdropTop={56}
                       onGoHome={handleGoHome}
@@ -217,13 +244,13 @@ const handleNavigateToApplications = () => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
           useResumeStore.getState().resetAll()
-          setSidebarOpen(false)
+          closeSidebar()
         }}
         onDiscardAndNavigateHome={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
           useResumeStore.getState().resetAll()
-          setSidebarOpen(false)
+          closeSidebar()
         }}
         onSaveAndNavigateToMe={() => {
           setShowDirtyModal(false)
@@ -234,6 +261,17 @@ const handleNavigateToApplications = () => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
           navigate('/me')
+        }}
+        onSaveAndNavigateToAnalyticsJD={() => {
+          setShowDirtyModal(false)
+          setDirtyNavTarget(null)
+          const resumeId = useResumeStore.getState().currentResumeId
+          navigate(getAnalyticsJDPath(resumeId))
+        }}
+        onDiscardAndNavigateToAnalyticsJD={() => {
+          setShowDirtyModal(false)
+          setDirtyNavTarget(null)
+          navigate(getAnalyticsJDPath(currentResumeId))
         }}
       />
 

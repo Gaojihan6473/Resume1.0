@@ -11,6 +11,7 @@ import {
 import { useResumeStore } from '../store/resumeStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
+import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { toast } from '../components/Toast'
 import {
   FileText,
@@ -22,11 +23,11 @@ import {
   Loader2,
   CheckCircle,
   Clock,
-  ChevronRight,
   Fish,
   User,
   LogOut,
   Copy,
+  ChevronsRight,
 } from 'lucide-react'
 
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
@@ -54,7 +55,7 @@ export function MePage() {
     cachedResumes, setCachedResumes, clearCachedResumes
   } = useResumeStore()
 
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const [resumes, setResumes] = useState<Resume[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
@@ -221,10 +222,18 @@ export function MePage() {
     setSyncStatus('syncing')
     setError(null)
 
+    const title = resume.title?.trim() || '未命名简历'
+    const duplicateTitle = `${title}-副本`
+    const duplicateContent = {
+      ...resume.content,
+      resumeTitle: duplicateTitle,
+    }
     const result = await createResume(
-      `${resume.title}-副本`,
-      resume.content as Record<string, unknown>,
-      resume.source
+      duplicateTitle,
+      duplicateContent,
+      resume.source,
+      resume.file_url,
+      resume.preview_url
     )
 
     if (result.success && result.resume) {
@@ -249,12 +258,12 @@ export function MePage() {
 
   const handleGoHome = () => {
     useResumeStore.getState().resetAll()
-    setSidebarOpen(false)
+    closeSidebar()
     navigate('/')
   }
 
   const handleNavigateToApplications = () => {
-    setSidebarOpen(false)
+    closeSidebar()
     navigate('/applications')
   }
 
@@ -272,19 +281,21 @@ export function MePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
+    <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
       {/* 顶部栏 */}
-      <header className="h-14 shrink-0 flex items-center px-4 border-b border-slate-100/80 bg-white/80 backdrop-blur-sm">
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors duration-200"
+      <header className="app-topbar h-14 shrink-0 flex items-center px-4">
+        <div
+          ref={triggerRef}
+          onMouseEnter={openSidebar}
+          onMouseLeave={scheduleCloseSidebar}
+          className="flex items-center gap-2 px-2 py-1.5"
         >
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
             <Fish className="w-4 h-4 text-white" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${sidebarOpen ? 'rotate-180' : ''}`} />
-        </button>
+          <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
+        </div>
 
         <div className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/70">
           <User className="w-4 h-4 text-indigo-500" />
@@ -306,7 +317,10 @@ export function MePage() {
         {/* 左侧边栏 */}
         <Sidebar
           open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          sidebarRef={sidebarRef}
+          onClose={closeSidebar}
+          onMouseEnter={openSidebar}
+          onMouseLeave={scheduleCloseSidebar}
           topOffset={0}
           backdropTop={56}
           onGoHome={handleGoHome}
@@ -316,7 +330,7 @@ export function MePage() {
         />
 
         {/* 主内容区 */}
-        <main className="flex-1 overflow-y-auto py-8 px-6 lg:px-10">
+        <main className="relative flex-1 overflow-y-auto py-8 px-6 lg:px-10 home-login-bg">
           <div className="max-w-3xl mx-auto">
             {/* 同步状态卡片 */}
             <div className="mb-6 p-4 rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur-sm shadow-sm">

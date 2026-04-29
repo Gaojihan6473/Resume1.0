@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
@@ -16,10 +17,14 @@ interface SidebarProps {
   onNavigateToApplications?: () => void
   onNavigateToAnalytics?: () => void
   onNavigateToLogin?: () => void
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  sidebarRef?: RefObject<HTMLDivElement | null>
 }
 
-export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToLogin }: SidebarProps) {
-  const sidebarRef = useRef<HTMLDivElement>(null)
+export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToLogin, onMouseEnter, onMouseLeave, sidebarRef }: SidebarProps) {
+  const internalSidebarRef = useRef<HTMLDivElement>(null)
+  const containerRef = sidebarRef ?? internalSidebarRef
   const effectiveBackdropTop = backdropTop ?? topOffset
   const location = useLocation()
   const { isAuthenticated } = useAuthStore()
@@ -42,21 +47,27 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
     return () => document.removeEventListener('keydown', handleKey)
   }, [open, onClose])
 
+  const handleAction = (action?: () => void) => {
+    onClose()
+    action?.()
+  }
+
   return (
     <>
       {/* 遮罩层 */}
       <div
         aria-hidden
-        onClick={onClose}
         className={`absolute inset-0 z-0 transition-opacity duration-300 ${
-          open ? 'opacity-100 pointer-events-auto cursor-default' : 'opacity-0 pointer-events-none'
+          open ? 'opacity-100 pointer-events-none' : 'opacity-0 pointer-events-none'
         }`}
         style={{ top: `${effectiveBackdropTop}px` }}
       />
 
       {/* 侧边栏 */}
       <div
-        ref={sidebarRef}
+        ref={containerRef}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
         className="absolute left-0 flex flex-col w-40 z-10"
         style={{
           top: `${topOffset}px`,
@@ -78,7 +89,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
           <nav className="flex flex-col gap-0.5 px-2 pt-3 pb-2">
             {/* 首页 - 仅上传页（parseStatus === 'idle'）显示活跃状态 */}
             <button
-              onClick={onGoHome}
+              onClick={() => handleAction(onGoHome)}
               className="group relative flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
               title="返回首页"
             >
@@ -88,24 +99,24 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
               <span>首页</span>
             </button>
 
-            {/* 投递 */}
+            {/* 岗位 */}
             {isAuthenticated && (
               <button
-                onClick={onNavigateToApplications}
+                onClick={() => handleAction(onNavigateToApplications)}
                 className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
-                title="投递记录"
+                title="岗位"
               >
                 {/* 左侧活跃指示条 */}
                 <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isApplicationsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                 <Briefcase className="w-4 h-4 shrink-0 text-blue-500" />
-                <span>投递</span>
+                <span>岗位</span>
               </button>
             )}
 
             {/* 分析 */}
             {isAuthenticated && (
               <button
-                onClick={onNavigateToAnalytics}
+                onClick={() => handleAction(onNavigateToAnalytics)}
                 className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
                 title="分析页"
               >
@@ -135,7 +146,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
           <div className="mt-auto px-2 pb-3 flex flex-col gap-0.5">
             {isAuthenticated ? (
               <button
-                onClick={onNavigateToMe}
+                onClick={() => handleAction(onNavigateToMe)}
                 className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
                 title="我的简历"
               >
@@ -146,7 +157,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
               </button>
             ) : (
               <button
-                onClick={onNavigateToLogin}
+                onClick={() => handleAction(onNavigateToLogin)}
                 className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
                 title="登录"
               >

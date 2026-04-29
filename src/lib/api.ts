@@ -154,7 +154,8 @@ export async function createResume(
   title: string = '未命名简历',
   content: Record<string, unknown> = {},
   source: string = 'blank',
-  fileUrl: string | null = null
+  fileUrl: string | null = null,
+  previewUrl: string | null = null
 ): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -170,6 +171,7 @@ export async function createResume(
         content,
         source,
         file_url: fileUrl,
+        preview_url: previewUrl,
       })
       .select()
       .single()

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Briefcase, Loader2 } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -10,6 +10,7 @@ interface Props {
   resumes: Resume[]
   selectedResumeId: string | null
   isLoading: boolean
+  initialExpandedId?: string | null
   headerAction?: ReactNode
   onSave: (application: Application) => void
   onDelete: (id: string) => void
@@ -32,12 +33,35 @@ export function ApplicationList({
   resumes,
   selectedResumeId,
   isLoading,
+  initialExpandedId,
   headerAction,
   onSave,
   onDelete,
 }: Props) {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const expandedCardRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!initialExpandedId) return
+    const exists = applications.some((app) => app.id === initialExpandedId)
+    if (exists) {
+      setExpandedId(initialExpandedId)
+    }
+  }, [applications, initialExpandedId])
+
+  useEffect(() => {
+    if (!initialExpandedId || expandedId !== initialExpandedId) return
+
+    const timer = window.setTimeout(() => {
+      expandedCardRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [expandedId, initialExpandedId])
 
   const filteredApplications = applications.filter((app) => {
     if (filterStatus === 'all') return true
@@ -106,7 +130,11 @@ export function ApplicationList({
         ) : (
           <div className="grid grid-cols-2 gap-3 items-start">
             {sortedApplications.map((app) => (
-              <div key={app.id} className={expandedId === app.id ? 'col-span-2' : ''}>
+              <div
+                key={app.id}
+                ref={expandedId === app.id ? expandedCardRef : undefined}
+                className={expandedId === app.id ? 'col-span-2' : ''}
+              >
                 <ApplicationCard
                   application={app}
                   resumes={resumes}
