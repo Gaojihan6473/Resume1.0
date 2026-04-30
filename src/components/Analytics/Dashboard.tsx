@@ -1,10 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
-import { TrendingUp, Target, Clock, Award, ChevronDown, ChevronUp, BarChart2, Table2, Inbox } from 'lucide-react'
+import { TrendingUp, Target, Clock, Award, ChevronDown, ChevronUp, BarChart2, Table2, Inbox, Network } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS, APPLICATION_CHANNEL_LABELS } from '../../types/application'
 import type { TimeRange } from '../../types/analytics'
 import { useAnalyticsStore } from '../../store/analyticsStore'
 import { GroupedBar } from './GroupedBar'
+import { ResumeJobGraph } from './ResumeJobGraph'
+import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
 import { fetchResumes } from '../../lib/api'
 import type { Resume } from '../../lib/api'
 import { CustomSelect } from '../Application/CustomSelect'
@@ -14,7 +16,6 @@ interface DashboardProps {
   applications: Application[]
 }
 
-type ViewMode = 'chart' | 'table'
 type SortField = 'company' | 'appliedAt' | 'status'
 
 const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
@@ -24,20 +25,8 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
   { value: 'all', label: '全部' },
 ]
 
-const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  interested: '#94a3b8',
-  applied: '#3b82f6',
-  interviewing: '#f59e0b',
-  offered: '#10b981',
-  rejected: '#ef4444',
-  ghosted: '#6b7280',
-}
-
-const STATUS_ORDER: ApplicationStatus[] = ['interested', 'applied', 'interviewing', 'offered', 'rejected', 'ghosted']
-
 export function Dashboard({ applications }: DashboardProps) {
   const { timeRange, setTimeRange, selectedResumeId, setSelectedResumeId } = useAnalyticsStore()
-  const [viewMode, setViewMode] = useState<ViewMode>('chart')
   const [sortField, setSortField] = useState<SortField>('appliedAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [resumes, setResumes] = useState<Resume[]>([])
@@ -99,7 +88,31 @@ export function Dashboard({ applications }: DashboardProps) {
     return Array.from(resumeMap.entries()).map(([id, title]) => ({ id, title }))
   }, [applications, resumes])
 
-  // 分组柱状图数据：按简历+状态统计
+  // 表格专用筛选：上排图表保持全量概览，只有明细表跟随这些条件
+  const filteredTableApplications = useMemo(() => {
+    let result = [...applications]
+
+    if (timeRange !== 'all') {
+      const now = new Date()
+      const threshold = new Date()
+      if (timeRange === '1m') threshold.setMonth(now.getMonth() - 1)
+      else if (timeRange === '3m') threshold.setMonth(now.getMonth() - 3)
+      else if (timeRange === '6m') threshold.setMonth(now.getMonth() - 6)
+
+      result = result.filter((app) => {
+        const date = app.appliedAt ? new Date(app.appliedAt) : new Date(app.created_at)
+        return date >= threshold
+      })
+    }
+
+    if (selectedResumeId) {
+      result = result.filter((app) => app.resume_id === selectedResumeId)
+    }
+
+    return result
+  }, [applications, timeRange, selectedResumeId])
+
+  // 分组柱状图数据：按简历+状态统计，使用全量岗位记录
   const resumeStatusData = useMemo(() => {
     const data: { resumeId: string; resumeName: string; company: string; position: string; status: ApplicationStatus; count: number; companies: string[] }[] = []
 
@@ -114,14 +127,11 @@ export function Dashboard({ applications }: DashboardProps) {
     resumes.forEach((r) => allResumeIds.add(r.id))
     resumeWithApps.forEach((id) => allResumeIds.add(id))
 
-    // 3. 如果有选中简历筛选，只显示该简历
+    // 3. 展示所有简历
     const allResumeIdsArray = Array.from(allResumeIds)
-    const filteredResumeIds = selectedResumeId
-      ? allResumeIdsArray.filter((id) => id === selectedResumeId)
-      : allResumeIdsArray
 
     // 4. 按简历分组处理数据
-    filteredResumeIds.forEach((resumeId) => {
+    allResumeIdsArray.forEach((resumeId) => {
       const resumeApps = applications.filter((app) => app.resume_id === resumeId)
       const resumeTitle = resumeTitleMap.get(resumeId) || '未关联简历'
 
@@ -148,35 +158,33 @@ export function Dashboard({ applications }: DashboardProps) {
       })
     })
 
-    // 4. 处理没有关联简历的岗位（resume_id 为 null 或空）- 只有在未筛选时才显示
-    if (!selectedResumeId) {
-      const unboundApps = applications.filter((app) => !app.resume_id)
-      if (unboundApps.length > 0) {
-        const statusApps: Record<ApplicationStatus, { company: string; position: string }[]> = {
-          interested: [], applied: [], interviewing: [], offered: [], rejected: [], ghosted: []
-        }
-
-        unboundApps.forEach((app) => {
-          statusApps[app.status].push({ company: app.company, position: app.position })
-        })
-
-        STATUS_ORDER.forEach((status) => {
-          const apps = statusApps[status]
-          data.push({
-            resumeId: 'unbound',
-            resumeName: '未绑定简历',
-            company: apps[0]?.company || '',
-            position: apps[0]?.position || '',
-            companies: apps.map((a) => `${a.company} - ${a.position}`),
-            status,
-            count: apps.length,
-          })
-        })
+    // 5. 处理没有关联简历的岗位（resume_id 为 null 或空）
+    const unboundApps = applications.filter((app) => !app.resume_id)
+    if (unboundApps.length > 0) {
+      const statusApps: Record<ApplicationStatus, { company: string; position: string }[]> = {
+        interested: [], applied: [], interviewing: [], offered: [], rejected: [], ghosted: []
       }
+
+      unboundApps.forEach((app) => {
+        statusApps[app.status].push({ company: app.company, position: app.position })
+      })
+
+      STATUS_ORDER.forEach((status) => {
+        const apps = statusApps[status]
+        data.push({
+          resumeId: 'unbound',
+          resumeName: '未绑定简历',
+          company: apps[0]?.company || '',
+          position: apps[0]?.position || '',
+          companies: apps.map((a) => `${a.company} - ${a.position}`),
+          status,
+          count: apps.length,
+        })
+      })
     }
 
     return data
-  }, [applications, resumeTitleMap, resumes, selectedResumeId])
+  }, [applications, resumeTitleMap, resumes])
 
   // 统计
   const stats = useMemo(() => {
@@ -201,26 +209,9 @@ export function Dashboard({ applications }: DashboardProps) {
     return { total, statusCounts, passRate, topChannel }
   }, [applications])
 
-  // 筛选和排序后的数据
-  const filteredApplications = useMemo(() => {
-    let result = [...applications]
-
-    if (timeRange !== 'all') {
-      const now = new Date()
-      const threshold = new Date()
-      if (timeRange === '1m') threshold.setMonth(now.getMonth() - 1)
-      else if (timeRange === '3m') threshold.setMonth(now.getMonth() - 3)
-      else if (timeRange === '6m') threshold.setMonth(now.getMonth() - 6)
-
-      result = result.filter((app) => {
-        const date = app.appliedAt ? new Date(app.appliedAt) : new Date(app.created_at)
-        return date >= threshold
-      })
-    }
-
-    if (selectedResumeId) {
-      result = result.filter((app) => app.resume_id === selectedResumeId)
-    }
+  // 表格排序后的数据
+  const sortedTableApplications = useMemo(() => {
+    const result = [...filteredTableApplications]
 
     result.sort((a, b) => {
       let comparison = 0
@@ -237,7 +228,7 @@ export function Dashboard({ applications }: DashboardProps) {
     })
 
     return result
-  }, [applications, timeRange, selectedResumeId, sortField, sortOrder])
+  }, [filteredTableApplications, sortField, sortOrder])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -285,48 +276,24 @@ export function Dashboard({ applications }: DashboardProps) {
         />
       </div>
 
-      {/* 筛选导航栏 + 大图表/表格区域 - 合并成统一大卡片 */}
+      {/* 表格明细 */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-        {/* 顶部筛选导航栏 */}
-        <div className="flex items-center justify-between px-5 h-12 bg-slate-50/80 border-b border-slate-100/60">
-          {/* 左侧：视图切换 + 时间筛选 */}
-          <div className="flex items-center h-12 gap-4">
-            {/* 视图切换 - 胶囊按钮 */}
-            <div className="flex items-center h-full gap-0.5">
-              <button
-                onClick={() => setViewMode('chart')}
-                className={`flex items-center gap-1.5 h-full px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                  viewMode === 'chart'
-                    ? 'text-slate-800 font-semibold'
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                <BarChart2 className="w-4 h-4" />
-                图表
-              </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`flex items-center gap-1.5 h-full px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                  viewMode === 'table'
-                    ? 'text-slate-800 font-semibold'
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                <Table2 className="w-4 h-4" />
-                表格
-              </button>
+        {/* 表格筛选导航栏 */}
+        <div className="flex items-center justify-between px-5 min-h-12 bg-slate-50/80 border-b border-slate-100/60">
+          <div className="flex flex-wrap items-center gap-4 py-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Table2 className="w-4 h-4 text-blue-500" />
+              岗位明细
             </div>
 
-            {/* 分隔线 */}
             <div className="h-6 w-px bg-slate-200" />
 
-            {/* 时间筛选 - 胶囊按钮 */}
-            <div className="flex items-center h-full gap-0.5">
+            <div className="flex items-center gap-0.5">
               {TIME_RANGE_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => setTimeRange(opt.value)}
-                  className={`h-full px-3 rounded-md text-xs font-medium transition-all duration-200 ${
+                  className={`h-8 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
                     timeRange === opt.value
                       ? 'text-slate-800 font-semibold'
                       : 'text-slate-400 hover:text-slate-600'
@@ -337,10 +304,8 @@ export function Dashboard({ applications }: DashboardProps) {
               ))}
             </div>
 
-            {/* 分隔线 */}
             <div className="h-6 w-px bg-slate-200" />
 
-            {/* 简历筛选 */}
             {resumeOptions.length > 0 && (
               <CustomSelect
                 value={selectedResumeId || ''}
@@ -351,25 +316,12 @@ export function Dashboard({ applications }: DashboardProps) {
             )}
           </div>
 
-          {/* 右侧：记录数 */}
           <div className="text-sm text-slate-500 whitespace-nowrap">
-            共 <span className="font-semibold text-slate-700">{filteredApplications.length}</span> 条
+            共 <span className="font-semibold text-slate-700">{filteredTableApplications.length}</span> 条
           </div>
         </div>
 
-        {/* 大图表/表格区域 - 无痕透明 */}
-        <div className="relative transition-all duration-300 ease-out">
-          {/* 图表视图 */}
-          <div className={`transition-all duration-300 ease-out ${viewMode === 'chart' ? 'opacity-100 translate-y-0' : 'opacity-0 absolute inset-0 pointer-events-none'}`}>
-            <div className="px-6 pt-5 pb-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-slate-700">各简历投递状态分布</h3>
-              </div>
-              <GroupedBar data={resumeStatusData} />
-            </div>
-          </div>
-          <div className={`transition-all duration-300 ease-out ${viewMode === 'table' ? 'opacity-100 translate-y-0' : 'opacity-0 absolute pointer-events-none'}`}>
-            <div className="overflow-x-auto px-6 py-5">
+        <div className="overflow-x-auto px-6 py-5">
               <table className="w-full">
                 <thead>
                   <tr className="bg-white border-b-2 border-slate-200">
@@ -415,7 +367,7 @@ export function Dashboard({ applications }: DashboardProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredApplications.length === 0 ? (
+                  {sortedTableApplications.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center">
@@ -428,7 +380,7 @@ export function Dashboard({ applications }: DashboardProps) {
                       </td>
                     </tr>
                   ) : (
-                    filteredApplications.map((app) => (
+                    sortedTableApplications.map((app) => (
                       <tr
                         key={app.id}
                         className="bg-white hover:bg-blue-50/50 transition-colors divide-y divide-slate-100"
@@ -488,7 +440,33 @@ export function Dashboard({ applications }: DashboardProps) {
                   )}
                 </tbody>
               </table>
+        </div>
+      </div>
+
+      {/* 图表 + 关系图谱 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+          <div className="px-6 pt-5 pb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart2 className="w-4 h-4 text-blue-500" />
+              <h3 className="text-base font-semibold text-slate-700">各简历投递状态分布</h3>
             </div>
+            <GroupedBar data={resumeStatusData} />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+          <div className="px-6 pt-5 pb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Network className="w-4 h-4 text-blue-500" />
+              <h3 className="text-base font-semibold text-slate-700">简历岗位关系图谱</h3>
+            </div>
+            <ResumeJobGraph
+              applications={applications}
+              resumes={resumes}
+              selectedResumeId={null}
+              resumeTitleMap={resumeTitleMap}
+            />
           </div>
         </div>
       </div>

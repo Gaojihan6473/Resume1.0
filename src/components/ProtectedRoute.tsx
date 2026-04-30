@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { Loader2 } from 'lucide-react'
 
@@ -8,6 +9,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, authInitializing } = useAuthStore()
+  const location = useLocation()
 
   // Show loading skeleton while initializing
   if (authInitializing) {
@@ -21,9 +23,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  // If not authenticated, show nothing (redirect should happen in the component using this)
   if (!isAuthenticated) {
-    return null
+    const redirectTo = `${location.pathname}${location.search}`
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectTo)}`} replace />
   }
 
   return <>{children}</>

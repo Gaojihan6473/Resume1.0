@@ -69,7 +69,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ authInitializing: true })
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        set({
+          user: null,
+          isAuthenticated: false,
+          authInitializing: false,
+        })
+        return
+      }
 
       if (session) {
         const result = await fetchCurrentUser()
@@ -89,6 +99,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         authInitializing: false,
       })
     } catch {
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
       set({
         user: null,
         isAuthenticated: false,

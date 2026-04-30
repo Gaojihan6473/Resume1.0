@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { Loader2, Key, AlertCircle, ArrowLeft } from 'lucide-react'
@@ -7,6 +7,13 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const action = searchParams.get('action')
+  const redirect = searchParams.get('redirect')
+  const safeRedirect = useMemo(() => {
+    if (!redirect || !redirect.startsWith('/') || redirect.startsWith('//') || redirect.includes('\\')) {
+      return null
+    }
+    return redirect
+  }, [redirect])
 
   const { signIn, isLoading, error, clearError, isAuthenticated } = useAuthStore()
   const [key, setKey] = useState('')
@@ -26,11 +33,13 @@ export function LoginPage() {
     } else if (action === 'me') {
       // Navigate to me page
       navigate('/me', { replace: true })
+    } else if (safeRedirect) {
+      navigate(safeRedirect, { replace: true })
     } else {
       // Default: go to home
       navigate('/', { replace: true })
     }
-  }, [action, navigate])
+  }, [action, navigate, safeRedirect])
 
   // Redirect if already authenticated
   useEffect(() => {

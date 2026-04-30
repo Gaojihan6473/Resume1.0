@@ -2,20 +2,10 @@ import { useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
+import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
 
 interface GroupedBarProps {
   data: { resumeId: string; resumeName: string; company: string; position: string; status: ApplicationStatus; count: number; companies: string[] }[]
-}
-
-const STATUS_ORDER: ApplicationStatus[] = ['interested', 'applied', 'interviewing', 'offered', 'rejected', 'ghosted']
-
-const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  interested: '#94a3b8',
-  applied: '#3b82f6',
-  interviewing: '#f59e0b',
-  offered: '#10b981',
-  rejected: '#ef4444',
-  ghosted: '#6b7280',
 }
 
 export function GroupedBar({ data }: GroupedBarProps) {

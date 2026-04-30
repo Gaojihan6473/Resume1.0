@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Fish, ChevronsRight, BarChart2, FileText } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
+import { useResumeStore } from '../store/resumeStore'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { Dashboard } from '../components/Analytics/Dashboard'
@@ -37,7 +38,10 @@ export function AnalyticsPage() {
 
   const handleNavigateToApplications = () => navigate('/applications')
   const handleNavigateToMe = () => navigate('/me')
-  const handleGoHome = () => navigate('/')
+  const handleGoHome = () => {
+    useResumeStore.getState().resetAll()
+    navigate('/')
+  }
 
   return (
     <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
@@ -101,7 +105,7 @@ export function AnalyticsPage() {
         />
 
         {/* 内容区 */}
-        <main className={`relative flex-1 home-login-bg ${activeTab === 'jd' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+        <main className={`relative flex-1 isolate home-login-bg ${activeTab === 'jd' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           {activeTab === 'dashboard' ? (
             <Dashboard applications={applications} />
           ) : (

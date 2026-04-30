@@ -228,6 +228,8 @@ body {
 
 /* Logged-in home soft aurora background */
 .home-login-bg {
+  position: relative;
+  isolation: isolate;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.66) 0%, rgba(255, 255, 255, 0) 48%),
     radial-gradient(76rem 34rem at 52% 12%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.42) 44%, rgba(255, 255, 255, 0) 78%),
@@ -240,7 +242,13 @@ body {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
+}
+
+.home-login-bg > * {
+  position: relative;
+  z-index: 1;
 }
 
 .home-login-bg::before {
