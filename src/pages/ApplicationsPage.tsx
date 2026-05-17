@@ -17,7 +17,7 @@ import type { JDParsedResult } from '../types/application'
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     setResumeData,
     setCurrentResumeId,
@@ -120,9 +120,7 @@ export function ApplicationsPage() {
         return
       }
 
-      if (applicationFromQuery.resume_id) {
-        setSelectedResumeId(applicationFromQuery.resume_id)
-      }
+      setSelectedResumeId(null)
       setHasAppliedQuerySelection(true)
       return
     }
@@ -148,12 +146,23 @@ export function ApplicationsPage() {
     }
   }
 
-  const handleUpdateApplication = async (application: import('../types/application').Application) => {
+  const handleUpdateApplication = async (
+    application: import('../types/application').Application,
+    options?: { silent?: boolean }
+  ) => {
     const { id, ...updateData } = application
     console.log('[handleUpdateApplication] id:', id, 'updateData:', updateData)
-    await updateApplication(id, updateData)
-    console.log('[handleUpdateApplication] after updateApplication')
-    toast('更新成功', 'success')
+    try {
+      await updateApplication(id, updateData)
+      console.log('[handleUpdateApplication] after updateApplication')
+      if (!options?.silent) {
+        toast('更新成功', 'success')
+      }
+    } catch (error) {
+      console.error('[handleUpdateApplication] error:', error)
+      toast(error instanceof Error ? error.message : '保存失败，请重试', 'error')
+      throw error
+    }
   }
 
   const handleDeleteApplication = async (id: string) => {
@@ -171,6 +180,22 @@ export function ApplicationsPage() {
     setAiParsedData(null)
     setShowJDModal(true)
   }
+
+  useEffect(() => {
+    const createMode = searchParams.get('create')
+    if (createMode !== 'manual' && createMode !== 'ai') return
+
+    setAiParsedData(null)
+    if (createMode === 'manual') {
+      setShowModal(true)
+    } else {
+      setShowJDModal(true)
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('create')
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const handleJDParsed = (data: JDParsedResult) => {
     setAiParsedData({
@@ -274,6 +299,7 @@ const handleGoHome = () => {
               selectedResumeId={selectedResumeId}
               isLoading={isLoading}
               initialExpandedId={searchParams.get('applicationId')}
+              pendingDeleteId={showDeleteConfirm}
               headerAction={
                 <button
                   ref={createButtonRef}

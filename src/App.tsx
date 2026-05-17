@@ -235,6 +235,7 @@ function AppContent() {
       {/* Dirty Confirm Modal */}
       <DirtyConfirmModal
         isOpen={showDirtyModal}
+        previewRef={previewRef}
         onClose={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)

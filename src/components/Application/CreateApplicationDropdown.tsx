@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { FileText, Pencil } from 'lucide-react'
 
 interface Props {
@@ -15,20 +15,24 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [buttonRect, setButtonRect] = useState<DOMRect | null>(null)
 
-  useEffect(() => {
-    const updateRect = () => {
-      if (buttonRef.current) {
-        setButtonRect(buttonRef.current.getBoundingClientRect())
-      }
-    }
-    updateRect()
-    window.addEventListener('resize', updateRect)
-    window.addEventListener('scroll', updateRect)
-    return () => {
-      window.removeEventListener('resize', updateRect)
-      window.removeEventListener('scroll', updateRect)
+  const updateRect = useCallback(() => {
+    if (buttonRef.current) {
+      setButtonRect(buttonRef.current.getBoundingClientRect())
     }
   }, [buttonRef])
+
+  useLayoutEffect(() => {
+    updateRect()
+  }, [updateRect, visible])
+
+  useEffect(() => {
+    window.addEventListener('resize', updateRect)
+    window.addEventListener('scroll', updateRect, true)
+    return () => {
+      window.removeEventListener('resize', updateRect)
+      window.removeEventListener('scroll', updateRect, true)
+    }
+  }, [updateRect])
 
   useEffect(() => {
     return () => {
@@ -59,7 +63,7 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
       ref={dropdownRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="fixed bg-white rounded-xl shadow-lg py-1"
+      className="fixed overflow-hidden rounded-xl border border-slate-100/80 bg-white py-1.5 shadow-lg shadow-slate-200/60"
       style={{
         top: buttonRect.bottom + 6,
         left: buttonRect.left,
@@ -76,9 +80,9 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
           onAICreate()
           onClose()
         }}
-        className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+        className="flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
-        <FileText className="w-4 h-4 text-blue-500" />
+        <FileText className="h-4 w-4 shrink-0 text-blue-500" />
         图文解析
       </button>
       <button
@@ -86,9 +90,9 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
           onManualCreate()
           onClose()
         }}
-        className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+        className="flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
-        <Pencil className="w-4 h-4 text-indigo-500" />
+        <Pencil className="h-4 w-4 shrink-0 text-indigo-500" />
         手动填写
       </button>
     </div>

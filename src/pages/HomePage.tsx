@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import type { RefObject } from 'react'
 import {
   Fish,
@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   Copy,
   Trash2,
+  Plus,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
@@ -33,6 +34,7 @@ import {
   type ApplicationStatus,
 } from '../types/application'
 import { PdfPreview } from '../components/Application/PdfPreview'
+import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
 import { toast } from '../components/Toast'
 
 interface HomePageProps {
@@ -47,6 +49,7 @@ interface HomePageProps {
 
 const HOME_RECENT_RESUME_LIMIT = 5
 const HOME_RECENT_APPLICATION_LIMIT = 8
+const HOME_PRIMARY_BUTTON_CLASS = 'inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-600 hover:shadow-xl hover:shadow-blue-300'
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
   const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
@@ -64,6 +67,9 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [openResumeMenuId, setOpenResumeMenuId] = useState<string | null>(null)
   const [deleteResumeId, setDeleteResumeId] = useState<string | null>(null)
   const [resumeActionLoadingId, setResumeActionLoadingId] = useState<string | null>(null)
+  const [showCreateApplicationDropdown, setShowCreateApplicationDropdown] = useState(false)
+  const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
+  const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -131,6 +137,43 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     window.addEventListener('pointerdown', handlePointerDown)
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [openResumeMenuId])
+
+  useEffect(() => {
+    return () => {
+      if (closeCreateApplicationTimeoutRef.current) {
+        clearTimeout(closeCreateApplicationTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleCreateApplicationButtonMouseEnter = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+    setShowCreateApplicationDropdown(true)
+  }, [])
+
+  const handleCreateApplicationButtonMouseLeave = useCallback(() => {
+    closeCreateApplicationTimeoutRef.current = setTimeout(() => {
+      setShowCreateApplicationDropdown(false)
+    }, 200)
+  }, [])
+
+  const handleCreateApplicationDropdownMouseEnter = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+  }, [])
+
+  const handleManualCreateApplication = useCallback(() => {
+    navigate('/applications?create=manual')
+  }, [navigate])
+
+  const handleAICreateApplication = useCallback(() => {
+    navigate('/applications?create=ai')
+  }, [navigate])
 
   const syncResumeList = (resumes: Resume[], fetchedAt: number) => {
     setRecentResumes(resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
@@ -286,7 +329,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       </button>
                       <button
                         onClick={handleNewResume}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-600 hover:shadow-xl hover:shadow-blue-300"
+                        className={HOME_PRIMARY_BUTTON_CLASS}
                       >
                         <FilePlus className="h-4 w-4" />
                         新建简历
@@ -317,8 +360,25 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                 </section>
 
                 <section className="mt-12">
-                  <div className="mb-5">
+                  <div className="mb-5 flex items-center justify-between gap-3">
                     <HomeSectionTitle label="岗位" count={recentApplications.length} />
+                    <button
+                      ref={createApplicationButtonRef}
+                      onMouseEnter={handleCreateApplicationButtonMouseEnter}
+                      onMouseLeave={handleCreateApplicationButtonMouseLeave}
+                      className={HOME_PRIMARY_BUTTON_CLASS}
+                    >
+                      <Plus className="h-4 w-4" />
+                      新建岗位
+                    </button>
+                    <CreateApplicationDropdown
+                      visible={showCreateApplicationDropdown}
+                      buttonRef={createApplicationButtonRef}
+                      onManualCreate={handleManualCreateApplication}
+                      onAICreate={handleAICreateApplication}
+                      onClose={() => setShowCreateApplicationDropdown(false)}
+                      onMouseEnter={handleCreateApplicationDropdownMouseEnter}
+                    />
                   </div>
 
                   {isLoadingApplications ? (
@@ -790,7 +850,7 @@ function UploadResumeModal({
 
         <div className="p-5">
           <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
-            <div className="min-w-0">
+            <div className="h-full min-w-0">
               <Upload embedded showBottomHint={false} onAuthRequired={onAuthRequired} />
             </div>
 

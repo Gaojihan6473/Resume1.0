@@ -111,6 +111,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, education: items },
+        isDirty: true,
       }
     }),
 
@@ -120,7 +121,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, education: items } }
+      return { resumeData: { ...state.resumeData, education: items }, isDirty: true }
     }),
 
   addInternship: () =>
@@ -176,6 +177,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, internships: items },
+        isDirty: true,
       }
     }),
 
@@ -185,7 +187,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, internships: items } }
+      return { resumeData: { ...state.resumeData, internships: items }, isDirty: true }
     }),
 
   addInternshipProject: (internshipId) =>
@@ -300,6 +302,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, projects: items },
+        isDirty: true,
       }
     }),
 
@@ -309,7 +312,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, projects: items } }
+      return { resumeData: { ...state.resumeData, projects: items }, isDirty: true }
     }),
 
   updateSummary: (summary) =>
@@ -327,7 +330,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, sectionOrder: items } }
+      return { resumeData: { ...state.resumeData, sectionOrder: items }, isDirty: true }
     }),
 
   updateSkills: (skills) =>
@@ -354,6 +357,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         style: createDefaultResumeData().style,
       },
+      isDirty: true,
     })),
 
   setZoom: (zoom) => set({ zoom }),

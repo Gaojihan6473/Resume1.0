@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   MapPin,
   Briefcase,
@@ -24,7 +24,8 @@ interface Props {
   isExpanded: boolean
   isHighlighted: boolean
   onToggle: () => void
-  onSave: (data: Application) => void
+  onSave: (data: Application, options?: { silent?: boolean }) => Promise<void>
+  onDraftChange?: (data: Application) => void
   onDelete: (id: string) => void
 }
 
@@ -35,21 +36,43 @@ export function ApplicationCard({
   isHighlighted,
   onToggle,
   onSave,
+  onDraftChange,
   onDelete,
 }: Props) {
   const [editData, setEditData] = useState({ ...application, appliedAt: application.appliedAt ?? null })
+  const editDataRef = useRef(editData)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     console.log('[ApplicationCard.useEffect] syncing editData with application:', application)
-    setEditData({ ...application, appliedAt: application.appliedAt ?? null })
+    const nextEditData = { ...application, appliedAt: application.appliedAt ?? null }
+    editDataRef.current = nextEditData
+    setEditData(nextEditData)
   }, [application])
+
+  useEffect(() => {
+    if (isExpanded) {
+      onDraftChange?.(editDataRef.current)
+    }
+  }, [isExpanded, onDraftChange])
+
+  const updateEditData = (patch: Partial<Application>) => {
+    const nextEditData = { ...editDataRef.current, ...patch }
+    editDataRef.current = nextEditData
+    setEditData(nextEditData)
+    onDraftChange?.(nextEditData)
+  }
 
   const handleSave = async () => {
     console.log('[ApplicationCard.handleSave] editData:', editData)
     setIsSaving(true)
-    await onSave(editData)
-    setIsSaving(false)
+    try {
+      await onSave(editDataRef.current)
+    } catch (error) {
+      console.error('[ApplicationCard.handleSave] save failed:', error)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const channelLabel =
@@ -132,7 +155,7 @@ export function ApplicationCard({
                   <input
                     type="text"
                     value={editData.company}
-                    onChange={(e) => setEditData({ ...editData, company: e.target.value })}
+                    onChange={(e) => updateEditData({ company: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
@@ -143,7 +166,7 @@ export function ApplicationCard({
                   <input
                     type="text"
                     value={editData.position}
-                    onChange={(e) => setEditData({ ...editData, position: e.target.value })}
+                    onChange={(e) => updateEditData({ position: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>
@@ -153,7 +176,7 @@ export function ApplicationCard({
                     <input
                       type="text"
                       value={editData.location}
-                      onChange={(e) => setEditData({ ...editData, location: e.target.value })}
+                      onChange={(e) => updateEditData({ location: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />
                   </div>
@@ -162,7 +185,7 @@ export function ApplicationCard({
                     <input
                       type="text"
                       value={editData.salaryRange}
-                      onChange={(e) => setEditData({ ...editData, salaryRange: e.target.value })}
+                      onChange={(e) => updateEditData({ salaryRange: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />
                   </div>
@@ -172,7 +195,7 @@ export function ApplicationCard({
                     <label className="block text-xs font-medium text-slate-600 mb-1">{'\u6295\u9012\u6e20\u9053'}</label>
                     <CustomSelect
                       value={editData.channel}
-                      onChange={(val) => setEditData({ ...editData, channel: val as ApplicationChannel })}
+                      onChange={(val) => updateEditData({ channel: val as ApplicationChannel })}
                       options={Object.entries(APPLICATION_CHANNEL_LABELS).map(([value, label]) => ({ value, label }))}
                     />
                   </div>
@@ -180,7 +203,7 @@ export function ApplicationCard({
                     <label className="block text-xs font-medium text-slate-600 mb-1">{'\u6295\u9012\u72b6\u6001'}</label>
                     <CustomSelect
                       value={editData.status}
-                      onChange={(val) => setEditData({ ...editData, status: val as ApplicationStatus })}
+                      onChange={(val) => updateEditData({ status: val as ApplicationStatus })}
                       options={Object.entries(APPLICATION_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
                     />
                   </div>
@@ -190,7 +213,7 @@ export function ApplicationCard({
                     <label className="block text-xs font-medium text-slate-600 mb-1">{'\u5173\u8054\u7b80\u5386'}</label>
                     <CustomSelect
                       value={editData.resume_id || ''}
-                      onChange={(val) => setEditData({ ...editData, resume_id: val || null })}
+                      onChange={(val) => updateEditData({ resume_id: val || null })}
                       options={[{ value: '', label: '请选择' }, ...resumes.map((r) => ({ value: r.id, label: r.title }))]}
                       placeholder="\u8bf7\u9009\u62e9"
                     />
@@ -199,7 +222,7 @@ export function ApplicationCard({
                     <label className="block text-xs font-medium text-slate-600 mb-1">{'\u6295\u9012\u65f6\u95f4'}</label>
                     <CalendarInput
                       value={editData.appliedAt}
-                      onChange={(val) => setEditData({ ...editData, appliedAt: val })}
+                      onChange={(val) => updateEditData({ appliedAt: val })}
                     />
                   </div>
                 </div>
@@ -213,7 +236,7 @@ export function ApplicationCard({
                 <textarea
                   value={editData.jobDescription}
                   onChange={(e) =>
-                    setEditData({ ...editData, jobDescription: e.target.value })
+                    updateEditData({ jobDescription: e.target.value })
                   }
                   className="flex-1 w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
                 />

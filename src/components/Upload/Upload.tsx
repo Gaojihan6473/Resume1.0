@@ -112,7 +112,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
 
   return (
     <div
-      className={embedded ? 'w-full min-w-0 flex flex-col' : 'w-full max-w-lg mx-auto px-6'}
+      className={embedded ? 'flex h-full w-full min-w-0 flex-col' : 'w-full max-w-lg mx-auto px-6'}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}

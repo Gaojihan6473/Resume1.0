@@ -3,9 +3,9 @@ import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
-import { updateResume, createResume, uploadResumeFile, uploadResumePreview, updateResumePreviewUrl } from '../../lib/api'
 import { toast } from '../../components/Toast'
 import type { StyleSettings } from '../../types/resume'
+import { saveCurrentResumeToCloud } from '../../utils/saveResume'
 import {
   Type,
   AlignVerticalJustifyCenter,
@@ -199,17 +199,11 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     showMultiPage,
     currentResumeId,
     isDirty,
-    currentFile,
     setZoom,
     setShowMultiPage,
     updateStyle,
     resetStyle,
     parseStatus,
-    setCurrentResumeId,
-    setIsDirty,
-    cachedResumes,
-    setCachedResumes,
-    clearCurrentFile,
   } = useResumeStore()
   useAuthStore()
 
@@ -233,74 +227,12 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     if (isSaving) return
     setIsSaving(true)
 
-    const title = resumeData.resumeTitle || resumeData.basic.name || '我的简历'
-
     try {
-      let resumeId = currentResumeId
-
-      if (currentResumeId) {
-        const result = await updateResume(currentResumeId, title, resumeData as unknown as Record<string, unknown>)
-        if (!result.success) {
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
-        if (result.resume) {
-          const updatedResumes = cachedResumes.map(r =>
-            r.id === currentResumeId ? { ...r, ...result.resume } : r
-          )
-          setCachedResumes(updatedResumes, Date.now())
-        }
-      } else {
-        let fileUrl: string | null = null
-        if (currentFile) {
-          const uploadResult = await uploadResumeFile(currentFile)
-          if (uploadResult.success && uploadResult.fileUrl) {
-            fileUrl = uploadResult.fileUrl
-          }
-        }
-        const result = await createResume(title, resumeData as unknown as Record<string, unknown>, 'cloud', fileUrl)
-        if (result.success && result.resume) {
-          resumeId = result.resume.id
-          setCurrentResumeId(result.resume.id)
-          clearCurrentFile()
-          const updatedResumes = [result.resume, ...cachedResumes]
-          setCachedResumes(updatedResumes, Date.now())
-        } else {
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
+      const result = await saveCurrentResumeToCloud({ previewElement: previewRef.current })
+      if (!result.success) {
+        toast(result.error || '保存失败', 'error')
+        return
       }
-
-      // 生成并上传预览图
-      if (resumeId && previewRef.current) {
-        console.log('[Preview] Starting preview generation for resume:', resumeId)
-        const { generatePreviewImage } = await import('../../utils/exporters')
-        const previewBlob = await generatePreviewImage(previewRef.current)
-        console.log('[Preview] Blob generated:', previewBlob ? `${previewBlob.size} bytes` : 'NULL')
-        if (previewBlob) {
-          const uploadResult = await uploadResumePreview(previewBlob, resumeId)
-          console.log('[Preview] Upload result:', uploadResult)
-          if (uploadResult.success && uploadResult.previewUrl) {
-            const previewUrl = uploadResult.previewUrl
-            await updateResumePreviewUrl(resumeId, previewUrl)
-            // 更新缓存中的 preview_url
-            const updatedResumes = cachedResumes.map(r =>
-              r.id === resumeId ? { ...r, preview_url: previewUrl } : r
-            )
-            setCachedResumes(updatedResumes, Date.now())
-          } else {
-            console.error('[Preview] Upload failed:', uploadResult.error)
-          }
-        } else {
-          console.error('[Preview] Blob generation returned null')
-        }
-      } else {
-        console.log('[Preview] Skipped - resumeId:', resumeId, 'previewRef:', previewRef.current ? 'exists' : 'null')
-      }
-
-      setIsDirty(false)
       toast('保存成功', 'success')
     } catch (err) {
       console.error('Save error:', err)

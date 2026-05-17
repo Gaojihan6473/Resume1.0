@@ -27,6 +27,9 @@ interface ResumesResponse {
   error?: string
 }
 
+let fetchResumesRequest: Promise<ResumesResponse> | null = null
+let fetchApplicationsRequest: Promise<Application[]> | null = null
+
 export interface Resume {
   id: string
   user_id: string
@@ -129,6 +132,17 @@ export async function fetchCurrentUser(): Promise<MeResponse> {
 
 // Resume CRUD operations using Supabase client directly
 export async function fetchResumes(): Promise<ResumesResponse> {
+  if (fetchResumesRequest) return fetchResumesRequest
+
+  fetchResumesRequest = fetchResumesOnce()
+  try {
+    return await fetchResumesRequest
+  } finally {
+    fetchResumesRequest = null
+  }
+}
+
+async function fetchResumesOnce(): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -462,6 +476,17 @@ function normalizeApplication(row: ApplicationRow): Application {
 
 // Application CRUD operations
 export async function fetchApplications(): Promise<Application[]> {
+  if (fetchApplicationsRequest) return fetchApplicationsRequest
+
+  fetchApplicationsRequest = fetchApplicationsOnce()
+  try {
+    return await fetchApplicationsRequest
+  } finally {
+    fetchApplicationsRequest = null
+  }
+}
+
+async function fetchApplicationsOnce(): Promise<Application[]> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
     throw new Error('未登录')

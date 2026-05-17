@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import type { RefObject } from 'react'
 import { useResumeStore } from '../store/resumeStore'
-import { updateResume, createResume } from '../lib/api'
 import { Cloud, X, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from './Toast'
+import { saveCurrentResumeToCloud } from '../utils/saveResume'
 
 type DirtyNavigationTarget = 'home' | 'me' | 'analytics-jd'
 
 interface DirtyConfirmModalProps {
   isOpen: boolean
+  previewRef: RefObject<HTMLDivElement | null>
   onClose: () => void
   navigationTarget: DirtyNavigationTarget | null
   onSaveAndNavigateHome: () => void
@@ -20,6 +22,7 @@ interface DirtyConfirmModalProps {
 
 export function DirtyConfirmModal({
   isOpen,
+  previewRef,
   onClose,
   navigationTarget,
   onSaveAndNavigateHome,
@@ -29,7 +32,7 @@ export function DirtyConfirmModal({
   onSaveAndNavigateToAnalyticsJD,
   onDiscardAndNavigateToAnalyticsJD,
 }: DirtyConfirmModalProps) {
-  const { resumeData, currentResumeId, setCurrentResumeId, setIsDirty, cachedResumes, setCachedResumes } = useResumeStore()
+  const { setIsDirty } = useResumeStore()
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -40,40 +43,15 @@ export function DirtyConfirmModal({
     setIsSaving(true)
     setSaveError(null)
 
-    const title = resumeData.resumeTitle || resumeData.basic.name || '我的简历'
-
     try {
-      if (currentResumeId) {
-        const result = await updateResume(currentResumeId, title, resumeData as unknown as Record<string, unknown>)
-        if (!result.success) {
-          setSaveError(result.error || '保存失败')
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
-        // 更新缓存
-        if (result.resume) {
-          const updatedResumes = cachedResumes.map(r =>
-            r.id === currentResumeId ? { ...r, ...result.resume } : r
-          )
-          setCachedResumes(updatedResumes, Date.now())
-        }
-      } else {
-        const result = await createResume(title, resumeData as unknown as Record<string, unknown>, 'cloud')
-        if (result.success && result.resume) {
-          setCurrentResumeId(result.resume.id)
-          // 更新缓存
-          const updatedResumes = [result.resume, ...cachedResumes]
-          setCachedResumes(updatedResumes, Date.now())
-        } else {
-          setSaveError(result.error || '保存失败')
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
+      const result = await saveCurrentResumeToCloud({ previewElement: previewRef.current })
+      if (!result.success) {
+        setSaveError(result.error || '保存失败')
+        toast(result.error || '保存失败', 'error')
+        setIsSaving(false)
+        return
       }
 
-      setIsDirty(false)
       setIsSaving(false)
       toast('保存成功', 'success')
 

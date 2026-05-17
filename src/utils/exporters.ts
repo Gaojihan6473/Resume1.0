@@ -84,11 +84,51 @@ function createPrintIframe(): Promise<HTMLIFrameElement> {
 }
 
 const PREVIEW_A4_WIDTH_PX = 595
+const PREVIEW_A4_HEIGHT_PX = 842
 const MM_PER_INCH = 25.4
 const CSS_PX_PER_INCH = 96
 const A4_WIDTH_MM = 210
+const A4_HEIGHT_MM = 297
 const PREVIEW_TO_PRINT_SCALE = (A4_WIDTH_MM / MM_PER_INCH) * CSS_PX_PER_INCH / PREVIEW_A4_WIDTH_PX
 const SCHOOL_TAG_OPTIONS = ['985', '211']
+
+function getElementContentHeight(element: HTMLElement): number {
+  const ownRectHeight = Math.ceil(element.getBoundingClientRect().height)
+  const childHeights = Array.from(element.children).map((child) => {
+    const childElement = child as HTMLElement
+    return Math.ceil(
+      Math.max(childElement.scrollHeight, childElement.getBoundingClientRect().height)
+    )
+  })
+
+  return Math.max(element.scrollHeight, ownRectHeight, ...childHeights)
+}
+
+function getPrintPageCount(element: HTMLElement): number {
+  const contentHeight = Math.max(PREVIEW_A4_HEIGHT_PX, getElementContentHeight(element))
+  return Math.max(1, Math.ceil(contentHeight / PREVIEW_A4_HEIGHT_PX))
+}
+
+function createPrintPage(
+  printDoc: Document,
+  sourceElement: HTMLElement,
+  pageIndex: number
+): HTMLElement {
+  const page = printDoc.createElement('section')
+  const viewport = printDoc.createElement('div')
+  const pageClone = sourceElement.cloneNode(true) as HTMLElement
+
+  page.setAttribute('data-print-page', '1')
+  viewport.setAttribute('data-print-viewport', '1')
+  pageClone.style.width = '100%'
+  pageClone.style.transform = `translateY(-${pageIndex * PREVIEW_A4_HEIGHT_PX}px)`
+  pageClone.style.transformOrigin = 'top left'
+
+  viewport.appendChild(pageClone)
+  page.appendChild(viewport)
+
+  return page
+}
 
 function richTextToLines(html: string): string[] {
   if (!html) return []
@@ -154,22 +194,28 @@ export async function exportToPdf(
 
   const originalTitle = document.title
   const styleNodes = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-  const previewClone = element.cloneNode(true) as HTMLElement
-  const wrapper = printDoc.createElement('div')
+  await waitForImages(element.getElementsByTagName('img'))
+  if ('fonts' in document) {
+    await (document as Document & { fonts?: FontFaceSet }).fonts?.ready
+  }
+
+  const pageCount = getPrintPageCount(element)
+  const wrapper = printDoc.createElement('main')
   wrapper.setAttribute('data-print-root', '1')
-  wrapper.style.width = `${PREVIEW_A4_WIDTH_PX}px`
-  wrapper.style.transform = `scale(${PREVIEW_TO_PRINT_SCALE})`
-  wrapper.style.transformOrigin = 'top left'
-  wrapper.style.overflow = 'hidden'
-  previewClone.style.width = '100%'
-  wrapper.appendChild(previewClone)
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    wrapper.appendChild(createPrintPage(printDoc, element, pageIndex))
+  }
 
   const printOverrides = printDoc.createElement('style')
   printOverrides.textContent = `
     @page { size: 210mm 297mm; margin: 0; }
     html, body {
+      width: ${A4_WIDTH_MM}mm;
+      min-height: ${A4_HEIGHT_MM}mm;
+      height: auto;
       margin: 0;
       padding: 0;
+      overflow: visible;
       background: #ffffff;
     }
     body {
@@ -177,11 +223,31 @@ export async function exportToPdf(
       print-color-adjust: exact;
     }
     [data-print-root="1"] {
-      width: ${PREVIEW_A4_WIDTH_PX}px;
+      width: ${A4_WIDTH_MM}mm;
+      margin: 0;
+    }
+    [data-print-page="1"] {
+      width: ${A4_WIDTH_MM}mm;
+      height: ${A4_HEIGHT_MM}mm;
       margin: 0;
       overflow: hidden;
+      position: relative;
+      background: #ffffff;
+      break-after: page;
+      page-break-after: always;
     }
-    [data-print-root="1"] > * {
+    [data-print-page="1"]:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+    [data-print-viewport="1"] {
+      width: ${PREVIEW_A4_WIDTH_PX}px;
+      height: ${PREVIEW_A4_HEIGHT_PX}px;
+      overflow: hidden;
+      transform: scale(${PREVIEW_TO_PRINT_SCALE});
+      transform-origin: top left;
+    }
+    [data-print-viewport="1"] > * {
       margin: 0;
     }
   `

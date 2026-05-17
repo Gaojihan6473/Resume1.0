@@ -7,6 +7,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase environment variables are not set. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY')
 }
 
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+const fetchWithGetRetry: typeof fetch = async (input, init) => {
+  const method = (init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET')).toUpperCase()
+
+  try {
+    return await fetch(input, init)
+  } catch (error) {
+    if (method !== 'GET' && method !== 'HEAD') {
+      throw error
+    }
+
+    await sleep(350)
+    return fetch(input, init)
+  }
+}
+
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key',
@@ -14,6 +31,9 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
+    },
+    global: {
+      fetch: fetchWithGetRetry,
     },
   }
 )
