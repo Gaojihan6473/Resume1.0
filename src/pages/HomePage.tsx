@@ -383,17 +383,17 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                 </div>
 
                 {/* 上传与新建并列区域 */}
-                <div className="relative mb-6 grid gap-6 lg:grid-cols-2">
+                <div className="relative mb-6 grid items-stretch gap-6 lg:grid-cols-2">
                   {/* 上传区域 */}
-                  <section className="min-h-[248px]">
+                  <section className="flex min-h-[248px] min-w-0">
                     <Upload embedded showBottomHint={false} onAuthRequired={() => onAuthRequired?.('upload')} />
                   </section>
 
                   {/* 新建空白简历 */}
-                  <section className="min-h-[248px]">
+                  <section className="flex min-h-[248px] min-w-0">
                     <button
                       onClick={handleNewResume}
-                      className="group relative flex h-full min-h-[248px] w-full overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-6 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] btn-press"
+                      className="group relative flex min-h-[248px] min-w-0 flex-1 overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-6 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] btn-press"
                     >
                       <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
                         {Array.from({ length: 25 }).map((_, index) => (
@@ -403,7 +403,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       <div className="pointer-events-none absolute -right-4 bottom-3 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/80" />
                       <div className="pointer-events-none absolute bottom-8 right-10 h-24 w-5 rotate-[34deg] rounded-full bg-gradient-to-b from-violet-200 to-violet-400 shadow-lg shadow-violet-200" />
 
-                      <div className="relative z-[1] grid w-full items-center gap-6 md:grid-cols-[170px_1fr]">
+                      <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-6 md:grid-cols-[minmax(128px,170px)_minmax(0,1fr)]">
                         <div className="flex items-center justify-center">
                           <div className="relative">
                             <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
@@ -413,7 +413,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                             </div>
                           </div>
                         </div>
-                        <div className="relative z-[1] text-center md:text-left">
+                        <div className="relative z-[1] min-w-0 text-center md:text-left">
                           <h2 className="text-xl font-bold text-slate-900">新建空白简历</h2>
                           <p className="mt-3 text-sm font-medium leading-6 text-slate-500">无需上传文件，直接开始编辑</p>
                           <span className="mt-6 inline-flex h-11 min-w-36 items-center justify-center rounded-xl border border-violet-400 bg-white/70 px-8 text-sm font-semibold text-violet-600 shadow-sm shadow-violet-100 transition-all duration-300 group-hover:bg-white group-hover:shadow-md">

@@ -1,9 +1,9 @@
 {
   "framework": "vite",
-  "buildCommand": "yarn add @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities && vite build",
+  "buildCommand": "yarn build",
   "installCommand": "yarn install",
-  "routes": [
-    { "handle": "rewrite" },
-    { "src": "/(.*)", "dest": "/" }
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
   ]
 }

@@ -91,7 +91,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
   const dropzoneHeightClass = embedded
     ? embeddedHasFile
       ? 'min-h-[188px]'
-      : 'min-h-[248px] h-full'
+      : 'min-h-[248px] flex-1'
     : ''
   const dropzonePaddingClass = embedded
     ? embeddedHasFile
@@ -112,7 +112,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
 
   return (
     <div
-      className={embedded ? 'w-full h-full flex flex-col' : 'w-full max-w-lg mx-auto px-6'}
+      className={embedded ? 'w-full min-w-0 flex flex-col' : 'w-full max-w-lg mx-auto px-6'}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
@@ -186,7 +186,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
             <div className="pointer-events-none absolute -right-4 bottom-5 h-24 w-32 rotate-[-24deg] rounded-[40px] border-4 border-blue-100/90" />
             <div className="pointer-events-none absolute bottom-7 right-9 h-16 w-20 rotate-[-16deg] border-b-8 border-r-8 border-blue-100/80" />
 
-            <div className="relative z-[1] grid h-full w-full items-center gap-6 md:grid-cols-[170px_1fr]">
+            <div className="relative z-[1] grid h-full w-full min-w-0 items-center gap-6 md:grid-cols-[minmax(128px,170px)_minmax(0,1fr)]">
               <div className="flex items-center justify-center">
                 <div className="relative">
                   <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-blue-200/45 blur-sm" />
@@ -197,7 +197,7 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
                 </div>
               </div>
 
-              <div className="text-center md:text-left">
+              <div className="min-w-0 text-center md:text-left">
                 <h2 className="text-xl font-bold text-slate-900">
                   {isDragActive ? '松开即可上传' : '点击或拖拽文件到这里'}
                 </h2>
