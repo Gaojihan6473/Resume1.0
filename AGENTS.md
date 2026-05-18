@@ -50,7 +50,16 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 
 ## Supabase Notes
 - This repo is CLI-linked locally to project ref `uxuyetdlhgjsbkguawzi` via `supabase/.temp/project-ref`.
+- The app may point to a different Supabase project through `.env`; for runtime auth work, confirm `VITE_SUPABASE_URL` / `VITE_EDGE_FUNCTIONS_URL` first instead of assuming `supabase/.temp/project-ref`.
 - `supabase/.temp` files are generated state; avoid manual edits unless explicitly needed.
+
+## Login Key Creation
+- Login uses the `auth-sign-in` Edge Function. It hashes the submitted `sk-...` key with SHA-256, looks up `public.valid_keys.key_hash` where `is_active = true`, then signs in the linked Auth user with the fixed password expected by the current function (`testpassword123`).
+- To create new login keys, generate fresh `sk-...` plaintext keys, compute their SHA-256 hashes, create the corresponding Supabase Auth users through the Supabase Auth Admin API (not by direct SQL into `auth.users`), then insert `public.valid_keys` rows with `user_id`, `key_hash`, `key_name`, and `is_active = true`.
+- Do not directly SQL-insert Auth users: rows can appear in `auth.users` while `supabase.auth.admin.getUserById` still fails with `用户不存在`.
+- After creation, call `auth-sign-in` with each new plaintext key and verify a session is returned before giving the keys to the user.
+- Plaintext login keys are only recoverable at generation time. Store or deliver them immediately; the database should retain only hashes. Do not commit generated keys or service-role tokens.
+- If a temporary Edge Function is used to call the Auth Admin API, protect it during use and disable or remove it immediately after successful verification.
 
 ## Non-Source Artifacts
 - `package/` and `supabase-2.90.0.tgz` are local installation artifacts from CLI setup flow.

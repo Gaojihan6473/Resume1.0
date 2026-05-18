@@ -223,6 +223,11 @@ const handleGoHome = () => {
     navigate('/analytics')
   }
 
+  const handleNavigateToJDAnalysis = () => {
+    closeSidebar()
+    navigate('/analytics?tab=jd')
+  }
+
   const handleEditResume = (resume: Resume) => {
     setResumeData(resume.content as unknown as ResumeData)
     setCurrentResumeId(resume.id)
@@ -266,6 +271,7 @@ const handleGoHome = () => {
           onNavigateToMe={() => navigate('/me')}
           onNavigateToApplications={() => navigate('/applications')}
           onNavigateToAnalytics={handleNavigateToAnalytics}
+          onNavigateToJDAnalysis={handleNavigateToJDAnalysis}
         />
 
         {/* 主内容区 - 左右分栏 */}

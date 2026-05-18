@@ -301,6 +301,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           }}
           onNavigateToApplications={() => navigate('/applications')}
           onNavigateToAnalytics={() => navigate('/analytics')}
+          onNavigateToJDAnalysis={() => navigate('/analytics?tab=jd')}
           onNavigateToLogin={() => navigate('/login')}
         />
 

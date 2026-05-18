@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Fish, ChevronsRight, BarChart2, FileText } from 'lucide-react'
+import { Fish, ChevronsRight } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { useResumeStore } from '../store/resumeStore'
 import { Sidebar } from '../components/Sidebar/Sidebar'
@@ -12,29 +12,14 @@ type Tab = 'dashboard' | 'jd'
 
 export function AnalyticsPage() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
-  const [activeTab, setActiveTab] = useState<Tab>(searchParams.get('tab') === 'jd' ? 'jd' : 'dashboard')
+  const activeTab: Tab = searchParams.get('tab') === 'jd' ? 'jd' : 'dashboard'
   const { applications, fetchApplications } = useApplicationStore()
 
   useEffect(() => {
     fetchApplications()
   }, [fetchApplications])
-
-  useEffect(() => {
-    setActiveTab(searchParams.get('tab') === 'jd' ? 'jd' : 'dashboard')
-  }, [searchParams])
-
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab)
-    const nextParams = new URLSearchParams(searchParams)
-    if (tab === 'jd') {
-      nextParams.set('tab', 'jd')
-    } else {
-      nextParams.delete('tab')
-    }
-    setSearchParams(nextParams)
-  }
 
   const handleNavigateToApplications = () => navigate('/applications')
   const handleNavigateToMe = () => navigate('/me')
@@ -59,32 +44,6 @@ export function AnalyticsPage() {
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
-
-        {/* Tab 切换 - 放在右侧 */}
-        <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => handleTabChange('dashboard')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-              activeTab === 'dashboard'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <BarChart2 className="w-4 h-4" />
-            Dashboard
-          </button>
-          <button
-            onClick={() => handleTabChange('jd')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-              activeTab === 'jd'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            JD 分析
-          </button>
-        </div>
       </header>
 
       {/* 主体内容 */}
@@ -101,7 +60,8 @@ export function AnalyticsPage() {
           onGoHome={handleGoHome}
           onNavigateToMe={handleNavigateToMe}
           onNavigateToApplications={handleNavigateToApplications}
-          onNavigateToAnalytics={() => {}}
+          onNavigateToAnalytics={() => navigate('/analytics')}
+          onNavigateToJDAnalysis={() => navigate('/analytics?tab=jd')}
         />
 
         {/* 内容区 */}

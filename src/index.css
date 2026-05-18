@@ -1,7 +1,7 @@
 ﻿@import "tailwindcss";
 
 @theme {
-  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, Consolas, monospace;
 }

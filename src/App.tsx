@@ -202,6 +202,7 @@ function AppContent() {
                       onNavigateToMe={handleNavigateToMe}
                       onNavigateToApplications={handleNavigateToApplications}
                       onNavigateToAnalytics={handleNavigateToAnalytics}
+                      onNavigateToJDAnalysis={handleNavigateToAnalysis}
                       onNavigateToLogin={handleNavigateToLogin}
                     />
 

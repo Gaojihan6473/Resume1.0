@@ -4,9 +4,9 @@ import type { SectionId, StyleSettings } from '../../types/resume'
 import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
-  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  system: "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Segoe UI', sans-serif",
   serif: "Georgia, 'Times New Roman', serif",
-  'sans-serif': "'Arial', 'Helvetica', sans-serif",
+  'sans-serif': "'Arial', 'Helvetica', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
 }
 const SECTION_TITLE_COLOR = '#1f2937'
 const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
