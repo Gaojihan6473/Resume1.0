@@ -4,9 +4,9 @@ import type { SectionId, StyleSettings } from '../../types/resume'
 import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
-  system: "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Segoe UI', sans-serif",
+  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   serif: "Georgia, 'Times New Roman', serif",
-  'sans-serif': "'Arial', 'Helvetica', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
+  'sans-serif': "'Arial', 'Helvetica', sans-serif",
 }
 const SECTION_TITLE_COLOR = '#1f2937'
 const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
@@ -52,7 +52,7 @@ export function PreviewContent({ style }: PreviewContentProps) {
           <div key={edu.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
             <div className="flex justify-between items-start gap-3">
               <span className="min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5" style={{ lineHeight: `${bodyLineHeightPx}px` }}>
-                <span className="font-medium" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.school}</span>
+                <span className="font-bold" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.school}</span>
                 {(edu.schoolTags || [])
                   .filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
                   .map((tag) => (
