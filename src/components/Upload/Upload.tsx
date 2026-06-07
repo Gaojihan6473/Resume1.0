@@ -17,12 +17,29 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
   const [isDragActive, setIsDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const requestAuthIfNeeded = useCallback(() => {
+    if (isAuthenticated) return false
+
+    if (onAuthRequired) {
+      onAuthRequired()
+    } else {
+      window.dispatchEvent(new CustomEvent('auth:required', { detail: { action: 'upload' } }))
+    }
+
+    return true
+  }, [isAuthenticated, onAuthRequired])
+
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile)
     setCurrentFile(selectedFile)
   }, [setCurrentFile])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (requestAuthIfNeeded()) {
+      e.target.value = ''
+      return
+    }
+
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
       handleFileSelect(selectedFile)
@@ -44,13 +61,15 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
     setIsDragActive(false)
     const droppedFile = e.dataTransfer.files?.[0]
     if (droppedFile) {
+      if (requestAuthIfNeeded()) return
+
       const validTypes = ['.pdf', '.docx', '.doc', '.txt']
       const ext = '.' + droppedFile.name.split('.').pop()?.toLowerCase()
       if (validTypes.includes(ext)) {
         handleFileSelect(droppedFile)
       }
     }
-  }, [handleFileSelect])
+  }, [handleFileSelect, requestAuthIfNeeded])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -121,10 +140,8 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
       <div
         className={`group relative overflow-hidden border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
         onClick={() => {
-          if (!isAuthenticated && onAuthRequired) {
-            onAuthRequired()
-            return
-          }
+          if (requestAuthIfNeeded()) return
+
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
             fileInputRef.current.click()
