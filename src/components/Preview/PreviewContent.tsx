@@ -1,6 +1,16 @@
 import type { ReactNode } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
-import type { SectionId, StyleSettings } from '../../types/resume'
+import type { JDAnalysisSectionId } from '../../types/analytics'
+import type { ResumeData, SectionId, StyleSettings } from '../../types/resume'
+import {
+  buildInternshipAnchorText,
+  buildProjectAnchorText,
+  buildSkillsAnchorText,
+  buildSummaryAnchorText,
+  createResumeAnchorKey,
+  createSectionAnchorKey,
+  stripHtml,
+} from '../../utils/analysisAnchors'
 import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
@@ -13,18 +23,34 @@ const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
 const UNIFIED_TEXT_COLOR = SECTION_TITLE_COLOR
 const SCHOOL_TAG_OPTIONS = ['985', '211']
 
+export interface ResumeAnalysisFocus {
+  section: JDAnalysisSectionId
+  itemKey?: string
+  problemText?: string
+  locked?: boolean
+}
+
+interface PreviewContentProps {
+  style: StyleSettings
+  resumeData?: ResumeData
+  analysisFocus?: ResumeAnalysisFocus | null
+  registerAnchor?: (key: string, element: HTMLElement | null) => void
+}
+
 function isHtmlEmpty(html: string | undefined | null): boolean {
   if (!html) return true
   const stripped = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
   return stripped === ''
 }
 
-interface PreviewContentProps {
-  style: StyleSettings
-}
-
-export function PreviewContent({ style }: PreviewContentProps) {
-  const { resumeData } = useResumeStore()
+export function PreviewContent({
+  style,
+  resumeData: externalResumeData,
+  analysisFocus,
+  registerAnchor,
+}: PreviewContentProps) {
+  const storeResumeData = useResumeStore((state) => state.resumeData)
+  const resumeData = externalResumeData ?? storeResumeData
   const { basic, education, internships, projects, summary, skills, sectionOrder } = resumeData
 
   const fontFamily = FONT_FAMILIES[style.fontFamily]
@@ -43,7 +69,25 @@ export function PreviewContent({ style }: PreviewContentProps) {
   const bodyLetterSpacingPx = style.letterSpacing ?? 0
   const horizontalPaddingPx = Math.max(0, Math.round(style.pageHorizontalPadding ?? style.pagePadding))
 
-  const sectionProps = { titleFontSize, titleLineHeightPx, sectionSpacingPx: paragraphSpacingPx, tightSpacingPx, dividerToBodySpacingPx, bodyFontSize, style }
+  const getItemFocus = (section: JDAnalysisSectionId, itemKey: string) =>
+    analysisFocus?.section === section && analysisFocus.itemKey === itemKey
+  const getSectionFocus = (section: JDAnalysisSectionId) =>
+    analysisFocus?.section === section && (!analysisFocus.itemKey || analysisFocus.itemKey === createSectionAnchorKey(section))
+  const getMarker = (isFocused: boolean) => (isFocused ? analysisFocus?.problemText : undefined)
+
+  const sectionProps = {
+    titleFontSize,
+    titleLineHeightPx,
+    sectionSpacingPx: paragraphSpacingPx,
+    tightSpacingPx,
+    dividerToBodySpacingPx,
+    registerAnchor,
+  }
+
+  const summaryKey = createResumeAnchorKey('summary', buildSummaryAnchorText(summary))
+  const summaryFocused = getSectionFocus('summary') || getItemFocus('summary', summaryKey)
+  const skillsKey = createResumeAnchorKey('skills', buildSkillsAnchorText(skills))
+  const skillsFocused = getSectionFocus('skills') || getItemFocus('skills', skillsKey)
 
   const sectionComponents: Record<SectionId, ReactNode> = {
     education: education.length > 0 ? (
@@ -88,110 +132,158 @@ export function PreviewContent({ style }: PreviewContentProps) {
     ) : null,
 
     internships: internships.length > 0 ? (
-      <Section key="internships" title="实习经历" {...sectionProps}>
-        {internships.map((intern) => (
-          <div key={intern.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-            <div className="flex justify-between items-baseline gap-3">
-              <span className="font-bold">{intern.company}</span>
-              <span>{intern.startDate} - {intern.endDate}</span>
+      <Section
+        key="internships"
+        title="实习经历"
+        section="internships"
+        isFocused={getSectionFocus('internships')}
+        {...sectionProps}
+      >
+        {internships.map((intern) => {
+          const itemKey = createResumeAnchorKey('internships', buildInternshipAnchorText(intern))
+          const isFocused = getItemFocus('internships', itemKey)
+          const marker = getMarker(isFocused)
+
+          return (
+            <div
+              key={intern.id}
+              ref={(element) => registerAnchor?.(itemKey, element)}
+              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked)}
+              style={{ marginBottom: `${itemSpacingPx}px` }}
+            >
+              <div className="flex justify-between items-baseline gap-3">
+                <span className="font-bold">{intern.company}</span>
+                <span>{intern.startDate} - {intern.endDate}</span>
+              </div>
+              <div>
+                {intern.position}
+                {intern.department && ` | ${intern.department}`}
+                {intern.location && ` | ${intern.location}`}
+              </div>
+              {!isHtmlEmpty(intern.content) ? (
+                <div
+                  className="rich-content"
+                  style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${intern.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
+                  dangerouslySetInnerHTML={{ __html: highlightHtml(intern.content, marker) }}
+                />
+              ) : (
+                intern.projects.map((proj) => (
+                  <div key={proj.id} style={{ marginTop: `${tightSpacingPx}px` }}>
+                    {proj.title && <div className="font-medium"><HighlightedText text={proj.title} marker={marker} /></div>}
+                    {proj.description && <div><HighlightedText text={proj.description} marker={marker} /></div>}
+                    {proj.bullets.length > 0 && (
+                      <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                        {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} /></li>)}
+                      </ul>
+                    )}
+                    {proj.achievements.length > 0 && (
+                      <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
-            <div>
-              {intern.position}
-              {intern.department && ` | ${intern.department}`}
-              {intern.location && ` | ${intern.location}`}
-            </div>
-            {!isHtmlEmpty(intern.content) ? (
-              <div
-                className="rich-content"
-                style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${intern.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-                dangerouslySetInnerHTML={{ __html: intern.content }}
-              />
-            ) : (
-              intern.projects.map((proj) => (
-                <div key={proj.id} style={{ marginTop: `${tightSpacingPx}px` }}>
-                  {proj.title && <div className="font-medium">{proj.title}</div>}
-                  {proj.description && <div>{proj.description}</div>}
+          )
+        })}
+      </Section>
+    ) : null,
+
+    projects: projects.length > 0 ? (
+      <Section
+        key="projects"
+        title="项目经历"
+        section="projects"
+        isFocused={getSectionFocus('projects')}
+        {...sectionProps}
+      >
+        {projects.map((proj) => {
+          const itemKey = createResumeAnchorKey('projects', buildProjectAnchorText(proj))
+          const isFocused = getItemFocus('projects', itemKey)
+          const marker = getMarker(isFocused)
+
+          return (
+            <div
+              key={proj.id}
+              ref={(element) => registerAnchor?.(itemKey, element)}
+              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked)}
+              style={{ marginBottom: `${itemSpacingPx}px` }}
+            >
+              <div className="flex justify-between items-baseline gap-3">
+                <span className="font-bold">{proj.name}</span>
+                <span>{proj.startDate} - {proj.endDate}</span>
+              </div>
+              {proj.role && <div>{proj.role}</div>}
+              {!isHtmlEmpty(proj.content) ? (
+                <div
+                  className="rich-content"
+                  style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${proj.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
+                  dangerouslySetInnerHTML={{ __html: highlightHtml(proj.content, marker) }}
+                />
+              ) : (
+                <>
+                  {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}><HighlightedText text={proj.description} marker={marker} /></div>}
                   {proj.bullets.length > 0 && (
                     <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                      {proj.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
+                      {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} /></li>)}
                     </ul>
                   )}
                   {proj.achievements.length > 0 && (
                     <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
                   )}
-                </div>
-              ))
-            )}
-          </div>
-        ))}
-      </Section>
-    ) : null,
-
-    projects: projects.length > 0 ? (
-      <Section key="projects" title="项目经历" {...sectionProps}>
-        {projects.map((proj) => (
-          <div key={proj.id} style={{ marginBottom: `${itemSpacingPx}px` }}>
-            <div className="flex justify-between items-baseline gap-3">
-              <span className="font-bold">{proj.name}</span>
-              <span>{proj.startDate} - {proj.endDate}</span>
+                </>
+              )}
             </div>
-            {proj.role && <div>{proj.role}</div>}
-            {!isHtmlEmpty(proj.content) ? (
-              <div
-                className="rich-content"
-                style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${proj.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-                dangerouslySetInnerHTML={{ __html: proj.content }}
-              />
-            ) : (
-              <>
-                {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.description}</div>}
-                {proj.bullets.length > 0 && (
-                  <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                    {proj.bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}
-                  </ul>
-                )}
-                {proj.achievements.length > 0 && (
-                  <div style={{ marginTop: `${tightSpacingPx}px` }}>{proj.achievements.join(' | ')}</div>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+          )
+        })}
       </Section>
     ) : null,
 
     summary: (!isHtmlEmpty(summary.content) || summary.text || summary.highlights.length > 0) ? (
-      <Section key="summary" title="个人总结" {...sectionProps}>
+      <Section
+        key="summary"
+        title="个人总结"
+        section="summary"
+        itemAnchorKey={summaryKey}
+        isFocused={summaryFocused}
+        {...sectionProps}
+      >
         {!isHtmlEmpty(summary.content) ? (
           <div
             className="rich-content"
             style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${summary.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((summary.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-            dangerouslySetInnerHTML={{ __html: summary.content }}
+            dangerouslySetInnerHTML={{ __html: highlightHtml(summary.content, getMarker(summaryFocused)) }}
           />
         ) : summary.mode === 'highlights' ? (
           <ul className="list-disc list-inside space-y-0.5">
-            {summary.highlights.map((item, index) => <li key={index}>{item}</li>)}
+            {summary.highlights.map((item, index) => <li key={index}><HighlightedText text={item} marker={getMarker(summaryFocused)} /></li>)}
           </ul>
         ) : (
-          <p className="whitespace-pre-wrap">{summary.text}</p>
+          <p className="whitespace-pre-wrap"><HighlightedText text={summary.text} marker={getMarker(summaryFocused)} /></p>
         )}
       </Section>
     ) : null,
 
     skills: (skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0) ? (
-      <Section key="skills" title="技能证书" {...sectionProps}>
+      <Section
+        key="skills"
+        title="技能证书"
+        section="skills"
+        itemAnchorKey={skillsKey}
+        isFocused={skillsFocused}
+        {...sectionProps}
+      >
         <div className="space-y-0.5">
           {skills.technical.length > 0 && (
-            <div><span className="font-medium">技术技能：</span>{skills.technical.join('、')}</div>
+            <div><span className="font-medium">技术技能：</span><HighlightedText text={skills.technical.join('、')} marker={getMarker(skillsFocused)} /></div>
           )}
           {skills.languages.length > 0 && (
-            <div><span className="font-medium">语言能力：</span>{skills.languages.join('、')}</div>
+            <div><span className="font-medium">语言能力：</span><HighlightedText text={skills.languages.join('、')} marker={getMarker(skillsFocused)} /></div>
           )}
           {skills.certificates.length > 0 && (
-            <div><span className="font-medium">证书资格：</span>{skills.certificates.join('、')}</div>
+            <div><span className="font-medium">证书资格：</span><HighlightedText text={skills.certificates.join('、')} marker={getMarker(skillsFocused)} /></div>
           )}
           {skills.interests.length > 0 && (
-            <div><span className="font-medium">兴趣爱好：</span>{skills.interests.join('、')}</div>
+            <div><span className="font-medium">兴趣爱好：</span><HighlightedText text={skills.interests.join('、')} marker={getMarker(skillsFocused)} /></div>
           )}
         </div>
       </Section>
@@ -244,23 +336,36 @@ export function PreviewContent({ style }: PreviewContentProps) {
 
 function Section({
   title,
+  section,
+  itemAnchorKey,
+  isFocused = false,
   titleFontSize,
   titleLineHeightPx,
   sectionSpacingPx,
   tightSpacingPx,
   dividerToBodySpacingPx,
+  registerAnchor,
   children,
 }: {
   title: string
+  section?: JDAnalysisSectionId
+  itemAnchorKey?: string
+  isFocused?: boolean
   titleFontSize: number
   titleLineHeightPx: number
   sectionSpacingPx: number
   tightSpacingPx: number
   dividerToBodySpacingPx: number
+  registerAnchor?: (key: string, element: HTMLElement | null) => void
   children: ReactNode
 }) {
+  const anchorRef = (element: HTMLDivElement | null) => {
+    if (section) registerAnchor?.(createSectionAnchorKey(section), element)
+    if (itemAnchorKey) registerAnchor?.(itemAnchorKey, element)
+  }
+
   return (
-    <div style={{ marginBottom: `${sectionSpacingPx}px` }}>
+    <div ref={anchorRef} className={getAnalysisFocusClass(isFocused)} style={{ marginBottom: `${sectionSpacingPx}px` }}>
       <h2 className="font-bold" style={{ marginBottom: `${tightSpacingPx}px`, fontSize: `${titleFontSize}px`, letterSpacing: '0', lineHeight: `${titleLineHeightPx}px`, color: SECTION_TITLE_COLOR }}>
         {title}
       </h2>
@@ -268,4 +373,73 @@ function Section({
       {children}
     </div>
   )
+}
+
+function HighlightedText({
+  text,
+  marker,
+}: {
+  text: string
+  marker?: string
+}) {
+  const cleanedMarker = stripHtml(marker || '').trim()
+  if (!cleanedMarker) return <>{text}</>
+
+  const start = text.indexOf(cleanedMarker)
+  if (start === -1 || cleanedMarker.length >= text.length * 0.8) return <>{text}</>
+
+  const end = start + cleanedMarker.length
+  return (
+    <>
+      {text.slice(0, start)}
+      <mark className="rounded bg-amber-200 px-0.5 text-amber-950">{text.slice(start, end)}</mark>
+      {text.slice(end)}
+    </>
+  )
+}
+
+function highlightHtml(html: string, marker?: string): string {
+  const cleanedMarker = stripHtml(marker || '').trim()
+  if (!cleanedMarker || typeof document === 'undefined') return html
+
+  const container = document.createElement('div')
+  container.innerHTML = html
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const markers = Array.from(new Set([cleanedMarker, cleanedMarker.replace(/\s+/g, ' ')]))
+
+  let node = walker.nextNode()
+  while (node) {
+    const textNode = node as Text
+    const text = textNode.nodeValue || ''
+    const markerToUse = markers.find((candidate) => candidate && text.includes(candidate))
+
+    if (markerToUse && markerToUse.length < text.length * 0.8) {
+      const start = text.indexOf(markerToUse)
+      const end = start + markerToUse.length
+      const mark = document.createElement('mark')
+      mark.setAttribute('style', 'background:#fde68a;color:#78350f;border-radius:2px;padding:0 1px;')
+      mark.textContent = text.slice(start, end)
+
+      const parent = textNode.parentNode
+      if (!parent) return html
+
+      if (start > 0) parent.insertBefore(document.createTextNode(text.slice(0, start)), textNode)
+      parent.insertBefore(mark, textNode)
+      if (end < text.length) parent.insertBefore(document.createTextNode(text.slice(end)), textNode)
+      parent.removeChild(textNode)
+      return container.innerHTML
+    }
+
+    node = walker.nextNode()
+  }
+
+  return html
+}
+
+function getAnalysisFocusClass(isFocused: boolean, locked = false): string {
+  if (!isFocused) return 'transition-all duration-150'
+  return [
+    'relative rounded-md px-1 -mx-1 transition-all duration-150',
+    locked ? 'bg-blue-50 ring-1 ring-blue-300' : 'bg-amber-50 ring-1 ring-amber-300',
+  ].join(' ')
 }

@@ -1,5 +1,7 @@
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Edit3,
   FileText,
@@ -9,17 +11,31 @@ import {
   Star,
   Wrench,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
   JD_ANALYSIS_SECTIONS,
+  type JDAnalysisSectionId,
   type JDSectionAnalysis,
   type JDSectionStatus,
   type SuggestionItem,
 } from '../../types/analytics'
 
+export interface SuggestionInteractionTarget {
+  key: string
+  section: JDAnalysisSectionId
+  itemKey?: string
+  problemText?: string
+  suggestion: SuggestionItem
+}
+
 interface SuggestionsProps {
   sectionAnalyses?: JDSectionAnalysis[]
   suggestions?: SuggestionItem[]
+  activeSuggestionKey?: string | null
+  getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
+  onSuggestionHover?: (target: SuggestionInteractionTarget) => void
+  onSuggestionLeave?: () => void
+  onSuggestionClick?: (target: SuggestionInteractionTarget) => void
 }
 
 const TYPE_CONFIG = {
@@ -70,19 +86,49 @@ const STATUS_CONFIG: Record<JDSectionStatus, {
   },
 }
 
-export function Suggestions({ sectionAnalyses, suggestions = [] }: SuggestionsProps) {
+export function Suggestions({
+  sectionAnalyses,
+  suggestions = [],
+  activeSuggestionKey,
+  getSuggestionTarget,
+  onSuggestionHover,
+  onSuggestionLeave,
+  onSuggestionClick,
+}: SuggestionsProps) {
   const sections = normalizeSections(sectionAnalyses, suggestions)
 
   return (
     <div className="space-y-4">
       {sections.map((section) => (
-        <SectionCard key={section.section} section={section} />
+        <SectionCard
+          key={section.section}
+          section={section}
+          activeSuggestionKey={activeSuggestionKey}
+          getSuggestionTarget={getSuggestionTarget}
+          onSuggestionHover={onSuggestionHover}
+          onSuggestionLeave={onSuggestionLeave}
+          onSuggestionClick={onSuggestionClick}
+        />
       ))}
     </div>
   )
 }
 
-function SectionCard({ section }: { section: JDSectionAnalysis }) {
+function SectionCard({
+  section,
+  activeSuggestionKey,
+  getSuggestionTarget,
+  onSuggestionHover,
+  onSuggestionLeave,
+  onSuggestionClick,
+}: {
+  section: JDSectionAnalysis
+  activeSuggestionKey?: string | null
+  getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
+  onSuggestionHover?: (target: SuggestionInteractionTarget) => void
+  onSuggestionLeave?: () => void
+  onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+}) {
   const statusConfig = STATUS_CONFIG[section.status]
   const StatusIcon = statusConfig.icon
 
@@ -103,9 +149,9 @@ function SectionCard({ section }: { section: JDSectionAnalysis }) {
 
       <div className="p-4">
         {section.summary && (
-          <div className="mb-4 overflow-hidden rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50">
-            <div className="flex gap-3 px-4 py-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-blue-500 shadow-sm ring-1 ring-blue-100">
+          <div className="mb-4 rounded-lg bg-blue-50/60">
+            <div className="flex gap-3 px-3 py-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/80 text-blue-500 ring-1 ring-blue-100">
                 <FileText className="h-4 w-4" />
               </span>
               <div>
@@ -123,7 +169,16 @@ function SectionCard({ section }: { section: JDSectionAnalysis }) {
         ) : (
           <div className="space-y-5">
             {groupSuggestionsByItem(section.suggestions).map((group, index) => (
-              <ItemAnalysis key={`${section.section}-${index}`} group={group} />
+              <ItemAnalysis
+                key={`${section.section}-${index}`}
+                sectionId={section.section}
+                group={group}
+                activeSuggestionKey={activeSuggestionKey}
+                getSuggestionTarget={getSuggestionTarget}
+                onSuggestionHover={onSuggestionHover}
+                onSuggestionLeave={onSuggestionLeave}
+                onSuggestionClick={onSuggestionClick}
+              />
             ))}
           </div>
         )}
@@ -138,7 +193,25 @@ interface SuggestionGroup {
   suggestions: SuggestionItem[]
 }
 
-function ItemAnalysis({ group }: { group: SuggestionGroup }) {
+function ItemAnalysis({
+  sectionId,
+  group,
+  activeSuggestionKey,
+  getSuggestionTarget,
+  onSuggestionHover,
+  onSuggestionLeave,
+  onSuggestionClick,
+}: {
+  sectionId: JDAnalysisSectionId
+  group: SuggestionGroup
+  activeSuggestionKey?: string | null
+  getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
+  onSuggestionHover?: (target: SuggestionInteractionTarget) => void
+  onSuggestionLeave?: () => void
+  onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+}) {
+  const [isOriginalExpanded, setIsOriginalExpanded] = useState(false)
+
   return (
     <article className="border-t border-slate-100 pt-5 first:border-t-0 first:pt-0">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -148,26 +221,67 @@ function ItemAnalysis({ group }: { group: SuggestionGroup }) {
         </span>
       </div>
 
-      <div className="relative pl-4">
-        <div className="absolute bottom-0 left-0 top-0 w-px bg-slate-200" />
+      <div className="mb-4 rounded-lg bg-slate-50 px-3 py-3">
         <div className="mb-2 flex items-center gap-2">
           <FileText className="h-4 w-4 text-slate-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">原文</span>
+          <span className="text-xs font-semibold text-slate-500">命中片段</span>
+          <button
+            type="button"
+            onClick={() => setIsOriginalExpanded((value) => !value)}
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-all hover:bg-white hover:text-blue-600"
+          >
+            {isOriginalExpanded ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" />
+                收起原文
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" />
+                查看完整原文
+              </>
+            )}
+          </button>
         </div>
-        <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-7 text-slate-700">
-          <HighlightedContent content={group.originalContent} suggestions={group.suggestions} />
+        <div className="space-y-2">
+          {group.suggestions.map((suggestion, index) => (
+            <div key={index} className="grid grid-cols-[24px_minmax(0,1fr)] gap-2 text-sm leading-6 text-slate-600">
+              <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700">
+                {index + 1}
+              </span>
+              <span className="line-clamp-2">{getSuggestionExcerpt(suggestion, group.originalContent)}</span>
+            </div>
+          ))}
         </div>
+
+        {isOriginalExpanded && (
+          <div className="mt-3 border-t border-slate-200/70 pt-3">
+            <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              <HighlightedContent content={group.originalContent} suggestions={group.suggestions} />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="mt-5 pl-4">
+      <div>
         <div className="mb-3 flex items-center gap-2">
           <MessageSquareText className="h-4 w-4 text-blue-500" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">分析与建议</span>
-          <span className="text-xs text-slate-400">编号对应原文高亮</span>
+          <span className="text-xs font-semibold text-blue-700">结构化建议</span>
+          <span className="text-xs text-slate-400">点击卡片定位到简历预览</span>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           {group.suggestions.map((suggestion, index) => (
-            <Annotation key={index} index={index} suggestion={suggestion} />
+            <Annotation
+              key={index}
+              sectionId={sectionId}
+              index={index}
+              suggestion={suggestion}
+              activeSuggestionKey={activeSuggestionKey}
+              getSuggestionTarget={getSuggestionTarget}
+              onSuggestionHover={onSuggestionHover}
+              onSuggestionLeave={onSuggestionLeave}
+              onSuggestionClick={onSuggestionClick}
+            />
           ))}
         </div>
       </div>
@@ -215,12 +329,63 @@ function HighlightedContent({
   return <p className="whitespace-pre-wrap">{nodes}</p>
 }
 
-function Annotation({ suggestion, index }: { suggestion: SuggestionItem; index: number }) {
+function Annotation({
+  sectionId,
+  suggestion,
+  index,
+  activeSuggestionKey,
+  getSuggestionTarget,
+  onSuggestionHover,
+  onSuggestionLeave,
+  onSuggestionClick,
+}: {
+  sectionId: JDAnalysisSectionId
+  suggestion: SuggestionItem
+  index: number
+  activeSuggestionKey?: string | null
+  getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
+  onSuggestionHover?: (target: SuggestionInteractionTarget) => void
+  onSuggestionLeave?: () => void
+  onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+}) {
   const config = TYPE_CONFIG[suggestion.type] ?? TYPE_CONFIG.modify
   const Icon = config.icon
+  const target = getSuggestionTarget?.(sectionId, suggestion)
+  const isActive = Boolean(target && target.key === activeSuggestionKey)
+  const isInteractive = Boolean(target && (onSuggestionHover || onSuggestionClick))
+
+  const handleHover = () => {
+    if (target) onSuggestionHover?.(target)
+  }
+
+  const handleClick = () => {
+    if (target) onSuggestionClick?.(target)
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isInteractive) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleClick()
+  }
+
+  const problemText = suggestion.problem || suggestion.problemText || '未提供具体问题，可结合命中片段查看'
+  const rewriteText = suggestion.rewriteExample?.trim()
 
   return (
-    <div className="grid gap-3 text-sm leading-6 sm:grid-cols-[32px_minmax(0,1fr)]">
+    <div
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      onMouseEnter={handleHover}
+      onMouseLeave={isInteractive ? onSuggestionLeave : undefined}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      className={[
+        'grid w-full gap-3 border-t border-slate-100 py-3 text-left text-sm leading-6 transition-all first:border-t-0 sm:grid-cols-[32px_minmax(0,1fr)]',
+        isInteractive ? 'cursor-pointer hover:bg-blue-50/40' : 'cursor-default',
+        isActive ? 'bg-blue-50/70' : '',
+      ].join(' ')}
+    >
       <div className="pt-0.5">
         <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white shadow-sm shadow-blue-200">
           {index + 1}
@@ -238,20 +403,36 @@ function Annotation({ suggestion, index }: { suggestion: SuggestionItem; index: 
         </div>
 
         <AnnotationBlock
-          label="分析"
-          text={buildAnalysisText(suggestion)}
-          tone="analysis"
+          label="问题"
+          text={problemText}
+          tone="problem"
         />
 
         <AnnotationBlock
-          label="建议改写"
-          text={buildRewriteText(suggestion)}
-          tone="rewrite"
+          label="原因"
+          text={suggestion.reason}
+          tone="reason"
         />
+
+        <AnnotationBlock
+          label="建议"
+          text={suggestion.suggestion}
+          tone="suggestion"
+        />
+
+        {rewriteText && (
+          <AnnotationBlock
+            label="参考改写"
+            text={rewriteText}
+            tone="rewrite"
+          />
+        )}
       </div>
     </div>
   )
 }
+
+type AnnotationTone = 'problem' | 'reason' | 'suggestion' | 'rewrite'
 
 function AnnotationBlock({
   label,
@@ -259,35 +440,91 @@ function AnnotationBlock({
   tone,
 }: {
   label: string
-  text: string
-  tone: 'analysis' | 'rewrite'
+  text?: string
+  tone: AnnotationTone
 }) {
-  const toneClass = tone === 'analysis'
-    ? 'border-l-blue-500 text-slate-700'
-    : 'border-l-emerald-500 text-slate-700'
-  const labelClass = tone === 'analysis' ? 'text-blue-700' : 'text-emerald-700'
+  const points = splitDisplayText(text)
+  if (points.length === 0) return null
+
+  const toneClass: Record<AnnotationTone, string> = {
+    problem: 'border-l-rose-400 bg-rose-50/50',
+    reason: 'border-l-blue-400 bg-blue-50/50',
+    suggestion: 'border-l-emerald-400 bg-emerald-50/50',
+    rewrite: 'border-l-amber-400 bg-amber-50/60',
+  }
+  const labelClass: Record<AnnotationTone, string> = {
+    problem: 'text-rose-700',
+    reason: 'text-blue-700',
+    suggestion: 'text-emerald-700',
+    rewrite: 'text-amber-700',
+  }
 
   return (
-    <div className={`border-l-4 py-0.5 pl-3 ${toneClass}`}>
-      <div className={`mb-1 text-xs font-semibold ${labelClass}`}>{label}</div>
-      <p className="text-sm leading-6">{text}</p>
+    <div className={`rounded-md border-l-4 px-3 py-2 ${toneClass[tone]}`}>
+      <div className={`mb-1 text-xs font-semibold ${labelClass[tone]}`}>{label}</div>
+      {points.length > 1 ? (
+        <ul className="space-y-1 text-sm leading-6 text-slate-700">
+          {points.map((point, pointIndex) => (
+            <li key={`${point}-${pointIndex}`} className="flex gap-2">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-40" />
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm leading-6 text-slate-700">{points[0]}</p>
+      )}
     </div>
   )
 }
 
-function buildAnalysisText(suggestion: SuggestionItem): string {
-  const parts = [suggestion.reason]
-  if (suggestion.problem) {
-    parts.push(`具体问题：${suggestion.problem}`)
-  }
-  return parts.filter(Boolean).join(' ')
+function getSuggestionExcerpt(suggestion: SuggestionItem, fallback: string): string {
+  const source =
+    suggestion.problemText ||
+    suggestion.targetText ||
+    suggestion.current ||
+    suggestion.problem ||
+    suggestion.originalContent ||
+    fallback
+
+  return truncateInlineText(source, 110) || '未提供具体片段，点击建议查看预览定位'
 }
 
-function buildRewriteText(suggestion: SuggestionItem): string {
-  if (suggestion.rewriteExample) {
-    return `${suggestion.suggestion} 参考表达：${suggestion.rewriteExample}`
-  }
-  return suggestion.suggestion
+function splitDisplayText(value?: string): string[] {
+  const normalized = (value || '')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+  if (!normalized) return []
+
+  const withBreaks = normalized
+    .replace(/([；;])/g, '\n')
+    .replace(/(^|\n|\s)(\d+[、)]|[一二三四五六七八九十]+[、.])\s*/g, '$1\n$2')
+    .replace(/([。！？!?])\s*(?=[^\s。！？!?])/g, '$1\n')
+
+  return withBreaks
+    .split(/\n+/)
+    .map(cleanBulletPrefix)
+    .filter(Boolean)
+}
+
+function cleanInlineText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function cleanBulletPrefix(value: string): string {
+  return value
+    .trim()
+    .replace(/^[-•*]\s*/, '')
+    .replace(/^(?:\d+[.、)]|[一二三四五六七八九十]+[、.])\s*/, '')
+    .trim()
+}
+
+function truncateInlineText(value: string, maxLength: number): string {
+  const normalized = cleanInlineText(value)
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength).trim()}...`
 }
 
 function groupSuggestionsByItem(suggestions: SuggestionItem[]): SuggestionGroup[] {

@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Loader2, Sparkles, Lightbulb, AlertCircle, FileText, Target } from 'lucide-react'
+import {
+  Loader2,
+  Sparkles,
+  Lightbulb,
+  AlertCircle,
+  FileText,
+  Target,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+} from 'lucide-react'
 import type { Application } from '../../types/application'
 import {
   JD_ANALYSIS_SECTIONS,
@@ -14,13 +25,22 @@ import {
 import type { ResumeData } from '../../types/resume'
 import { useResumeStore } from '../../store/resumeStore'
 import { fetchResumes } from '../../lib/api'
+import { createSectionAnchorKey, resolveSuggestionAnchor } from '../../utils/analysisAnchors'
 import { CustomSelect } from '../Application/CustomSelect'
-import { MatchScore } from './MatchScore'
-import { Suggestions } from './Suggestions'
+import { PreviewContent, type ResumeAnalysisFocus } from '../Preview/PreviewContent'
+import { Suggestions, type SuggestionInteractionTarget } from './Suggestions'
 
 interface JDAnalyzerProps {
   applications: Application[]
 }
+
+const A4_WIDTH = 595
+const A4_MIN_HEIGHT = 842
+const PREVIEW_PADDING_PX = 56
+const DEFAULT_MAX_PREVIEW_SCALE = 0.96
+const ONE_SIDE_COLLAPSED_MAX_PREVIEW_SCALE = 1.22
+const BOTH_SIDES_COLLAPSED_MAX_PREVIEW_SCALE = 1.38
+const MIN_PREVIEW_SCALE = 0.45
 
 export function JDAnalyzer({ applications }: JDAnalyzerProps) {
   const [searchParams] = useSearchParams()
@@ -31,12 +51,56 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
   const [selectedJobId, setSelectedJobId] = useState<string>('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<JDAnalysisResult | null>(null)
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false)
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false)
+  const [previewScale, setPreviewScale] = useState(0.86)
+  const [previewContentHeight, setPreviewContentHeight] = useState(A4_MIN_HEIGHT)
+  const [hoverTarget, setHoverTarget] = useState<SuggestionInteractionTarget | null>(null)
+  const [lockedTarget, setLockedTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { cachedResumes, setCachedResumes } = useResumeStore()
   const apiKey = (import.meta.env.VITE_DEEPSEEK_API_KEY as string)?.trim()
   const analysisControllerRef = useRef<AbortController | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement>(null)
+  const previewPageRef = useRef<HTMLDivElement>(null)
+  const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
 
   const applicationsWithJD = applications.filter((app) => app.jobDescription?.trim())
+  const selectedResume = useMemo(
+    () => cachedResumes.find((resume) => resume.id === selectedResumeId),
+    [cachedResumes, selectedResumeId]
+  )
+  const selectedResumeData = selectedResume?.content as unknown as ResumeData | undefined
+  const maxPreviewScale = getMaxPreviewScale(isLeftPanelCollapsed, isRightPanelCollapsed)
+  const activeTarget = useMemo(
+    () => hoverTarget ?? lockedTarget,
+    [hoverTarget, lockedTarget]
+  )
+  const activeSuggestionKey = activeTarget?.key ?? null
+  const analysisFocus: ResumeAnalysisFocus | null = useMemo(
+    () => activeTarget
+      ? {
+          section: activeTarget.section,
+          itemKey: activeTarget.itemKey,
+          problemText: activeTarget.problemText,
+          locked: !hoverTarget && Boolean(lockedTarget),
+        }
+      : null,
+    [activeTarget, hoverTarget, lockedTarget]
+  )
+
+  const clearAnalysisState = useCallback(() => {
+    setAnalysisResult(null)
+    setHoverTarget(null)
+    setLockedTarget(null)
+    setError(null)
+  }, [])
+
+  const abortCurrentAnalysis = useCallback(() => {
+    analysisControllerRef.current?.abort()
+    analysisControllerRef.current = null
+    setIsAnalyzing(false)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -44,12 +108,54 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
     }
   }, [])
 
+  useEffect(() => {
+    anchorMapRef.current.clear()
+  }, [selectedResumeId])
+
+  useEffect(() => {
+    const container = previewScrollRef.current
+    if (!container) return
+
+    const updateScale = () => {
+      const availableWidth = Math.max(1, container.clientWidth - PREVIEW_PADDING_PX)
+      const widthScale = availableWidth / A4_WIDTH
+      const nextScale = Math.max(
+        MIN_PREVIEW_SCALE,
+        Math.min(maxPreviewScale, widthScale)
+      )
+
+      setPreviewScale((current) => Math.abs(current - nextScale) > 0.01 ? nextScale : current)
+    }
+
+    updateScale()
+
+    const resizeObserver = new ResizeObserver(updateScale)
+    resizeObserver.observe(container)
+    return () => resizeObserver.disconnect()
+  }, [analysisResult, isLeftPanelCollapsed, isRightPanelCollapsed, maxPreviewScale, selectedResumeId])
+
+  useEffect(() => {
+    const page = previewPageRef.current
+    if (!page) return
+
+    const updateHeight = () => {
+      setPreviewContentHeight(Math.max(A4_MIN_HEIGHT, Math.ceil(page.scrollHeight)))
+    }
+
+    updateHeight()
+
+    const resizeObserver = new ResizeObserver(updateHeight)
+    resizeObserver.observe(page)
+    return () => resizeObserver.disconnect()
+  }, [analysisFocus, selectedResumeData])
+
   // 从编辑器跳转时自动选中对应简历
   useEffect(() => {
     if (resumeIdFromQuery) {
-      setSelectedResumeId(resumeIdFromQuery)
+      setSelectedResumeId((current) => current === resumeIdFromQuery ? current : resumeIdFromQuery)
+      clearAnalysisState()
     }
-  }, [resumeIdFromQuery])
+  }, [clearAnalysisState, resumeIdFromQuery])
 
   // 组件挂载时加载简历列表（确保下拉框有选项）
   useEffect(() => {
@@ -74,11 +180,23 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
   }, [cachedResumes, setCachedResumes])
 
   const handleJobSelect = (jobId: string) => {
+    abortCurrentAnalysis()
+    clearAnalysisState()
     setSelectedJobId(jobId)
     const job = applicationsWithJD.find((app) => app.id === jobId)
-    if (job?.jobDescription) {
-      setJdText(job.jobDescription)
-    }
+    setJdText(job?.jobDescription || '')
+  }
+
+  const handleResumeSelect = (resumeId: string) => {
+    abortCurrentAnalysis()
+    clearAnalysisState()
+    setSelectedResumeId(resumeId)
+  }
+
+  const handleJdTextChange = (value: string) => {
+    abortCurrentAnalysis()
+    clearAnalysisState()
+    setJdText(value)
   }
 
   const handleAnalyze = async () => {
@@ -97,12 +215,13 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
 
     setIsAnalyzing(true)
     setError(null)
+    setHoverTarget(null)
+    setLockedTarget(null)
     analysisControllerRef.current?.abort()
     const controller = new AbortController()
     analysisControllerRef.current = controller
 
     try {
-      const selectedResume = cachedResumes.find((r) => r.id === selectedResumeId)
       if (!selectedResume) {
         throw new Error('未找到选中的简历')
       }
@@ -123,14 +242,11 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
   }
 
   const handleClear = () => {
-    analysisControllerRef.current?.abort()
-    analysisControllerRef.current = null
+    abortCurrentAnalysis()
     setJdText('')
     setSelectedResumeId('')
     setSelectedJobId('')
-    setIsAnalyzing(false)
-    setAnalysisResult(null)
-    setError(null)
+    clearAnalysisState()
   }
 
   const suggestionCount = analysisResult?.sectionAnalyses.reduce(
@@ -140,64 +256,116 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
   const prioritySectionCount = analysisResult?.sectionAnalyses.filter(
     (section) => section.status === '重点优化'
   ).length ?? 0
+  const selectedResumeTitle = selectedResume?.title || selectedResumeData?.resumeTitle || '未命名简历'
+  const desktopGridClass = getDesktopGridClass(isLeftPanelCollapsed, isRightPanelCollapsed)
+
+  const registerAnchor = useCallback((key: string, element: HTMLElement | null) => {
+    if (element) {
+      anchorMapRef.current.set(key, element)
+    } else {
+      anchorMapRef.current.delete(key)
+    }
+  }, [])
+
+  const scrollToAnchor = useCallback((target: SuggestionInteractionTarget) => {
+    const anchorKey = target.itemKey || createSectionAnchorKey(target.section)
+    const element = anchorMapRef.current.get(anchorKey) || anchorMapRef.current.get(createSectionAnchorKey(target.section))
+    const container = previewScrollRef.current
+    if (!element || !container) return
+
+    const containerRect = container.getBoundingClientRect()
+    const elementRect = element.getBoundingClientRect()
+    const nextTop = elementRect.top - containerRect.top + container.scrollTop - 88
+    container.scrollTo({
+      top: Math.max(0, nextTop),
+      behavior: 'smooth',
+    })
+  }, [])
+
+  const getSuggestionTarget = useCallback(
+    (section: JDAnalysisSectionId, suggestion: SuggestionItem): SuggestionInteractionTarget => {
+      const itemKey = selectedResumeData
+        ? resolveSuggestionAnchor(selectedResumeData, section, suggestion)
+        : createSectionAnchorKey(section)
+
+      return {
+        key: createSuggestionKey(section, itemKey, suggestion),
+        section,
+        itemKey,
+        problemText: suggestion.problemText || suggestion.targetText || suggestion.current,
+        suggestion,
+      }
+    },
+    [selectedResumeData]
+  )
+
+  const handleSuggestionHover = useCallback((target: SuggestionInteractionTarget) => {
+    setHoverTarget(target)
+  }, [])
+
+  const handleSuggestionLeave = useCallback(() => {
+    setHoverTarget(null)
+  }, [])
+
+  const handleSuggestionClick = useCallback((target: SuggestionInteractionTarget) => {
+    setHoverTarget(null)
+    setLockedTarget(target)
+    requestAnimationFrame(() => scrollToAnchor(target))
+  }, [scrollToAnchor])
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 bg-slate-50 lg:grid-cols-[minmax(300px,34%)_minmax(0,66%)]">
-      <aside className="min-h-0 overflow-y-auto border-b border-slate-200/70 bg-white/80 lg:border-b-0 lg:border-r">
-        <div className="flex min-h-full flex-col p-4 lg:p-5">
-          <div className="mb-4">
-            <div className="mb-3 flex items-center gap-2">
-              <div className="rounded-md bg-blue-50 p-2">
-                <FileText className="h-4 w-4 text-blue-500" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800">输入 JD</h3>
-                <p className="text-xs text-slate-400">选择岗位和简历后开始匹配</p>
-              </div>
-            </div>
-          </div>
+    <div className={`grid h-full min-h-0 grid-cols-1 bg-slate-50 transition-[grid-template-columns] duration-200 ${desktopGridClass}`}>
+      <aside className={`min-w-0 min-h-0 overflow-y-auto border-b border-slate-200/70 bg-white/85 lg:border-b-0 lg:border-r ${isLeftPanelCollapsed ? 'lg:overflow-hidden lg:border-r-0' : ''}`}>
+        <div className={`flex min-h-full flex-col ${isLeftPanelCollapsed ? 'lg:pointer-events-none lg:invisible' : ''}`}>
+          <PanelHeader
+            icon={<FileText className="h-4 w-4" />}
+            title="输入 JD"
+            subtitle="选择岗位与简历"
+            tone="blue"
+          />
 
-          <div className="space-y-3">
+          <div className="flex flex-1 flex-col p-4">
+            <div className="space-y-3">
             <section>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">选择已有岗位</label>
-            <CustomSelect
-              value={selectedJobId}
-              onChange={handleJobSelect}
-              options={applicationsWithJD.map((app) => ({
-                value: app.id,
-                label: `${app.company} - ${app.position}`,
-              }))}
-              placeholder="— 从已投递岗位中选择 —"
-            />
-          </section>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">选择已有岗位</label>
+              <CustomSelect
+                value={selectedJobId}
+                onChange={handleJobSelect}
+                options={applicationsWithJD.map((app) => ({
+                  value: app.id,
+                  label: `${app.company} - ${app.position}`,
+                }))}
+                placeholder="— 从已投递岗位中选择 —"
+              />
+            </section>
 
-          <section>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">匹配简历</label>
-            <CustomSelect
-              value={selectedResumeId}
-              onChange={setSelectedResumeId}
-              options={cachedResumes.map((resume) => ({
-                value: resume.id,
-                label: resume.title || '无标题简历',
-              }))}
-              placeholder="— 选择一份简历 —"
-            />
-          </section>
+            <section>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">匹配简历</label>
+              <CustomSelect
+                value={selectedResumeId}
+                onChange={handleResumeSelect}
+                options={cachedResumes.map((resume) => ({
+                  value: resume.id,
+                  label: resume.title || '无标题简历',
+                }))}
+                placeholder="— 选择一份简历 —"
+              />
+            </section>
 
-          <section className="flex min-h-[340px] flex-1 flex-col">
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              职位描述 {selectedJobId && <span className="text-blue-500">(已从岗位填充)</span>}
-            </label>
-            <textarea
-              value={jdText}
-              onChange={(e) => setJdText(e.target.value)}
-              placeholder="粘贴 JD 内容，获取简历匹配度分析和优化建议..."
-              className="min-h-[340px] w-full flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-700 transition-all placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </section>
-          </div>
+            <section className="flex min-h-[320px] flex-1 flex-col">
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                职位描述 {selectedJobId && <span className="text-blue-500">(已从岗位填充)</span>}
+              </label>
+              <textarea
+                value={jdText}
+                onChange={(event) => handleJdTextChange(event.target.value)}
+                placeholder="粘贴 JD 内容，获取简历匹配度分析和优化建议..."
+                className="min-h-[320px] w-full flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-700 transition-all placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </section>
+            </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
             <button
               onClick={handleAnalyze}
               disabled={isAnalyzing || !jdText.trim() || !selectedResumeId}
@@ -223,62 +391,301 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
             </button>
           </div>
 
-          {error && (
-            <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+            {error && (
+              <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
-      <section className="min-h-0 overflow-y-auto bg-slate-50">
-        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 p-4 lg:p-6">
-          {analysisResult ? (
-            <>
-              <div className="rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm">
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="rounded-md bg-emerald-50 p-2">
-                    <Target className="h-4 w-4 text-emerald-500" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-700">匹配度评分</h3>
-                </div>
-                <MatchScore
-                  score={analysisResult.matchScore}
-                  breakdown={analysisResult.scoreBreakdown}
-                  suggestionCount={suggestionCount}
-                  prioritySectionCount={prioritySectionCount}
-                  compact
-                />
-              </div>
+      <section className="relative min-h-[520px] min-w-0 border-b border-slate-200/70 bg-slate-100 lg:min-h-0 lg:border-b-0 lg:border-r lg:border-slate-200/70">
+        <button
+          type="button"
+          onClick={() => setIsLeftPanelCollapsed((value) => !value)}
+          title={isLeftPanelCollapsed ? '展开左侧栏' : '收起左侧栏'}
+          className="absolute left-0 top-4 z-30 hidden h-9 w-8 -translate-x-1/2 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 lg:flex"
+        >
+          {isLeftPanelCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          <span className="sr-only">{isLeftPanelCollapsed ? '展开左侧栏' : '收起左侧栏'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsRightPanelCollapsed((value) => !value)}
+          title={isRightPanelCollapsed ? '展开右侧栏' : '收起右侧栏'}
+          className="absolute right-0 top-4 z-30 hidden h-9 w-8 translate-x-1/2 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 lg:flex"
+        >
+          {isRightPanelCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+          <span className="sr-only">{isRightPanelCollapsed ? '展开右侧栏' : '收起右侧栏'}</span>
+        </button>
 
-              <div className="min-h-0 flex-1">
-                <div className="mb-3 flex items-center gap-2">
-                  <div className="rounded-md bg-amber-50 p-2">
-                    <Lightbulb className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-slate-700">逐模块优化建议</h3>
-                  <span className="ml-auto text-xs text-slate-400">{suggestionCount} 条建议</span>
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <PanelHeader
+            icon={<FileText className="h-4 w-4" />}
+            title={selectedResumeData ? selectedResumeTitle : '简历预览'}
+            subtitle={selectedResumeData ? '建议会联动定位' : '选择简历后显示'}
+            tone="slate"
+          />
+
+          {selectedResumeData ? (
+            <div ref={previewScrollRef} className="min-h-0 flex-1 overflow-auto bg-slate-200 p-4 lg:p-5">
+              <div
+                className="relative mx-auto mb-8"
+                style={{
+                  width: A4_WIDTH * previewScale,
+                  height: Math.max(A4_MIN_HEIGHT, previewContentHeight) * previewScale,
+                }}
+              >
+                <div
+                  ref={previewPageRef}
+                  className="a4-page absolute left-0 top-0 bg-white shadow-xl ring-1 ring-slate-200"
+                  style={{
+                    width: A4_WIDTH,
+                    minHeight: A4_MIN_HEIGHT,
+                    transform: `scale(${previewScale})`,
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  <PreviewContent
+                    style={selectedResumeData.style}
+                    resumeData={selectedResumeData}
+                    analysisFocus={analysisFocus}
+                    registerAnchor={registerAnchor}
+                  />
                 </div>
-                <Suggestions sectionAnalyses={analysisResult.sectionAnalyses} />
               </div>
-            </>
+            </div>
           ) : (
-            <div className="flex flex-1 items-center justify-center">
+            <div className="flex min-h-0 flex-1 items-center justify-center p-6">
               <div className="text-center">
                 <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-lg bg-white shadow-sm ring-1 ring-slate-100">
-                  <Lightbulb className="h-10 w-10 text-slate-300" />
+                  <FileText className="h-10 w-10 text-slate-300" />
                 </div>
-                <p className="mb-1 font-medium text-slate-600">准备就绪</p>
-                <p className="text-sm text-slate-400">输入 JD 并选择简历后</p>
-                <p className="text-sm text-slate-400">点击"开始分析"获取逐模块结果</p>
+                <p className="mb-1 font-medium text-slate-600">等待选择简历</p>
+                <p className="text-sm text-slate-400">选中简历后会在这里显示 A4 预览</p>
               </div>
             </div>
           )}
         </div>
       </section>
+
+      <aside className={`min-w-0 min-h-[360px] overflow-y-auto bg-slate-50 lg:min-h-0 ${isRightPanelCollapsed ? 'lg:overflow-hidden' : ''}`}>
+        <div className={`flex min-h-full flex-col ${isRightPanelCollapsed ? 'lg:pointer-events-none lg:invisible' : ''}`}>
+          <PanelHeader
+            icon={<Lightbulb className="h-4 w-4" />}
+            title="逐模块优化建议"
+            subtitle={analysisResult ? '点击建议定位预览' : '等待分析结果'}
+            meta={analysisResult ? `${suggestionCount} 条建议` : undefined}
+            tone="amber"
+          />
+
+          <div className="flex-1 p-4">
+            {analysisResult && (
+              <CompactScoreSummary
+                score={analysisResult.matchScore}
+                breakdown={analysisResult.scoreBreakdown}
+                suggestionCount={suggestionCount}
+                prioritySectionCount={prioritySectionCount}
+              />
+            )}
+
+            {analysisResult ? (
+              <Suggestions
+                sectionAnalyses={analysisResult.sectionAnalyses}
+                activeSuggestionKey={activeSuggestionKey}
+                getSuggestionTarget={getSuggestionTarget}
+                onSuggestionHover={handleSuggestionHover}
+                onSuggestionLeave={handleSuggestionLeave}
+                onSuggestionClick={handleSuggestionClick}
+              />
+            ) : (
+              <AnalysisEmptyState isAnalyzing={isAnalyzing} />
+            )}
+          </div>
+        </div>
+      </aside>
     </div>
   )
+}
+
+function PanelHeader({
+  icon,
+  title,
+  subtitle,
+  meta,
+  tone,
+}: {
+  icon: ReactNode
+  title: string
+  subtitle?: string
+  meta?: string
+  tone: 'blue' | 'slate' | 'amber'
+}) {
+  const toneClass = {
+    blue: 'bg-blue-50 text-blue-600',
+    slate: 'bg-slate-100 text-slate-600',
+    amber: 'bg-amber-50 text-amber-600',
+  }[tone]
+
+  return (
+    <div className="flex min-h-[68px] items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 py-3">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneClass}`}>
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-semibold leading-5 text-slate-800">{title}</h3>
+        {subtitle && <p className="truncate text-xs leading-4 text-slate-400">{subtitle}</p>}
+      </div>
+      {meta && (
+        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+          {meta}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function AnalysisEmptyState({ isAnalyzing }: { isAnalyzing: boolean }) {
+  return (
+    <div className="flex min-h-[420px] items-center justify-center px-4">
+      <div className="w-full max-w-sm text-center">
+        <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
+          {isAnalyzing && <span className="absolute inset-1 rounded-full bg-amber-200/50 animate-ping" />}
+          <span className={`relative flex h-14 w-14 items-center justify-center rounded-xl bg-white text-slate-300 shadow-sm ring-1 ring-slate-100 ${isAnalyzing ? 'animate-pulse text-amber-400' : ''}`}>
+            <Lightbulb className="h-7 w-7" />
+          </span>
+        </div>
+
+        <p className="mb-1 font-medium text-slate-600">{isAnalyzing ? '分析中...' : '准备就绪'}</p>
+        <p className="text-sm text-slate-400">
+          {isAnalyzing ? '正在匹配 JD 与简历模块' : '输入 JD 并选择简历后'}
+        </p>
+        <p className="text-sm text-slate-400">
+          {isAnalyzing ? '结果会出现在这里' : '点击“开始分析”获取逐模块结果'}
+        </p>
+
+        {isAnalyzing && (
+          <div className="mx-auto mt-6 max-w-[220px] space-y-2">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full w-1/2 rounded-full bg-gradient-to-r from-amber-200 via-blue-300 to-emerald-200 animate-pulse"
+                  style={{ animationDelay: `${item * 140}ms` }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CompactScoreSummary({
+  score,
+  breakdown,
+  suggestionCount,
+  prioritySectionCount,
+}: {
+  score: number
+  breakdown: JDScoreBreakdown
+  suggestionCount: number
+  prioritySectionCount: number
+}) {
+  const normalizedScore = Math.max(0, Math.min(Math.round(score), 100))
+  const color = normalizedScore >= 80
+    ? '#10b981'
+    : normalizedScore >= 60
+      ? '#3b82f6'
+      : normalizedScore >= 40
+        ? '#f59e0b'
+        : '#ef4444'
+  const breakdownItems: Array<[keyof JDScoreBreakdown, string]> = [
+    ['skills', '技能'],
+    ['experience', '经历'],
+    ['keywords', '关键词'],
+    ['expression', '表达'],
+  ]
+
+  return (
+    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50">
+            <Target className="h-4 w-4 text-emerald-500" />
+          </span>
+          <div>
+            <div className="text-xs text-slate-400">匹配度</div>
+            <div className="text-lg font-bold leading-none" style={{ color }}>{normalizedScore}</div>
+          </div>
+        </div>
+        <div className="min-w-[120px] flex-1">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${normalizedScore}%`, backgroundColor: color }}
+            />
+          </div>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5">{suggestionCount} 条建议</span>
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-500">{prioritySectionCount} 个重点模块</span>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {breakdownItems.map(([key, label]) => (
+          <div key={key} className="min-w-0 rounded-md bg-slate-50 px-2 py-1.5">
+            <div className="mb-0.5 flex items-center justify-between gap-2 text-xs">
+              <span className="text-slate-500">{label}</span>
+              <span className="font-semibold text-slate-700">{breakdown[key].score}</span>
+            </div>
+            <p className="truncate text-[11px] text-slate-400" title={breakdown[key].reason}>{breakdown[key].reason}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function getDesktopGridClass(leftCollapsed: boolean, rightCollapsed: boolean): string {
+  if (leftCollapsed && rightCollapsed) {
+    return 'lg:grid-cols-[0_minmax(0,1fr)_0]'
+  }
+  if (leftCollapsed) {
+    return 'lg:grid-cols-[0_minmax(0,1.15fr)_minmax(0,0.85fr)]'
+  }
+  if (rightCollapsed) {
+    return 'lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_0]'
+  }
+  return 'lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
+}
+
+function getMaxPreviewScale(leftCollapsed: boolean, rightCollapsed: boolean): number {
+  if (leftCollapsed && rightCollapsed) return BOTH_SIDES_COLLAPSED_MAX_PREVIEW_SCALE
+  if (leftCollapsed || rightCollapsed) return ONE_SIDE_COLLAPSED_MAX_PREVIEW_SCALE
+  return DEFAULT_MAX_PREVIEW_SCALE
+}
+
+function createSuggestionKey(
+  section: JDAnalysisSectionId,
+  itemKey: string,
+  suggestion: SuggestionItem
+): string {
+  return [
+    section,
+    itemKey,
+    suggestion.problemText,
+    suggestion.targetText,
+    suggestion.suggestion,
+    suggestion.reason,
+  ]
+    .filter(Boolean)
+    .join('|')
+    .replace(/\s+/g, '')
+    .slice(0, 220)
 }
 
 function buildResumeText(content: ResumeData): string {
@@ -532,7 +939,8 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
 11. 对 summary，可以更主动地建议重写定位和关键词，但也不能编造具体经历或成果。
 12. 建议必须聚焦成熟简历的差异化投递优化：岗位关键词、相关经历表达、业务场景匹配、技能栈呈现、成果量化、职责与 JD 的对应关系、表达优先级。
 13. reason 负责资深顾问视角的专业分析；problem 负责指出原文与 JD 的具体差距；suggestion 负责修改策略；rewriteExample 负责给出可参考表达。
-14. 某个模块没有明显优化点时，summary 简短说明原因，status 返回"暂无问题"，suggestions 返回空数组。
+14. problem、reason、suggestion、rewriteExample 必须职责单一，不要互相混写；每个字段优先使用 1-2 个短句，多个动作可用分号或序号分隔，便于前端分点展示。
+15. 某个模块没有明显优化点时，summary 简短说明原因，status 返回"暂无问题"，suggestions 返回空数组。
 
 【输出格式】
 只输出合法 JSON，不要输出 Markdown 代码块、解释文字、注释、<think> 或推理过程。第一个字符必须是 {，最后一个字符必须是 }：
@@ -558,10 +966,10 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
           "originalContent": "需要修改的这一整项简历原文，尽量完整保留标题、时间、正文和要点",
           "problemText": "originalContent中需要高亮的原文片段，必须能在originalContent里找到",
           "targetText": "可选：具体定位补充",
-          "problem": "当前内容与JD要求之间的具体差距",
-          "suggestion": "具体可操作的修改建议",
-          "rewriteExample": "基于已有事实的示例改写；没有事实则使用"如确有相关经历，可补充..."",
-          "reason": "为什么这样修改能提升匹配度"
+          "problem": "只写当前原文与JD要求之间的具体差距，1-2个短句",
+          "suggestion": "只写具体可操作的修改策略，可用1、2、3分点",
+          "rewriteExample": "只写基于已有事实的参考表达；没有事实则使用「如确有相关经历，可补充...」",
+          "reason": "只写为什么这样修改能提升匹配度，1-2个短句"
         }
       ]
     },
@@ -596,7 +1004,8 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
 2. scoreBreakdown 必须包含 skills、experience、keywords、expression 四项，且 reason 要说明具体依据。
 3. 每个模块最多返回 3 条建议，总建议数建议控制在 4-10 条。
 4. itemTitle、originalContent、problemText、problem、suggestion、reason 不能为空；rewriteExample 尽量给出。
-5. matchScore 要客观真实，不要过高评分。`
+5. problem 不要写改法；reason 不要重复 problem；suggestion 不要写长篇分析；rewriteExample 不要解释原因。
+6. matchScore 要客观真实，不要过高评分。`
 
 const strictJsonRetrySystemPrompt = `${analyzeJDSystemPrompt}
 
