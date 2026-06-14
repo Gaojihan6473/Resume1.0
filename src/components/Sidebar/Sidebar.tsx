@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Layout, Lock, Home, User, Briefcase, BarChart2, FileText } from 'lucide-react'
+import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeStore } from '../../store/resumeStore'
 
@@ -16,14 +16,13 @@ interface SidebarProps {
   onNavigateToMe?: () => void
   onNavigateToApplications?: () => void
   onNavigateToAnalytics?: () => void
-  onNavigateToJDAnalysis?: () => void
   onNavigateToLogin?: () => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   sidebarRef?: RefObject<HTMLDivElement | null>
 }
 
-export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToJDAnalysis, onNavigateToLogin, onMouseEnter, onMouseLeave, sidebarRef }: SidebarProps) {
+export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToLogin, onMouseEnter, onMouseLeave, sidebarRef }: SidebarProps) {
   const internalSidebarRef = useRef<HTMLDivElement>(null)
   const containerRef = sidebarRef ?? internalSidebarRef
   const effectiveBackdropTop = backdropTop ?? topOffset
@@ -38,8 +37,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
   const isMePage = location.pathname === '/me'
   const isApplicationsPage = location.pathname === '/applications'
   const isAnalyticsPage = location.pathname === '/analytics'
-  const isJDAnalysisPage = isAnalyticsPage && new URLSearchParams(location.search).get('tab') === 'jd'
-  const isDashboardPage = isAnalyticsPage && !isJDAnalysisPage
+  const isDashboardPage = isAnalyticsPage && new URLSearchParams(location.search).get('tab') !== 'jd'
 
   // ESC 键关闭
   useEffect(() => {
@@ -71,7 +69,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
         ref={containerRef}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className="absolute left-0 flex flex-col w-40 z-10"
+        className="absolute left-0 z-[80] flex w-40 flex-col"
         style={{
           top: `${topOffset}px`,
           bottom: 0,
@@ -127,20 +125,6 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
                 <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isDashboardPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                 <BarChart2 className="w-4 h-4 shrink-0 text-blue-500" />
                 <span>Dashboard</span>
-              </button>
-            )}
-
-            {/* JD 分析 */}
-            {isAuthenticated && (
-              <button
-                onClick={() => handleAction(onNavigateToJDAnalysis)}
-                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
-                title="JD 分析"
-              >
-                {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isJDAnalysisPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                <FileText className="w-4 h-4 shrink-0 text-blue-500" />
-                <span>JD 分析</span>
               </button>
             )}
 

@@ -7,16 +7,27 @@ import {
   useState,
 } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
-import { PreviewContent } from './PreviewContent'
+import { PreviewContent, type ResumeAnalysisFocus } from './PreviewContent'
 
 const A4_WIDTH = 595
 const A4_HEIGHT = 842
 
-export const Preview = forwardRef<HTMLDivElement>((_, ref) => {
+interface PreviewProps {
+  analysisFocus?: ResumeAnalysisFocus | null
+  registerAnchor?: (key: string, element: HTMLElement | null) => void
+  onScrollContainerChange?: (element: HTMLDivElement | null) => void
+}
+
+export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
+  analysisFocus,
+  registerAnchor,
+  onScrollContainerChange,
+}, ref) => {
   const { resumeData, zoom, showMultiPage } = useResumeStore()
   const pagesRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const exportRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState(A4_HEIGHT)
 
   useImperativeHandle(ref, () => exportRef.current as HTMLDivElement)
@@ -64,40 +75,52 @@ export const Preview = forwardRef<HTMLDivElement>((_, ref) => {
   const pages = showMultiPage ? Array.from({ length: pageCount }, (_, i) => i) : [0]
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-200 p-4">
-      <div
-        ref={pagesRef}
-        className="mx-auto space-y-4"
-        style={{ width: scaledPageWidth }}
-      >
-        {pages.map((pageIndex) => (
-          <div
-            key={pageIndex}
-            className="a4-page bg-white shadow-lg mx-auto overflow-hidden"
-            style={{
-              width: scaledPageWidth,
-              height: showMultiPage ? scaledPageHeight : singlePageHeight,
-            }}
-          >
+    <div
+      ref={(element) => {
+        scrollContainerRef.current = element
+        onScrollContainerChange?.(element)
+      }}
+      className="h-full min-h-0 overflow-auto bg-gray-200 p-4"
+    >
+      <div className="flex w-max min-w-full justify-center">
+        <div
+          ref={pagesRef}
+          className="space-y-4"
+          style={{ width: scaledPageWidth }}
+        >
+          {pages.map((pageIndex) => (
             <div
+              key={pageIndex}
+              className="a4-page bg-white shadow-lg mx-auto overflow-hidden"
               style={{
-                width: A4_WIDTH,
-                transform: `scale(${zoom})`,
-                transformOrigin: 'top left',
+                width: scaledPageWidth,
+                height: showMultiPage ? scaledPageHeight : singlePageHeight,
               }}
             >
               <div
                 style={{
-                  transform: showMultiPage
-                    ? `translateY(-${pageIndex * A4_HEIGHT}px)`
-                    : undefined,
+                  width: A4_WIDTH,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'top left',
                 }}
               >
-                <PreviewContent style={resumeData.style} />
+                <div
+                  style={{
+                    transform: showMultiPage
+                      ? `translateY(-${pageIndex * A4_HEIGHT}px)`
+                      : undefined,
+                  }}
+                >
+                  <PreviewContent
+                    style={resumeData.style}
+                    analysisFocus={analysisFocus}
+                    registerAnchor={registerAnchor}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       <div

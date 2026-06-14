@@ -3,8 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { useResumeStore } from './store/resumeStore'
 import { useAuthStore } from './store/authStore'
 import { Toolbar } from './components/Toolbar/Toolbar'
-import { Editor } from './components/Editor/Editor'
-import { Preview } from './components/Preview/Preview'
+import { EditorAnalysisLayout } from './components/Editor/EditorAnalysisLayout'
 import { HomePage } from './pages/HomePage'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
@@ -17,7 +16,7 @@ import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
 
-type DirtyNavTarget = 'home' | 'me' | 'analytics-jd'
+type DirtyNavTarget = 'home' | 'me'
 
 function AppContent() {
   const { parseStatus, isDirty, currentResumeId } = useResumeStore()
@@ -75,12 +74,6 @@ function AppContent() {
     }
   }
 
-  const getAnalyticsJDPath = (resumeId: string | null) => {
-    const params = new URLSearchParams({ tab: 'jd' })
-    if (resumeId) params.set('resumeId', resumeId)
-    return `/analytics?${params.toString()}`
-  }
-
   const handleNavigateToApplications = () => {
     closeSidebar()
     navigate('/applications')
@@ -89,16 +82,6 @@ function AppContent() {
   const handleNavigateToAnalytics = () => {
     closeSidebar()
     navigate('/analytics')
-  }
-
-  const handleNavigateToAnalysis = () => {
-    closeSidebar()
-    if (isDirty || currentResumeId === null) {
-      setDirtyNavTarget('analytics-jd')
-      setShowDirtyModal(true)
-    } else {
-      navigate(getAnalyticsJDPath(currentResumeId))
-    }
   }
 
   const handleNavigateToLogin = () => {
@@ -184,7 +167,6 @@ function AppContent() {
                       setPendingAction(action)
                       setShowAuthModal(true)
                     }}
-                    onNavigateToAnalysis={handleNavigateToAnalysis}
                   />
 
                   {/* 侧边栏 + 主内容，放在同一 relative 容器中 */}
@@ -202,19 +184,11 @@ function AppContent() {
                       onNavigateToMe={handleNavigateToMe}
                       onNavigateToApplications={handleNavigateToApplications}
                       onNavigateToAnalytics={handleNavigateToAnalytics}
-                      onNavigateToJDAnalysis={handleNavigateToAnalysis}
                       onNavigateToLogin={handleNavigateToLogin}
                     />
 
                     {/* 主内容 */}
-                    <div className="flex-1 flex overflow-hidden">
-                      <div className="w-[45%] border-r border-gray-200 overflow-hidden flex flex-col bg-white">
-                        <Editor />
-                      </div>
-                      <div className="w-[55%] preview-container bg-gray-100">
-                        <Preview ref={previewRef} />
-                      </div>
-                    </div>
+                    <EditorAnalysisLayout previewRef={previewRef} />
                   </div>
                 </div>
               )}
@@ -263,17 +237,6 @@ function AppContent() {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
           navigate('/me')
-        }}
-        onSaveAndNavigateToAnalyticsJD={() => {
-          setShowDirtyModal(false)
-          setDirtyNavTarget(null)
-          const resumeId = useResumeStore.getState().currentResumeId
-          navigate(getAnalyticsJDPath(resumeId))
-        }}
-        onDiscardAndNavigateToAnalyticsJD={() => {
-          setShowDirtyModal(false)
-          setDirtyNavTarget(null)
-          navigate(getAnalyticsJDPath(currentResumeId))
         }}
       />
 

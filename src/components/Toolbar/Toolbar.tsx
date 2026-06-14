@@ -22,7 +22,6 @@ import {
   Fish,
   ChevronsRight,
   Send,
-  BarChart2,
 } from 'lucide-react'
 
 interface ToolbarProps {
@@ -31,7 +30,6 @@ interface ToolbarProps {
   onOpenSidebar: () => void
   onScheduleCloseSidebar: () => void
   onAuthRequired?: (action: 'new' | 'upload') => void
-  onNavigateToAnalysis?: () => void
 }
 
 const FONT_OPTIONS = [
@@ -191,7 +189,7 @@ function CardButton({
   )
 }
 
-export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar, onNavigateToAnalysis }: ToolbarProps) {
+export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar }: ToolbarProps) {
   const navigate = useNavigate()
   const {
     resumeData,
@@ -341,14 +339,6 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
           label="岗位"
           title={canNavigateToApplications ? '进入岗位页' : '请先保存最新更改'}
         />
-        <CardButton
-          onClick={onNavigateToAnalysis}
-          disabled={isSaving}
-          icon={<BarChart2 className={iconSize} />}
-          label="分析"
-          title={isSaving ? '保存中，请稍候' : '进入 JD 分析页'}
-        />
-
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
         <CardButton

@@ -6,7 +6,6 @@ import {
   Lightbulb,
   AlertCircle,
   FileText,
-  Target,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -253,9 +252,6 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
     (count, section) => count + section.suggestions.length,
     0
   ) ?? 0
-  const prioritySectionCount = analysisResult?.sectionAnalyses.filter(
-    (section) => section.status === '重点优化'
-  ).length ?? 0
   const selectedResumeTitle = selectedResume?.title || selectedResumeData?.resumeTitle || '未命名简历'
   const desktopGridClass = getDesktopGridClass(isLeftPanelCollapsed, isRightPanelCollapsed)
 
@@ -482,15 +478,6 @@ export function JDAnalyzer({ applications }: JDAnalyzerProps) {
           />
 
           <div className="flex-1 p-4">
-            {analysisResult && (
-              <CompactScoreSummary
-                score={analysisResult.matchScore}
-                breakdown={analysisResult.scoreBreakdown}
-                suggestionCount={suggestionCount}
-                prioritySectionCount={prioritySectionCount}
-              />
-            )}
-
             {analysisResult ? (
               <Suggestions
                 sectionAnalyses={analysisResult.sectionAnalyses}
@@ -547,7 +534,7 @@ function PanelHeader({
   )
 }
 
-function AnalysisEmptyState({ isAnalyzing }: { isAnalyzing: boolean }) {
+export function AnalysisEmptyState({ isAnalyzing }: { isAnalyzing: boolean }) {
   return (
     <div className="flex min-h-[420px] items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
@@ -583,73 +570,6 @@ function AnalysisEmptyState({ isAnalyzing }: { isAnalyzing: boolean }) {
   )
 }
 
-function CompactScoreSummary({
-  score,
-  breakdown,
-  suggestionCount,
-  prioritySectionCount,
-}: {
-  score: number
-  breakdown: JDScoreBreakdown
-  suggestionCount: number
-  prioritySectionCount: number
-}) {
-  const normalizedScore = Math.max(0, Math.min(Math.round(score), 100))
-  const color = normalizedScore >= 80
-    ? '#10b981'
-    : normalizedScore >= 60
-      ? '#3b82f6'
-      : normalizedScore >= 40
-        ? '#f59e0b'
-        : '#ef4444'
-  const breakdownItems: Array<[keyof JDScoreBreakdown, string]> = [
-    ['skills', '技能'],
-    ['experience', '经历'],
-    ['keywords', '关键词'],
-    ['expression', '表达'],
-  ]
-
-  return (
-    <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50">
-            <Target className="h-4 w-4 text-emerald-500" />
-          </span>
-          <div>
-            <div className="text-xs text-slate-400">匹配度</div>
-            <div className="text-lg font-bold leading-none" style={{ color }}>{normalizedScore}</div>
-          </div>
-        </div>
-        <div className="min-w-[120px] flex-1">
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${normalizedScore}%`, backgroundColor: color }}
-            />
-          </div>
-        </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5">{suggestionCount} 条建议</span>
-          <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-500">{prioritySectionCount} 个重点模块</span>
-        </div>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {breakdownItems.map(([key, label]) => (
-          <div key={key} className="min-w-0 rounded-md bg-slate-50 px-2 py-1.5">
-            <div className="mb-0.5 flex items-center justify-between gap-2 text-xs">
-              <span className="text-slate-500">{label}</span>
-              <span className="font-semibold text-slate-700">{breakdown[key].score}</span>
-            </div>
-            <p className="truncate text-[11px] text-slate-400" title={breakdown[key].reason}>{breakdown[key].reason}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function getDesktopGridClass(leftCollapsed: boolean, rightCollapsed: boolean): string {
   if (leftCollapsed && rightCollapsed) {
     return 'lg:grid-cols-[0_minmax(0,1fr)_0]'
@@ -669,7 +589,7 @@ function getMaxPreviewScale(leftCollapsed: boolean, rightCollapsed: boolean): nu
   return DEFAULT_MAX_PREVIEW_SCALE
 }
 
-function createSuggestionKey(
+export function createSuggestionKey(
   section: JDAnalysisSectionId,
   itemKey: string,
   suggestion: SuggestionItem
@@ -688,7 +608,7 @@ function createSuggestionKey(
     .slice(0, 220)
 }
 
-function buildResumeText(content: ResumeData): string {
+export function buildResumeText(content: ResumeData): string {
   const parts: string[] = []
 
   parts.push('【基础信息】')
@@ -792,7 +712,7 @@ function limitText(text: string, maxLength: number): string {
   return `${text.slice(0, maxLength)}\n...（内容过长，已截断）`
 }
 
-async function analyzeJDWithAI(
+export async function analyzeJDWithAI(
   jdText: string,
   resumeText: string,
   apiKey: string,

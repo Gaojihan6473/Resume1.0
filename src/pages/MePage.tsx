@@ -327,7 +327,6 @@ export function MePage() {
           onNavigateToMe={() => navigate('/me')}
           onNavigateToApplications={handleNavigateToApplications}
           onNavigateToAnalytics={() => navigate('/analytics')}
-          onNavigateToJDAnalysis={() => navigate('/analytics?tab=jd')}
         />
 
         {/* 主内容区 */}

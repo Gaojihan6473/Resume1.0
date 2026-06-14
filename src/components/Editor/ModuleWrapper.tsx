@@ -35,12 +35,12 @@ export function ModuleWrapper({
 
   return (
     <div
-      className="border border-gray-200 rounded-xl overflow-hidden mb-3 shadow-sm transition-all duration-200 hover:shadow-md"
+      className="mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-all duration-200 hover:shadow-md"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
+        className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered ? 'bg-gray-50/80' : 'bg-white'
         }`}
         onClick={handleToggle}

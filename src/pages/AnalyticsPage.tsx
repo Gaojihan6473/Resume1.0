@@ -61,7 +61,6 @@ export function AnalyticsPage() {
           onNavigateToMe={handleNavigateToMe}
           onNavigateToApplications={handleNavigateToApplications}
           onNavigateToAnalytics={() => navigate('/analytics')}
-          onNavigateToJDAnalysis={() => navigate('/analytics?tab=jd')}
         />
 
         {/* 内容区 */}

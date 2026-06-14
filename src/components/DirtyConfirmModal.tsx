@@ -5,7 +5,7 @@ import { Cloud, X, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from './Toast'
 import { saveCurrentResumeToCloud } from '../utils/saveResume'
 
-type DirtyNavigationTarget = 'home' | 'me' | 'analytics-jd'
+type DirtyNavigationTarget = 'home' | 'me'
 
 interface DirtyConfirmModalProps {
   isOpen: boolean
@@ -16,8 +16,6 @@ interface DirtyConfirmModalProps {
   onDiscardAndNavigateHome: () => void
   onSaveAndNavigateToMe: () => void
   onDiscardAndNavigateToMe: () => void
-  onSaveAndNavigateToAnalyticsJD: () => void
-  onDiscardAndNavigateToAnalyticsJD: () => void
 }
 
 export function DirtyConfirmModal({
@@ -29,8 +27,6 @@ export function DirtyConfirmModal({
   onDiscardAndNavigateHome,
   onSaveAndNavigateToMe,
   onDiscardAndNavigateToMe,
-  onSaveAndNavigateToAnalyticsJD,
-  onDiscardAndNavigateToAnalyticsJD,
 }: DirtyConfirmModalProps) {
   const { setIsDirty } = useResumeStore()
   const [isSaving, setIsSaving] = useState(false)
@@ -59,8 +55,6 @@ export function DirtyConfirmModal({
         onSaveAndNavigateHome()
       } else if (navigationTarget === 'me') {
         onSaveAndNavigateToMe()
-      } else if (navigationTarget === 'analytics-jd') {
-        onSaveAndNavigateToAnalyticsJD()
       }
     } catch (err) {
       console.error('Save error:', err)
@@ -78,8 +72,6 @@ export function DirtyConfirmModal({
       onDiscardAndNavigateHome()
     } else if (navigationTarget === 'me') {
       onDiscardAndNavigateToMe()
-    } else if (navigationTarget === 'analytics-jd') {
-      onDiscardAndNavigateToAnalyticsJD()
     }
   }
 
