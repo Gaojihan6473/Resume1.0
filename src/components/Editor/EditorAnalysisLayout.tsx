@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   AlertCircle,
-  Bookmark,
-  Lightbulb,
   Loader2,
   PanelRightClose,
   PanelRightOpen,
+  RefreshCw,
   Sparkles,
-  X,
 } from 'lucide-react'
 import type { Application } from '../../types/application'
 import {
@@ -25,7 +23,8 @@ import {
   analyzeJDWithAI,
   buildResumeText,
   createSuggestionKey,
-} from '../Analytics/JDAnalyzer'
+  getJDAnalysisErrorMessage,
+} from '../Analytics/jdAnalysis'
 import { Suggestions, type SuggestionInteractionTarget } from '../Analytics/Suggestions'
 import { Preview } from '../Preview/Preview'
 import type { ResumeAnalysisFocus } from '../Preview/PreviewContent'
@@ -50,7 +49,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const { resumeData } = useResumeStore()
   const { applications, isLoading, fetchApplications } = useApplicationStore()
   const { isAuthenticated } = useAuthStore()
-  const apiKey = (import.meta.env.VITE_DEEPSEEK_API_KEY as string)?.trim()
+  const apiKey = (import.meta.env.VITE_MINIMAX_API_KEY as string)?.trim()
   const analysisControllerRef = useRef<AbortController | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
@@ -134,9 +133,14 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     setJdText('')
   }
 
+  const handleToggleDetails = useCallback(() => {
+    setIsRightPanelCollapsed((value) => !value)
+  }, [])
+
   const handleAnalyze = async () => {
     setHasAnalysisStarted(true)
     setError(null)
+    setAnalysisResult(null)
     setHoverTarget(null)
     setLockedTarget(null)
 
@@ -145,7 +149,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       return
     }
     if (!apiKey?.trim()) {
-      setError('请先配置 DeepSeek API 密钥')
+      setError('请先配置 MiniMax API 密钥')
       return
     }
 
@@ -159,9 +163,10 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       const result = await analyzeJDWithAI(jdText, resumeText, apiKey, controller.signal)
       if (controller.signal.aborted || analysisControllerRef.current !== controller) return
       setAnalysisResult(result)
+      setIsRightPanelCollapsed(false)
     } catch (err) {
       if (controller.signal.aborted) return
-      setError(err instanceof Error ? err.message : '分析失败')
+      setError(getJDAnalysisErrorMessage(err))
     } finally {
       if (analysisControllerRef.current === controller) {
         analysisControllerRef.current = null
@@ -179,19 +184,30 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [])
 
   const scrollToAnchor = useCallback((target: SuggestionInteractionTarget) => {
-    const anchorKey = target.itemKey || createSectionAnchorKey(target.section)
-    const element =
-      anchorMapRef.current.get(anchorKey) ||
-      anchorMapRef.current.get(createSectionAnchorKey(target.section))
-    const container = previewScrollRef.current
-    if (!element?.isConnected || !container) return
+    const performScroll = () => {
+      const anchorKey = target.itemKey || createSectionAnchorKey(target.section)
+      const sectionKey = createSectionAnchorKey(target.section)
+      const element =
+        anchorMapRef.current.get(anchorKey) ||
+        anchorMapRef.current.get(sectionKey)
+      const container = previewScrollRef.current
+      if (!element?.isConnected || !container) return false
 
-    const containerRect = container.getBoundingClientRect()
-    const elementRect = element.getBoundingClientRect()
-    const nextTop = elementRect.top - containerRect.top + container.scrollTop - 88
-    container.scrollTo({
-      top: Math.max(0, nextTop),
-      behavior: 'smooth',
+      const containerRect = container.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+      const nextTop = elementRect.top - containerRect.top + container.scrollTop - Math.round(container.clientHeight * 0.22)
+      container.scrollTo({
+        top: Math.max(0, nextTop),
+        behavior: 'smooth',
+      })
+      return true
+    }
+
+    if (performScroll()) return
+    requestAnimationFrame(() => {
+      if (performScroll()) return
+      window.setTimeout(performScroll, 80)
+      window.setTimeout(performScroll, 180)
     })
   }, [])
 
@@ -238,9 +254,12 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
               isLoadingApplications={isLoading}
               isAnalyzing={isAnalyzing}
               error={error}
+              hasError={Boolean(error)}
+              hasAnalysisResult={Boolean(analysisResult)}
               onJobSelect={handleJobSelect}
               onJdTextChange={handleJdTextChange}
               onAnalyze={handleAnalyze}
+              onToggleDetails={handleToggleDetails}
               onClear={handleClear}
             />
           )}
@@ -252,12 +271,13 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           ref={previewRef}
           analysisFocus={analysisFocus}
           registerAnchor={registerAnchor}
+          fitToWidth={!isRightPanelCollapsed}
           onScrollContainerChange={(element) => {
             previewScrollRef.current = element
           }}
         />
 
-        {shouldShowBookmark && (
+        {shouldShowBookmark && isRightPanelCollapsed && (
           <AnalysisBookmark
             isOpen={!isRightPanelCollapsed}
             isAnalyzing={isAnalyzing}
@@ -272,16 +292,23 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         isRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
       }`}>
         <div className="flex min-h-full flex-col">
-          <SuggestionPanelHeader
-            suggestionCount={analysisResult ? suggestionCount : undefined}
-            onClose={() => setIsRightPanelCollapsed(true)}
-          />
-
           <div className="flex-1 p-4">
+            <div className="mb-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsRightPanelCollapsed(true)}
+                title="收起建议"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 transition-all hover:bg-white hover:text-slate-700"
+              >
+                <PanelRightClose className="h-3.5 w-3.5" />
+                收起
+              </button>
+            </div>
+
             {error && (
               <div className="mb-4 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
+                <span className="whitespace-pre-line">{error}</span>
               </div>
             )}
 
@@ -311,9 +338,12 @@ function JDInputPanel({
   isLoadingApplications,
   isAnalyzing,
   error,
+  hasError,
+  hasAnalysisResult,
   onJobSelect,
   onJdTextChange,
   onAnalyze,
+  onToggleDetails,
   onClear,
 }: {
   applications: Application[]
@@ -322,11 +352,32 @@ function JDInputPanel({
   isLoadingApplications: boolean
   isAnalyzing: boolean
   error: string | null
+  hasError: boolean
+  hasAnalysisResult: boolean
   onJobSelect: (jobId: string) => void
   onJdTextChange: (value: string) => void
   onAnalyze: () => void
+  onToggleDetails: () => void
   onClear: () => void
 }) {
+  const canAnalyze = Boolean(jdText.trim()) && !isAnalyzing
+  const primaryAction = hasAnalysisResult ? onToggleDetails : onAnalyze
+  const primaryDisabled = hasAnalysisResult ? false : !canAnalyze
+  const primaryLabel = isAnalyzing
+    ? '分析中...'
+    : hasAnalysisResult
+      ? '查看详情'
+      : hasError
+        ? '重新生成'
+        : '开始分析'
+  const PrimaryIcon = isAnalyzing
+    ? Loader2
+    : hasAnalysisResult
+      ? PanelRightOpen
+      : hasError
+        ? RefreshCw
+        : Sparkles
+
   return (
     <div className="flex min-h-[calc(100vh-156px)] flex-col pt-1">
       <div className="space-y-4">
@@ -360,22 +411,23 @@ function JDInputPanel({
       <div className="jd-analysis-actions mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
         <button
           type="button"
-          onClick={onAnalyze}
-          disabled={isAnalyzing || !jdText.trim()}
+          onClick={primaryAction}
+          disabled={primaryDisabled}
           className="jd-analysis-primary-action"
         >
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              分析中...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              开始分析
-            </>
-          )}
+          <PrimaryIcon className={`h-4 w-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+          {primaryLabel}
         </button>
+        {isAnalyzing && (
+          <button
+            type="button"
+            onClick={onToggleDetails}
+            className="jd-analysis-detail-action"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            查看详情
+          </button>
+        )}
         <button
           type="button"
           onClick={onClear}
@@ -388,7 +440,7 @@ function JDInputPanel({
       {error && (
         <div className="mt-3 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
+          <span className="whitespace-pre-line">{error}</span>
         </div>
       )}
     </div>
@@ -409,58 +461,22 @@ function AnalysisBookmark({
   onClick: () => void
 }) {
   const tone = hasError
-    ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+    ? 'border-red-200 bg-red-50/95 text-red-600 hover:bg-red-100'
     : isAnalyzing
-      ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
-      : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+      ? 'border-blue-200 bg-blue-50/95 text-blue-600 hover:bg-blue-100'
+      : 'border-blue-200 bg-white/95 text-blue-600 hover:bg-blue-50'
+  const StatusIcon = hasError ? AlertCircle : isAnalyzing ? Loader2 : PanelRightOpen
+  const label = hasError ? '错误' : isAnalyzing ? '分析' : `${suggestionCount}`
 
   return (
     <button
       type="button"
       onClick={onClick}
       title={isOpen ? '收起逐模块优化建议' : '展开逐模块优化建议'}
-      className={`absolute right-0 top-20 z-30 flex min-w-10 items-center gap-1.5 rounded-l-lg border px-2.5 py-2 text-xs font-semibold shadow-sm transition-all ${tone}`}
+      className={`absolute right-0 top-20 z-30 flex h-[74px] w-9 flex-col items-center justify-center gap-1 rounded-l-2xl border px-1 py-2 text-[11px] font-semibold shadow-md shadow-slate-200/60 backdrop-blur transition-all ${tone}`}
     >
-      {isOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-      {isAnalyzing ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Bookmark className="h-3.5 w-3.5" />
-      )}
-      <span>{hasError ? '错误' : isAnalyzing ? '分析中' : suggestionCount}</span>
+      <StatusIcon className={`h-4 w-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+      <span>{label}</span>
     </button>
-  )
-}
-
-function SuggestionPanelHeader({
-  suggestionCount,
-  onClose,
-}: {
-  suggestionCount?: number
-  onClose: () => void
-}) {
-  return (
-    <div className="flex min-h-[68px] items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-        <Lightbulb className="h-4 w-4" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <h3 className="truncate text-sm font-semibold leading-5 text-slate-800">逐模块优化建议</h3>
-        <p className="truncate text-xs leading-4 text-slate-400">点击建议定位预览</p>
-      </div>
-      {typeof suggestionCount === 'number' && (
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-          {suggestionCount} 条建议
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={onClose}
-        title="收起建议"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
   )
 }

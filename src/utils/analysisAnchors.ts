@@ -138,15 +138,19 @@ export function resolveSuggestionAnchor(
   const candidates = getResumeAnchorCandidates(data).filter((candidate) => candidate.section === section)
   if (candidates.length === 0) return createSectionAnchorKey(section)
 
-  const fields = [
+  const rawFields = [
     suggestion.itemTitle,
     suggestion.originalContent,
     suggestion.problemText,
     suggestion.targetText,
     suggestion.current,
+    suggestion.problemReason,
   ]
+
+  const fields = rawFields
     .map((value) => normalizeAnchorText(value || ''))
     .filter(Boolean)
+  const fragments = extractAnchorFragments(rawFields)
 
   let best = { key: createSectionAnchorKey(section), score: 0 }
 
@@ -162,6 +166,11 @@ export function resolveSuggestionAnchor(
       if (field.length >= 8 && candidateText.includes(field.slice(0, Math.min(field.length, 36)))) score += 2
     })
 
+    fragments.forEach((fragment) => {
+      if (candidateTitle && candidateTitle.includes(fragment)) score += 3
+      if (candidateText.includes(fragment)) score += 1
+    })
+
     if (score > best.score) {
       best = { key: candidate.key, score }
     }
@@ -172,6 +181,17 @@ export function resolveSuggestionAnchor(
 
 function joinAnchorParts(values: Array<string | undefined | null>): string {
   return values.map((value) => stripHtml(value || '')).filter(Boolean).join('\n')
+}
+
+function extractAnchorFragments(values: Array<string | undefined | null>): string[] {
+  const fragments = values.flatMap((value) =>
+    stripHtml(value || '')
+      .split(/[\s|｜·•,，.。:：;；、/\\()（）[\]【】{}《》<>-]+/g)
+      .map((fragment) => normalizeAnchorText(fragment))
+      .filter((fragment) => fragment.length >= 2)
+  )
+
+  return Array.from(new Set(fragments)).slice(0, 48)
 }
 
 function hashText(value: string): string {

@@ -37,7 +37,6 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
   const isMePage = location.pathname === '/me'
   const isApplicationsPage = location.pathname === '/applications'
   const isAnalyticsPage = location.pathname === '/analytics'
-  const isDashboardPage = isAnalyticsPage && new URLSearchParams(location.search).get('tab') !== 'jd'
 
   // ESC 键关闭
   useEffect(() => {
@@ -122,7 +121,7 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
                 title="Dashboard"
               >
                 {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isDashboardPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isAnalyticsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
                 <BarChart2 className="w-4 h-4 shrink-0 text-blue-500" />
                 <span>Dashboard</span>
               </button>

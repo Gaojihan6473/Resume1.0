@@ -79,6 +79,7 @@ export interface SuggestionItem {
   targetText?: string
   problemText?: string
   problem?: string
+  problemReason?: string
   suggestion: string
   rewriteExample?: string
   reason: string

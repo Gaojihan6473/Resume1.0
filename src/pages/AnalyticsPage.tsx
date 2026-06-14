@@ -1,20 +1,15 @@
 import { useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Fish, ChevronsRight } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { useResumeStore } from '../store/resumeStore'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { Dashboard } from '../components/Analytics/Dashboard'
-import { JDAnalyzer } from '../components/Analytics/JDAnalyzer'
-
-type Tab = 'dashboard' | 'jd'
 
 export function AnalyticsPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
-  const activeTab: Tab = searchParams.get('tab') === 'jd' ? 'jd' : 'dashboard'
   const { applications, fetchApplications } = useApplicationStore()
 
   useEffect(() => {
@@ -64,12 +59,8 @@ export function AnalyticsPage() {
         />
 
         {/* 内容区 */}
-        <main className={`relative flex-1 isolate home-login-bg ${activeTab === 'jd' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          {activeTab === 'dashboard' ? (
-            <Dashboard applications={applications} />
-          ) : (
-            <JDAnalyzer applications={applications} />
-          )}
+        <main className="relative flex-1 isolate overflow-y-auto home-login-bg">
+          <Dashboard applications={applications} />
         </main>
       </div>
     </div>

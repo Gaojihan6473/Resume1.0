@@ -11,17 +11,20 @@ import { PreviewContent, type ResumeAnalysisFocus } from './PreviewContent'
 
 const A4_WIDTH = 595
 const A4_HEIGHT = 842
+const FIT_SIDE_GAP = 28
 
 interface PreviewProps {
   analysisFocus?: ResumeAnalysisFocus | null
   registerAnchor?: (key: string, element: HTMLElement | null) => void
   onScrollContainerChange?: (element: HTMLDivElement | null) => void
+  fitToWidth?: boolean
 }
 
 export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   analysisFocus,
   registerAnchor,
   onScrollContainerChange,
+  fitToWidth = false,
 }, ref) => {
   const { resumeData, zoom, showMultiPage } = useResumeStore()
   const pagesRef = useRef<HTMLDivElement>(null)
@@ -29,6 +32,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const exportRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState(A4_HEIGHT)
+  const [containerWidth, setContainerWidth] = useState(0)
 
   useImperativeHandle(ref, () => exportRef.current as HTMLDivElement)
 
@@ -42,6 +46,20 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     const raf = requestAnimationFrame(measure)
     return () => cancelAnimationFrame(raf)
   }, [resumeData])
+
+  useLayoutEffect(() => {
+    const element = scrollContainerRef.current
+    if (!element) return
+
+    const updateWidth = () => {
+      setContainerWidth(element.clientWidth)
+    }
+
+    updateWidth()
+    const resizeObserver = new ResizeObserver(updateWidth)
+    resizeObserver.observe(element)
+    return () => resizeObserver.disconnect()
+  }, [])
 
   const pageCount = useMemo(
     () => Math.max(1, Math.ceil(contentHeight / A4_HEIGHT)),
@@ -69,9 +87,13 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     )
   }
 
-  const scaledPageWidth = A4_WIDTH * zoom
-  const scaledPageHeight = A4_HEIGHT * zoom
-  const singlePageHeight = Math.max(A4_HEIGHT, contentHeight) * zoom
+  const fitZoom = fitToWidth && containerWidth > 0
+    ? Math.max(0.45, (containerWidth - FIT_SIDE_GAP * 2) / A4_WIDTH)
+    : zoom
+  const previewZoom = fitToWidth ? Math.min(zoom, fitZoom) : zoom
+  const scaledPageWidth = A4_WIDTH * previewZoom
+  const scaledPageHeight = A4_HEIGHT * previewZoom
+  const singlePageHeight = Math.max(A4_HEIGHT, contentHeight) * previewZoom
   const pages = showMultiPage ? Array.from({ length: pageCount }, (_, i) => i) : [0]
 
   return (
@@ -100,7 +122,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
               <div
                 style={{
                   width: A4_WIDTH,
-                  transform: `scale(${zoom})`,
+                  transform: `scale(${previewZoom})`,
                   transformOrigin: 'top left',
                 }}
               >
