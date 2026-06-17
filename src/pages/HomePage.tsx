@@ -1,23 +1,25 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import type { RefObject } from 'react'
+import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
   Fish,
   FilePlus,
   FileText,
   Sparkles,
-  BarChart3,
-  UserRound,
   Upload as UploadIcon,
   X,
   MapPin,
   Calendar,
   Building2,
   ChevronsRight,
+  GitBranch,
+  Layers3,
   Loader2,
   MoreHorizontal,
   Copy,
   Trash2,
   Plus,
+  Target,
+  Pencil,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
@@ -49,7 +51,6 @@ interface HomePageProps {
 
 const HOME_RECENT_RESUME_LIMIT = 5
 const HOME_RECENT_APPLICATION_LIMIT = 8
-const HOME_PRIMARY_BUTTON_CLASS = 'inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-600 hover:shadow-xl hover:shadow-blue-300'
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
   const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
@@ -154,6 +155,14 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     setShowCreateApplicationDropdown(true)
   }, [])
 
+  const handleCreateApplicationButtonClick = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+    setShowCreateApplicationDropdown(true)
+  }, [])
+
   const handleCreateApplicationButtonMouseLeave = useCallback(() => {
     closeCreateApplicationTimeoutRef.current = setTimeout(() => {
       setShowCreateApplicationDropdown(false)
@@ -192,13 +201,25 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     setParseStatus('success')
   }
 
-  const handleSelectResume = (resume: Resume) => {
+  const handleSelectResume = (resume: Resume, options?: { tab?: 'jd' }) => {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
     setParseError(null)
     setParseStatus('success')
-    navigate('/')
+    navigate(options?.tab === 'jd' ? '/?tab=jd' : '/')
+  }
+
+  const handleOpenLatestResumeJdAnalysis = () => {
+    const latestResume = [...getResumeListForAction()]
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+
+    if (!latestResume) {
+      handleNewResume()
+      return
+    }
+
+    handleSelectResume(latestResume, { tab: 'jd' })
   }
 
   const handleOpenUpload = () => {
@@ -315,32 +336,46 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           <div className="relative mx-auto w-full max-w-[1180px]">
             {isAuthenticated ? (
               <>
-                <section>
-                  <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <HomeSectionTitle label="我的简历" count={recentResumes.length} />
+                <LoggedInActionStrip
+                  resumeCount={recentResumes.length}
+                  applicationCount={recentApplications.length}
+                  onNewResume={handleNewResume}
+                  onAICreateApplication={handleAICreateApplication}
+                  onOpenJdAnalysis={handleOpenLatestResumeJdAnalysis}
+                />
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        onClick={handleOpenUpload}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white/80 px-5 text-sm font-semibold text-blue-600 shadow-sm shadow-blue-100 transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-400 hover:bg-blue-50"
-                      >
-                        <UploadIcon className="h-4 w-4" />
-                        上传简历
-                      </button>
-                      <button
-                        onClick={handleNewResume}
-                        className={HOME_PRIMARY_BUTTON_CLASS}
-                      >
-                        <FilePlus className="h-4 w-4" />
-                        新建简历
-                      </button>
-                    </div>
+                <section className="mt-8">
+                  <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <HomeSectionTitle
+                      label="我的简历"
+                      count={recentResumes.length}
+                    />
+
+                    {recentResumes.length > 0 && (
+                      <HomeSectionActions>
+                        <HomeGhostButton onClick={handleOpenUpload} icon={<UploadIcon className="h-4 w-4" />}>
+                          上传
+                        </HomeGhostButton>
+                        <HomeGhostButton onClick={handleNewResume} icon={<FilePlus className="h-4 w-4" />} variant="primary">
+                          新建
+                        </HomeGhostButton>
+                      </HomeSectionActions>
+                    )}
                   </div>
 
                   {isLoadingResumes ? (
                     <HomeLoadingState text="简历加载中..." />
                   ) : recentResumes.length === 0 ? (
-                    <HomeEmptyState text="暂无最近编辑的简历" />
+                    <HomeEmptyActionState
+                      title="还没有简历"
+                      description="先建立一份基础简历，之后可以复制成不同岗位版本。"
+                      actions={(
+                        <HomeResumeCreateActions
+                          onCreate={handleNewResume}
+                          onUpload={handleOpenUpload}
+                        />
+                      )}
+                    />
                   ) : (
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                       {recentResumes.map((resume) => (
@@ -360,31 +395,42 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                 </section>
 
                 <section className="mt-12">
-                  <div className="mb-5 flex items-center justify-between gap-3">
-                    <HomeSectionTitle label="岗位" count={recentApplications.length} />
-                    <button
-                      ref={createApplicationButtonRef}
-                      onMouseEnter={handleCreateApplicationButtonMouseEnter}
-                      onMouseLeave={handleCreateApplicationButtonMouseLeave}
-                      className={HOME_PRIMARY_BUTTON_CLASS}
-                    >
-                      <Plus className="h-4 w-4" />
-                      新建岗位
-                    </button>
-                    <CreateApplicationDropdown
-                      visible={showCreateApplicationDropdown}
-                      buttonRef={createApplicationButtonRef}
-                      onManualCreate={handleManualCreateApplication}
-                      onAICreate={handleAICreateApplication}
-                      onClose={() => setShowCreateApplicationDropdown(false)}
-                      onMouseEnter={handleCreateApplicationDropdownMouseEnter}
+                  <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <HomeSectionTitle
+                      label="岗位"
+                      count={recentApplications.length}
                     />
+                    {recentApplications.length > 0 && (
+                      <HomeSectionActions>
+                        <HomeGhostButton
+                          buttonRef={createApplicationButtonRef}
+                          onMouseEnter={handleCreateApplicationButtonMouseEnter}
+                          onMouseLeave={handleCreateApplicationButtonMouseLeave}
+                          onClick={handleCreateApplicationButtonClick}
+                          icon={<Plus className="h-4 w-4" />}
+                          variant="primary"
+                          menuAligned
+                        >
+                          新建岗位
+                        </HomeGhostButton>
+                      </HomeSectionActions>
+                    )}
                   </div>
 
                   {isLoadingApplications ? (
                     <HomeLoadingState text="岗位加载中..." compact />
                   ) : recentApplications.length === 0 ? (
-                    <HomeEmptyState text="暂无岗位记录" compact />
+                    <HomeEmptyActionState
+                      compact
+                      title="还没有岗位"
+                      description="新建岗位后，可以把 JD 和对应简历版本关联起来。"
+                      actions={(
+                        <HomeApplicationCreateActions
+                          onAICreate={handleAICreateApplication}
+                          onManualCreate={handleManualCreateApplication}
+                        />
+                      )}
+                    />
                   ) : (
                     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                       {recentApplications.map((application) => (
@@ -398,93 +444,21 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                     </div>
                   )}
                 </section>
+
+                <CreateApplicationDropdown
+                  visible={showCreateApplicationDropdown}
+                  buttonRef={createApplicationButtonRef}
+                  onManualCreate={handleManualCreateApplication}
+                  onAICreate={handleAICreateApplication}
+                  onClose={() => setShowCreateApplicationDropdown(false)}
+                  onMouseEnter={handleCreateApplicationDropdownMouseEnter}
+                />
               </>
             ) : (
-              <>
-                {/* 标题区 */}
-                <div className="relative mb-7 grid items-center gap-6 lg:grid-cols-[1fr_420px]">
-                  <div className="pt-4 text-center lg:text-left">
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/60">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      AI 简历工作台
-                    </div>
-                    <h1 className="text-[40px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl">
-                      <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">智能</span> 制作简历
-                    </h1>
-                    <p className="mt-4 text-base font-medium leading-7 text-slate-500">
-                      上传现有简历，AI 瞬间解析 · 从空白开始，自由创作
-                    </p>
-                  </div>
-
-                  <div className="relative hidden h-44 lg:block">
-                    <div className="absolute right-3 top-7 h-24 w-80 rotate-[-8deg] rounded-[50%] border-2 border-indigo-200/70" />
-                    <div className="absolute right-24 top-4 h-40 w-40 rotate-6 rounded-[26px] border border-white/80 bg-gradient-to-br from-white/85 to-blue-100/70 p-5 shadow-2xl shadow-blue-200/60 backdrop-blur">
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-300">
-                          <UserRound className="h-6 w-6" />
-                        </div>
-                        <div className="space-y-2">
-                          <div className="h-2.5 w-20 rounded-full bg-blue-200/90" />
-                          <div className="h-2.5 w-16 rounded-full bg-slate-200/90" />
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="h-3 w-full rounded-full bg-white" />
-                        <div className="h-3 w-11/12 rounded-full bg-white" />
-                        <div className="h-3 w-4/5 rounded-full bg-white" />
-                      </div>
-                    </div>
-                    <div className="absolute right-0 top-16 flex h-20 w-24 rotate-6 items-end gap-2 rounded-[22px] bg-gradient-to-br from-blue-500 to-violet-500 p-4 shadow-2xl shadow-indigo-200/80">
-                      <BarChart3 className="h-11 w-11 text-white/90" />
-                    </div>
-                    <div className="absolute right-4 top-4 h-2 w-2 rotate-45 bg-indigo-300" />
-                    <div className="absolute right-72 top-20 h-2.5 w-2.5 rotate-45 bg-blue-300" />
-                  </div>
-                </div>
-
-                {/* 上传与新建并列区域 */}
-                <div className="relative mb-6 grid items-stretch gap-6 lg:grid-cols-2">
-                  {/* 上传区域 */}
-                  <section className="flex min-h-[248px] min-w-0">
-                    <Upload embedded showBottomHint={false} onAuthRequired={() => onAuthRequired?.('upload')} />
-                  </section>
-
-                  {/* 新建空白简历 */}
-                  <section className="flex min-h-[248px] min-w-0">
-                    <button
-                      onClick={handleNewResume}
-                      className="group relative flex min-h-[248px] min-w-0 flex-1 overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-6 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] btn-press"
-                    >
-                      <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
-                        {Array.from({ length: 25 }).map((_, index) => (
-                          <span key={index} className="h-1.5 w-1.5 rounded-full bg-violet-300" />
-                        ))}
-                      </div>
-                      <div className="pointer-events-none absolute -right-4 bottom-3 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/80" />
-                      <div className="pointer-events-none absolute bottom-8 right-10 h-24 w-5 rotate-[34deg] rounded-full bg-gradient-to-b from-violet-200 to-violet-400 shadow-lg shadow-violet-200" />
-
-                      <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-6 md:grid-cols-[minmax(128px,170px)_minmax(0,1fr)]">
-                        <div className="flex items-center justify-center">
-                          <div className="relative">
-                            <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
-                            <div className="absolute -bottom-5 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] border border-violet-200 bg-white/45" />
-                            <div className="relative flex h-[76px] w-[76px] items-center justify-center rounded-[24px] bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-xl shadow-violet-300/80 transition-transform duration-300 group-hover:scale-105">
-                              <FilePlus className="h-9 w-9" />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="relative z-[1] min-w-0 text-center md:text-left">
-                          <h2 className="text-xl font-bold text-slate-900">新建空白简历</h2>
-                          <p className="mt-3 text-sm font-medium leading-6 text-slate-500">无需上传文件，直接开始编辑</p>
-                          <span className="mt-6 inline-flex h-11 min-w-36 items-center justify-center rounded-xl border border-violet-400 bg-white/70 px-8 text-sm font-semibold text-violet-600 shadow-sm shadow-violet-100 transition-all duration-300 group-hover:bg-white group-hover:shadow-md">
-                            新建简历
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  </section>
-                </div>
-              </>
+              <UnauthenticatedLanding
+                onCreateBaseResume={handleNewResume}
+                onAuthRequired={onAuthRequired}
+              />
             )}
 
           </div>
@@ -506,18 +480,465 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   )
 }
 
+function LoggedInActionStrip({
+  resumeCount,
+  applicationCount,
+  onNewResume,
+  onAICreateApplication,
+  onOpenJdAnalysis,
+}: {
+  resumeCount: number
+  applicationCount: number
+  onNewResume: () => void
+  onAICreateApplication: () => void
+  onOpenJdAnalysis: () => void
+}) {
+  const advice = resumeCount === 0
+    ? '先建立一份基础简历，开始管理你的投递版本。'
+    : applicationCount === 0
+      ? '已有简历后，可以新建岗位并关联 JD。'
+      : '继续用 JD 分析，让每份投递版本更匹配。'
+  const action = resumeCount === 0
+    ? {
+        label: '新建简历',
+        icon: <FilePlus className="h-4 w-4" />,
+        onClick: onNewResume,
+      }
+    : applicationCount === 0
+      ? {
+          label: '图文解析',
+          icon: <FileText className="h-4 w-4" />,
+          onClick: onAICreateApplication,
+        }
+      : {
+          label: 'JD分析',
+          icon: <Sparkles className="h-4 w-4" />,
+          onClick: onOpenJdAnalysis,
+        }
+
+  return (
+    <section className="home-action-strip">
+      <div className="home-action-strip-content flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="home-action-mark">
+            <Target className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="home-action-kicker">
+              <Sparkles className="h-3.5 w-3.5" />
+              推荐下一步
+            </p>
+            <p className="home-action-copy">{advice}</p>
+          </div>
+        </div>
+        <HomeActionButton onClick={action.onClick} icon={action.icon} primary>
+          {action.label}
+        </HomeActionButton>
+      </div>
+    </section>
+  )
+}
+
+function HomeActionButton({
+  children,
+  icon,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+  primary = false,
+}: {
+  children: ReactNode
+  icon: ReactNode
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseLeave?: () => void
+  primary?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className={primary ? 'home-action-button home-action-button-primary' : 'home-action-button'}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function HomeSectionActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {children}
+    </div>
+  )
+}
+
+function HomeApplicationCreateActions({
+  onAICreate,
+  onManualCreate,
+  compact = false,
+}: {
+  onAICreate: () => void
+  onManualCreate: () => void
+  compact?: boolean
+}) {
+  return (
+    <HomeSectionActions>
+      <HomeGhostButton
+        onClick={onAICreate}
+        icon={<FileText className="h-4 w-4" />}
+        variant="primary"
+        compact={compact}
+      >
+        图文解析
+      </HomeGhostButton>
+      <HomeGhostButton
+        onClick={onManualCreate}
+        icon={<Pencil className="h-4 w-4" />}
+        compact={compact}
+      >
+        手动填写
+      </HomeGhostButton>
+    </HomeSectionActions>
+  )
+}
+
+function HomeResumeCreateActions({
+  onCreate,
+  onUpload,
+}: {
+  onCreate: () => void
+  onUpload: () => void
+}) {
+  return (
+    <HomeSectionActions>
+      <HomeGhostButton
+        onClick={onCreate}
+        icon={<FilePlus className="h-4 w-4" />}
+        variant="primary"
+      >
+        新建简历
+      </HomeGhostButton>
+      <HomeGhostButton
+        onClick={onUpload}
+        icon={<UploadIcon className="h-4 w-4" />}
+      >
+        上传解析
+      </HomeGhostButton>
+    </HomeSectionActions>
+  )
+}
+
+function HomeGhostButton({
+  children,
+  icon,
+  buttonRef,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+  variant = 'default',
+  compact = false,
+  menuAligned = false,
+  className = '',
+}: {
+  children: ReactNode
+  icon: ReactNode
+  buttonRef?: RefObject<HTMLButtonElement | null>
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseLeave?: () => void
+  variant?: 'default' | 'primary'
+  compact?: boolean
+  menuAligned?: boolean
+  className?: string
+}) {
+  const sizeClass = menuAligned
+    ? 'h-11 justify-start px-4 text-sm'
+    : compact
+      ? 'h-10 justify-center px-4 text-sm'
+      : 'h-11 justify-center px-5 text-sm'
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className={`inline-flex items-center gap-2 rounded-xl font-semibold transition-all duration-200 hover:-translate-y-0.5 ${sizeClass} ${
+        variant === 'primary'
+          ? 'border border-blue-200 bg-blue-50/80 text-blue-600 shadow-sm shadow-blue-100 hover:border-blue-300 hover:bg-blue-100'
+          : 'border border-slate-200 bg-white/70 text-slate-500 shadow-sm shadow-slate-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+      } ${className}`}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function HomeEmptyActionState({
+  title,
+  description,
+  primaryLabel,
+  primaryIcon,
+  onPrimary,
+  onPrimaryClick,
+  onPrimaryMouseEnter,
+  onPrimaryMouseLeave,
+  secondaryLabel,
+  onSecondary,
+  actions,
+  compact = false,
+}: {
+  title: string
+  description: string
+  primaryLabel?: string
+  primaryIcon?: ReactNode
+  onPrimary?: () => void
+  onPrimaryClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  onPrimaryMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
+  onPrimaryMouseLeave?: () => void
+  secondaryLabel?: string
+  onSecondary?: () => void
+  actions?: ReactNode
+  compact?: boolean
+}) {
+  const handlePrimaryClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (onPrimaryClick) {
+      onPrimaryClick(event)
+      return
+    }
+    onPrimary?.()
+  }
+
+  return (
+    <div className={`flex flex-col items-center justify-center rounded-[24px] border border-white/80 bg-white/58 px-5 text-center shadow-sm shadow-blue-100/40 backdrop-blur ${compact ? 'min-h-[150px] py-6' : 'min-h-[260px] py-8'}`}>
+      <h3 className="text-base font-bold text-slate-800">{title}</h3>
+      <p className="mt-2 max-w-md text-sm font-medium leading-6 text-slate-500">{description}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        {actions ?? (
+          <>
+            {primaryLabel && (
+              <button
+                type="button"
+                onClick={handlePrimaryClick}
+                onMouseEnter={onPrimaryMouseEnter}
+                onMouseLeave={onPrimaryMouseLeave}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-600 hover:to-indigo-600"
+              >
+                {primaryIcon}
+                {primaryLabel}
+              </button>
+            )}
+          </>
+        )}
+        {secondaryLabel && onSecondary && (
+          <button
+            type="button"
+            onClick={onSecondary}
+            className="text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700"
+          >
+            {secondaryLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function UnauthenticatedLanding({
+  onCreateBaseResume,
+  onAuthRequired,
+}: {
+  onCreateBaseResume: () => void
+  onAuthRequired?: HomePageProps['onAuthRequired']
+}) {
+  return (
+    <>
+      <section className="relative mb-7 grid items-center gap-7 xl:grid-cols-[minmax(720px,1fr)_340px]">
+        <div className="pt-2 text-center xl:text-left">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/50 backdrop-blur">
+            <Target className="h-3.5 w-3.5" />
+            JD 定制简历工作台
+          </div>
+          <h1 className="mx-auto max-w-3xl text-[38px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl xl:mx-0 xl:max-w-none xl:whitespace-nowrap">
+            每个 <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">JD</span>，都有一版更匹配的简历
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-8 text-slate-500 xl:mx-0">
+            先建立一份基础简历，再围绕不同岗位复制、调整和分析匹配点，让每次投递都有对应版本。
+          </p>
+        </div>
+
+        <LandingWorkflowMockup />
+      </section>
+
+      <section className="relative mb-7">
+        <div className="mb-4 flex flex-col gap-2 text-center sm:text-left">
+          <p className="text-xs font-semibold text-blue-600">从基础版开始</p>
+          <h2 className="text-2xl font-bold text-slate-900">选择一种方式建立基础版</h2>
+        </div>
+        <div className="grid items-stretch gap-5 lg:grid-cols-2">
+          <section className="flex min-h-[190px] min-w-0">
+            <Upload
+              embedded
+              compact
+              showBottomHint={false}
+              onAuthRequired={() => onAuthRequired?.('upload')}
+              emptyTitle="导入现有简历"
+              emptyActiveTitle="松开即可导入"
+              emptyDescription="上传 PDF、DOCX、TXT，解析成可编辑的基础版。"
+              emptyActionLabel="选择文件导入"
+              emptyBadge="开始入口"
+              emphasizeAction
+            />
+          </section>
+
+          <section className="flex min-h-[190px] min-w-0">
+            <button
+              type="button"
+              onClick={onCreateBaseResume}
+              className="group relative flex min-h-[190px] min-w-0 flex-1 cursor-pointer overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-5 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] ring-1 ring-violet-300/70 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 btn-press"
+            >
+              <div className="absolute left-5 top-5 z-[2] rounded-full border border-violet-200 bg-white/85 px-3 py-1 text-[11px] font-semibold text-violet-600 shadow-sm shadow-violet-100 backdrop-blur">
+                开始入口
+              </div>
+              <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
+                {Array.from({ length: 25 }).map((_, index) => (
+                  <span key={index} className="h-1.5 w-1.5 rounded-full bg-violet-300" />
+                ))}
+              </div>
+              <div className="pointer-events-none absolute -right-8 bottom-0 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/70" />
+
+              <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-5 md:grid-cols-[minmax(104px,140px)_minmax(0,1fr)]">
+                <div className="flex items-center justify-center">
+                  <div className="relative">
+                    <div className="absolute -bottom-4 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
+                    <div className="absolute -bottom-5 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] border border-violet-200 bg-white/45" />
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-xl shadow-violet-300/80 transition-transform duration-300 group-hover:scale-105">
+                      <FilePlus className="h-8 w-8" />
+                    </div>
+                  </div>
+                </div>
+                <div className="relative z-[1] min-w-0 text-center md:text-left">
+                  <h2 className="text-lg font-bold text-slate-900">创建基础版简历</h2>
+                  <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
+                    从空白开始搭建主简历，之后可复制成不同岗位版本。
+                  </p>
+                  <span className="mt-5 inline-flex h-10 min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-6 text-sm font-semibold text-white shadow-xl shadow-violet-300 ring-4 ring-violet-100/80 transition-all duration-300 group-hover:from-violet-600 group-hover:to-purple-700 group-hover:ring-violet-200/80">
+                    开始创建基础版
+                  </span>
+                </div>
+              </div>
+            </button>
+          </section>
+        </div>
+      </section>
+
+      <LandingFlowStrip />
+    </>
+  )
+}
+
+function LandingWorkflowMockup() {
+  return (
+    <div className="pointer-events-none relative mx-auto w-full max-w-[420px] select-none px-2 py-4">
+      <div className="absolute inset-x-6 top-8 bottom-8 rounded-[36px] bg-[radial-gradient(circle_at_50%_15%,rgba(219,234,254,0.62),rgba(255,255,255,0)_68%)] blur-2xl" />
+      <div className="absolute right-8 top-8 grid grid-cols-5 gap-2 opacity-18">
+        {Array.from({ length: 25 }).map((_, index) => (
+          <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
+        ))}
+      </div>
+      <div className="relative z-[1] space-y-3">
+        <div className="flex items-center gap-3 rounded-[22px] border border-white/70 bg-white/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/92 to-indigo-500/92 text-white shadow-md shadow-blue-200/70">
+            <Layers3 className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">基础版简历</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-400">完整经历库</p>
+          </div>
+        </div>
+
+        <div className="ml-8 h-5 w-px bg-gradient-to-b from-blue-200 to-indigo-200" />
+
+        <div className="flex items-center gap-3 rounded-[22px] border border-blue-100/80 bg-blue-50/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-xs font-bold text-blue-600 shadow-sm">
+            JD
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">岗位版本</p>
+            <p className="mt-1 truncate text-xs font-medium text-blue-500">增长产品 / 数据产品</p>
+          </div>
+        </div>
+
+        <div className="ml-8 h-5 w-px bg-gradient-to-b from-indigo-200 to-violet-200" />
+
+        <div className="flex items-center justify-between gap-3 rounded-[22px] border border-violet-100/80 bg-violet-50/50 px-4 py-3 shadow-sm shadow-violet-100/50 backdrop-blur">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">匹配建议</p>
+            <p className="mt-1 truncate text-xs font-medium text-violet-500">补关键词、调重点、改表达</p>
+          </div>
+          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-violet-600 shadow-sm">
+            78%
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LandingFlowStrip() {
+  const items = [
+    { icon: <FileText className="h-3.5 w-3.5" />, label: '保留基础版' },
+    { icon: <GitBranch className="h-3.5 w-3.5" />, label: '复制岗位版本' },
+    { icon: <Sparkles className="h-3.5 w-3.5" />, label: '按 JD 优化' },
+  ]
+
+  return (
+    <section className="pb-8">
+      <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200/60 pt-5 text-center sm:flex-row sm:text-left">
+        <p className="text-sm font-medium leading-6 text-slate-500">
+          建立基础版后，可以继续复制成不同岗位版本，再用 JD 分析找到改写重点。
+        </p>
+        <div className="flex shrink-0 flex-wrap justify-center gap-2">
+          {items.map((item) => (
+            <span
+              key={item.label}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-100 bg-white/60 px-3 text-xs font-semibold text-blue-600 shadow-sm shadow-blue-100/40 backdrop-blur"
+            >
+              {item.icon}
+              {item.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function HomeSectionTitle({
   label,
   count,
+  description,
 }: {
   label: string
   count: number
+  description?: string
 }) {
   return (
-    <h2 className="relative inline-flex pb-2 text-lg font-bold text-slate-800">
-      <span>{label}（{count}）</span>
-      <span className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
-    </h2>
+    <div>
+      <h2 className="relative inline-flex pb-2 text-lg font-bold text-slate-800">
+        <span>{label}（{count}）</span>
+        <span className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
+      </h2>
+      {description && (
+        <p className="mt-2 text-sm font-medium text-slate-500">{description}</p>
+      )}
+    </div>
   )
 }
 
@@ -525,14 +946,6 @@ function HomeLoadingState({ text, compact = false }: { text: string; compact?: b
   return (
     <div className={`flex items-center justify-center text-sm font-medium text-slate-400 ${compact ? 'min-h-[160px]' : 'min-h-[340px]'}`}>
       <Loader2 className="mr-2 h-4 w-4 animate-spin text-blue-500" />
-      {text}
-    </div>
-  )
-}
-
-function HomeEmptyState({ text, compact = false }: { text: string; compact?: boolean }) {
-  return (
-    <div className={`flex items-center justify-center text-sm font-medium text-slate-400 ${compact ? 'min-h-[160px]' : 'min-h-[340px]'}`}>
       {text}
     </div>
   )

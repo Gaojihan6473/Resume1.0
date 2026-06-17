@@ -235,7 +235,7 @@ export function ApplicationList({
   const showFloatingLoading = isAutosaving || (isLoading && applications.length > 0)
 
   return (
-    <div className="relative h-full overflow-y-auto pr-1">
+    <div className="relative flex h-full flex-col overflow-y-auto pr-1">
       {showFloatingLoading && (
         <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
           <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border border-slate-100/80 backdrop-blur animate-slide-in pointer-events-auto max-w-sm">
@@ -271,14 +271,14 @@ export function ApplicationList({
         {headerAction && <div className="shrink-0">{headerAction}</div>}
       </div>
 
-      <div>
+      <div className="min-h-0 flex-1">
         {isInitialLoading ? (
-          <div className="py-16 text-center">
+          <div className="flex h-full flex-col items-center justify-center text-center">
             <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
             <p className="mt-3 text-sm text-slate-500">加载中...</p>
           </div>
         ) : sortedApplications.length === 0 ? (
-          <div className="py-16 text-center">
+          <div className="flex h-full flex-col items-center justify-center text-center">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto">
               <Briefcase className="w-8 h-8 text-slate-400" />
             </div>

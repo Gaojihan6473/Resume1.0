@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Loader2, Fish, ChevronsRight } from 'lucide-react'
+import { Plus, Loader2, Fish, ChevronsRight, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { fetchResumes, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
-import type { ResumeData } from '../types/resume'
+import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { toast } from '../components/Toast'
@@ -232,6 +232,15 @@ const handleGoHome = () => {
     navigate('/')
   }
 
+  const handleNewResume = () => {
+    setResumeData(createDefaultResumeData())
+    setCurrentResumeId(null)
+    setIsDirty(false)
+    setParseError(null)
+    setParseStatus('success')
+    navigate('/')
+  }
+
   return (
     <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
       {/* 顶部栏 */}
@@ -277,9 +286,17 @@ const handleGoHome = () => {
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
               </div>
             ) : resumes.length === 0 ? (
-              <div className="text-center py-8">
+              <div className="flex min-h-full flex-col items-center justify-center text-center">
                 <p className="text-sm text-slate-500">暂无简历</p>
                 <p className="text-xs text-slate-400 mt-1">点击上方按钮创建第一个简历</p>
+                <button
+                  type="button"
+                  onClick={handleNewResume}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-400 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500"
+                >
+                  <FilePlus className="h-4 w-4" />
+                  新建简历
+                </button>
               </div>
             ) : (
               <ResumeSelector

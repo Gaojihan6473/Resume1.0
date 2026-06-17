@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   Loader2,
@@ -35,6 +36,7 @@ interface EditorAnalysisLayoutProps {
 }
 
 export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<EditorMainTab>('edit')
   const [jdText, setJdText] = useState('')
   const [selectedJobId, setSelectedJobId] = useState('')
@@ -59,6 +61,15 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       fetchApplications()
     }
   }, [fetchApplications, isAuthenticated])
+
+  useEffect(() => {
+    if (searchParams.get('tab') !== 'jd') return
+
+    setActiveTab('jd')
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('tab')
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,8 @@
 import { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { FileText, Pencil } from 'lucide-react'
 
+const DROPDOWN_VIEWPORT_PADDING = 8
+
 interface Props {
   visible: boolean
   onManualCreate: () => void
@@ -58,6 +60,16 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
 
   if (!buttonRect) return null
 
+  const dropdownWidth = Math.ceil(buttonRect.width)
+  const maxDropdownLeft = Math.max(
+    DROPDOWN_VIEWPORT_PADDING,
+    window.innerWidth - dropdownWidth - DROPDOWN_VIEWPORT_PADDING
+  )
+  const dropdownLeft = Math.min(
+    maxDropdownLeft,
+    Math.max(DROPDOWN_VIEWPORT_PADDING, buttonRect.left)
+  )
+
   return (
     <div
       ref={dropdownRef}
@@ -66,8 +78,8 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
       className="fixed overflow-hidden rounded-xl border border-slate-100/80 bg-white py-1.5 shadow-lg shadow-slate-200/60"
       style={{
         top: buttonRect.bottom + 6,
-        left: buttonRect.left,
-        width: buttonRect.width,
+        left: dropdownLeft,
+        width: dropdownWidth,
         opacity: visible ? 1 : 0,
         transform: visible ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.98)',
         pointerEvents: visible ? 'auto' : 'none',
