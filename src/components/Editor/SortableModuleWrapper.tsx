@@ -57,14 +57,14 @@ export function SortableModuleWrapper({
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: isDragging ? 'none' : transition,
   }
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-all duration-200 hover:shadow-md ${
+      className={`mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-shadow duration-200 hover:shadow-md ${
         isDragging ? 'opacity-40 scale-[1.01] shadow-lg z-50' : ''
       }`}
       onMouseEnter={() => setIsHovered(true)}
@@ -78,18 +78,19 @@ export function SortableModuleWrapper({
       >
         <div className="flex items-center gap-2.5">
           <button
+            type="button"
             {...attributes}
             {...listeners}
             onClick={(e) => e.stopPropagation()}
-            className="p-1 hover:bg-gray-100 rounded cursor-grab active:cursor-grabbing transition-colors duration-200"
+            className="p-1 hover:bg-gray-100 rounded cursor-grab active:cursor-grabbing touch-none select-none transition-colors duration-200"
           >
             <GripVertical className="w-4 h-4 text-gray-400" />
           </button>
           <div
             className={`w-5 h-5 rounded-md flex items-center justify-center transition-all duration-300 ${
               expanded
-                ? 'bg-blue-500 text-white rotate-90'
-                : 'bg-gray-100 text-gray-400 rotate-0'
+                ? 'bg-blue-500 text-white rotate-0'
+                : 'bg-gray-100 text-gray-400 -rotate-90'
             }`}
           >
             <ChevronDown className="w-3 h-3" />

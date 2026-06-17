@@ -49,8 +49,8 @@ export function ModuleWrapper({
           <div
             className={`w-5 h-5 rounded-md flex items-center justify-center transition-all duration-300 ${
               expanded
-                ? 'bg-blue-500 text-white rotate-90'
-                : 'bg-gray-100 text-gray-400 rotate-0'
+                ? 'bg-blue-500 text-white rotate-0'
+                : 'bg-gray-100 text-gray-400 -rotate-90'
             }`}
           >
             <ChevronDown className="w-3 h-3" />

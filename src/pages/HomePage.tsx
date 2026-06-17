@@ -12,7 +12,6 @@ import {
   Building2,
   ChevronsRight,
   GitBranch,
-  Layers3,
   Loader2,
   MoreHorizontal,
   Copy,
@@ -855,36 +854,36 @@ function LandingWorkflowMockup() {
       <div className="relative z-[1] space-y-3">
         <div className="flex items-center gap-3 rounded-[22px] border border-white/70 bg-white/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/92 to-indigo-500/92 text-white shadow-md shadow-blue-200/70">
-            <Layers3 className="h-4.5 w-4.5" />
+            <FilePlus className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">基础版简历</p>
-            <p className="mt-1 truncate text-xs font-medium text-slate-400">完整经历库</p>
+            <p className="truncate text-sm font-bold text-slate-900">创建简历</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-400">导入或新建基础版</p>
           </div>
         </div>
 
         <div className="ml-8 h-5 w-px bg-gradient-to-b from-blue-200 to-indigo-200" />
 
         <div className="flex items-center gap-3 rounded-[22px] border border-blue-100/80 bg-blue-50/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-xs font-bold text-blue-600 shadow-sm">
-            JD
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-blue-600 shadow-sm">
+            <Plus className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">岗位版本</p>
-            <p className="mt-1 truncate text-xs font-medium text-blue-500">增长产品 / 数据产品</p>
+            <p className="truncate text-sm font-bold text-slate-900">添加岗位</p>
+            <p className="mt-1 truncate text-xs font-medium text-blue-500">录入目标岗位 JD</p>
           </div>
         </div>
 
         <div className="ml-8 h-5 w-px bg-gradient-to-b from-indigo-200 to-violet-200" />
 
-        <div className="flex items-center justify-between gap-3 rounded-[22px] border border-violet-100/80 bg-violet-50/50 px-4 py-3 shadow-sm shadow-violet-100/50 backdrop-blur">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">匹配建议</p>
-            <p className="mt-1 truncate text-xs font-medium text-violet-500">补关键词、调重点、改表达</p>
-          </div>
-          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-violet-600 shadow-sm">
-            78%
+        <div className="flex items-center gap-3 rounded-[22px] border border-violet-100/80 bg-violet-50/50 px-4 py-3 shadow-sm shadow-violet-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-violet-600 shadow-sm">
+            <Target className="h-4.5 w-4.5" />
           </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">JD分析</p>
+            <p className="mt-1 truncate text-xs font-medium text-violet-500">提炼匹配重点，生成多版本</p>
+          </div>
         </div>
       </div>
     </div>
