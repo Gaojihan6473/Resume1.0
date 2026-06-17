@@ -26,11 +26,12 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   onScrollContainerChange,
   fitToWidth = false,
 }, ref) => {
-  const { resumeData, zoom, showMultiPage } = useResumeStore()
+  const { resumeData, zoom, showMultiPage, setZoom } = useResumeStore()
   const pagesRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLDivElement>(null)
   const exportRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const fitStateRef = useRef({ fitToWidth: false, containerWidth: 0 })
   const [contentHeight, setContentHeight] = useState(A4_HEIGHT)
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -66,6 +67,35 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     [contentHeight]
   )
 
+  const fitZoom = containerWidth > 0
+    ? Math.max(0.45, (containerWidth - FIT_SIDE_GAP * 2) / A4_WIDTH)
+    : zoom
+  const previewZoom = zoom
+  const scaledPageWidth = A4_WIDTH * previewZoom
+  const scaledPageHeight = A4_HEIGHT * previewZoom
+  const singlePageHeight = Math.max(A4_HEIGHT, contentHeight) * previewZoom
+
+  useLayoutEffect(() => {
+    const previous = fitStateRef.current
+    const becameFitToWidth = fitToWidth && !previous.fitToWidth
+    const widthShrankWhileFitting =
+      fitToWidth &&
+      previous.fitToWidth &&
+      containerWidth > 0 &&
+      containerWidth < previous.containerWidth - 1
+
+    fitStateRef.current = { fitToWidth, containerWidth }
+
+    if (!fitToWidth || containerWidth <= 0 || (!becameFitToWidth && !widthShrankWhileFitting)) {
+      return
+    }
+
+    const currentZoom = useResumeStore.getState().zoom
+    if (fitZoom < currentZoom - 0.001) {
+      setZoom(fitZoom)
+    }
+  }, [containerWidth, fitToWidth, fitZoom, setZoom])
+
   const isEmpty =
     !resumeData.basic.name &&
     resumeData.education.length === 0 &&
@@ -87,13 +117,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     )
   }
 
-  const fitZoom = fitToWidth && containerWidth > 0
-    ? Math.max(0.45, (containerWidth - FIT_SIDE_GAP * 2) / A4_WIDTH)
-    : zoom
-  const previewZoom = fitToWidth ? Math.min(zoom, fitZoom) : zoom
-  const scaledPageWidth = A4_WIDTH * previewZoom
-  const scaledPageHeight = A4_HEIGHT * previewZoom
-  const singlePageHeight = Math.max(A4_HEIGHT, contentHeight) * previewZoom
   const pages = showMultiPage ? Array.from({ length: pageCount }, (_, i) => i) : [0]
 
   return (

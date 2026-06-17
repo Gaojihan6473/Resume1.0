@@ -79,6 +79,9 @@ const LETTER_SPACING_OPTIONS = [
   { label: '1.0', value: 1.0 },
 ]
 
+const MIN_ZOOM = 0.45
+const MAX_ZOOM = 1.5
+
 interface SelectProps {
   value: string | number
   options: { label: string; value: string | number }[]
@@ -248,13 +251,13 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
   }
 
   return (
-    <div className="app-topbar h-14 shrink-0 flex items-center relative z-50 min-w-0">
+    <div className="app-topbar h-14 shrink-0 flex items-center relative z-[100] min-w-0">
       {/* 左侧 Logo - 固定不滚动 */}
       <div
         ref={sidebarTriggerRef}
         onMouseEnter={onOpenSidebar}
         onMouseLeave={onScheduleCloseSidebar}
-        className="h-full w-40 flex items-center gap-2 px-3 border-r border-slate-200 shrink-0"
+        className="h-full w-40 flex items-center gap-2 px-3 shrink-0"
       >
         <div
           className="flex items-center gap-2 px-1.5 py-1"
@@ -322,9 +325,9 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
         />
 
         <div className="flex items-center gap-0.5 px-1.5 rounded-xl border border-slate-200 bg-white shrink-0 h-8">
-          <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="缩小" variant="ghost" />
+          <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(MIN_ZOOM, zoom - 0.1))} title="缩小" variant="ghost" />
           <span className="text-xs font-mono w-10 text-center text-slate-700">{Math.round(zoom * 100)}%</span>
-          <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(1.5, zoom + 0.1))} title="放大" variant="ghost" />
+          <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(MAX_ZOOM, zoom + 0.1))} title="放大" variant="ghost" />
         </div>
       </div>
 
