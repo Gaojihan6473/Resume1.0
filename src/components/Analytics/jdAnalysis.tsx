@@ -9,8 +9,8 @@ import {
   type SuggestionItem,
 } from '../../types/analytics'
 import type { ResumeData } from '../../types/resume'
+import { getMiniMaxContent, requestMiniMaxChat } from '../../lib/minimax'
 
-const JD_ANALYSIS_API_URL = 'https://api.minimaxi.com/v1/chat/completions'
 const JD_ANALYSIS_MODEL = 'MiniMax-M3'
 const JD_ANALYSIS_TIMEOUT_MS = 240000
 const JD_ANALYSIS_MAX_TOKENS = 6000
@@ -256,12 +256,10 @@ export function getJDAnalysisErrorMessage(error: unknown): string {
 export async function analyzeJDWithAI(
   jdText: string,
   resumeText: string,
-  apiKey: string,
   signal?: AbortSignal
 ): Promise<JDAnalysisResult> {
   try {
     const content = await requestAnalysisContent({
-      apiKey,
       signal,
       messages: [
         { role: 'system', content: analyzeJDSystemPrompt },
@@ -283,7 +281,6 @@ ${resumeText}`,
     } catch (parseError) {
       console.warn('[JDAnalysis] 首次返回不是合法 JSON，准备自动重试:', parseError)
       const retryContent = await requestAnalysisContent({
-        apiKey,
         signal,
         messages: [
           { role: 'system', content: strictJsonRetrySystemPrompt },
@@ -318,11 +315,9 @@ type ChatMessage = {
 }
 
 async function requestAnalysisContent({
-  apiKey,
   signal,
   messages,
 }: {
-  apiKey: string
   signal?: AbortSignal
   messages: ChatMessage[]
 }): Promise<string> {
@@ -341,36 +336,19 @@ async function requestAnalysisContent({
   }
 
   try {
-    const response = await fetch(JD_ANALYSIS_API_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey.trim()}`,
-      },
-      body: JSON.stringify({
+    const result = await requestMiniMaxChat(
+      {
         model: JD_ANALYSIS_MODEL,
         max_tokens: JD_ANALYSIS_MAX_TOKENS,
         temperature: 0,
         thinking: { type: 'disabled' },
         response_format: { type: 'json_object' },
         messages,
-      }),
-    })
+      },
+      controller.signal
+    )
 
-    if (!response.ok) {
-      const message = await response.text().catch(() => '')
-      throw new Error(formatApiError(response.status, message))
-    }
-
-    const result = await response.json()
-    const content = result?.choices?.[0]?.message?.content
-
-    if (typeof content !== 'string' || !content.trim()) {
-      throw new Error('API 返回了空内容')
-    }
-
-    return content
+    return getMiniMaxContent(result)
   } catch (error) {
     if (didTimeout) {
       throw new Error('请求超时')
@@ -380,41 +358,6 @@ async function requestAnalysisContent({
     clearTimeout(timeout)
     signal?.removeEventListener('abort', abortRequest)
   }
-}
-
-function formatApiError(status: number, body: string): string {
-  const detail = extractApiErrorDetail(body)
-  const suffix = detail ? `\n服务返回：${detail}` : ''
-
-  if (status === 401 || status === 403) {
-    return `API 错误 ${status}: 鉴权失败或无权限访问分析服务。${suffix}`
-  }
-  if (status === 429) {
-    return `API 错误 ${status}: 请求过于频繁或账号额度不足。${suffix}`
-  }
-  if (status >= 500) {
-    return `API 错误 ${status}: 上游分析服务暂时异常。${suffix}`
-  }
-  if (status === 400) {
-    return `API 错误 ${status}: 请求内容可能不符合服务要求。${suffix}`
-  }
-
-  return `API 错误 ${status}: 分析服务返回异常。${suffix}`
-}
-
-function extractApiErrorDetail(body: string): string {
-  const trimmed = body.trim()
-  if (!trimmed) return ''
-
-  try {
-    const parsed = JSON.parse(trimmed)
-    if (typeof parsed?.error?.message === 'string') return limitText(parsed.error.message, 160)
-    if (typeof parsed?.message === 'string') return limitText(parsed.message, 160)
-  } catch {
-    // Fall through to plain text below.
-  }
-
-  return limitText(trimmed.replace(/\s+/g, ' '), 160)
 }
 
 const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对象是已有成熟简历、准备针对具体 JD 做差异化投递优化的候选人。请基于用户提供的 JD 和简历内容，输出匹配度评分，并按简历模块顺序给出专业、克制、可落地的优化建议。

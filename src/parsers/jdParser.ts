@@ -1,5 +1,6 @@
 import Tesseract from 'tesseract.js'
 import type { JDParsedResult } from '../types/application'
+import { getMiniMaxContent, requestMiniMaxChat } from '../lib/minimax'
 
 const JD_PARSE_SYSTEM_PROMPT = `你是一个专业的招聘JD信息提取助手。请从职位描述文本（或图片OCR结果）中准确提取结构化信息。
 
@@ -117,24 +118,14 @@ export async function extractTextFromImage(file: File): Promise<string> {
 
 export async function parseJDByAI(
   rawText: string,
-  apiKey: string,
   signal?: AbortSignal
 ): Promise<JDParsedResult> {
   if (signal?.aborted) {
     throw new Error('解析已取消')
   }
 
-  const normalizedApiKey = apiKey.trim()
-  const minimaxUrl = 'https://api.minimaxi.com/v1/chat/completions'
-
-  const response = await fetch(minimaxUrl, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${normalizedApiKey}`,
-    },
-    body: JSON.stringify({
+  const result = await requestMiniMaxChat(
+    {
       model: 'MiniMax-M2.5',
       max_tokens: 4000,
       temperature: 0,
@@ -142,20 +133,11 @@ export async function parseJDByAI(
         { role: 'system', content: JD_PARSE_SYSTEM_PROMPT },
         { role: 'user', content: `请从以下内容中提取JD信息：\n\n${rawText.slice(0, 12000)}` },
       ],
-    }),
-  })
+    },
+    signal
+  )
 
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(`MiniMax API错误: ${response.status} ${message}`)
-  }
-
-  const result = await response.json()
-  const content = result?.choices?.[0]?.message?.content
-
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('MiniMax返回了空内容')
-  }
+  const content = getMiniMaxContent(result)
 
   return parseJDParsedResult(content)
 }

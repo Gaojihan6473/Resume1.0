@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { AppState } from '../types/resume'
 import { createDefaultResumeData } from '../types/resume'
 import { applyReferenceTemplate } from '../utils/template'
+import { normalizeResumeData } from '../utils/resumeData'
 
 let activeParseController: AbortController | null = null
 let parseRunId = 0
@@ -15,7 +16,6 @@ export const useResumeStore = create<AppState>((set, get) => ({
   zoom: 1,
   showMultiPage: true,
   isAIEnabled: true,
-  apiKey: import.meta.env.VITE_MINIMAX_API_KEY as string || '',
   currentResumeId: null,
   isDirty: false,
   currentFile: null,
@@ -35,11 +35,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
   clearCurrentFile: () => set({ currentFile: null }),
 
   setResumeData: (data, title) => set({
-    resumeData: {
-      ...createDefaultResumeData(),
-      ...data,
-      resumeTitle: title ?? data.resumeTitle ?? '',
-    }
+    resumeData: normalizeResumeData(data, title),
   }),
 
   updateBasic: (basic) =>
@@ -381,7 +377,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
     set({ parseStatus: 'parsing', parseError: null })
     try {
       const { parseFile } = await import('../parsers')
-      const result = await parseFile(file, get().isAIEnabled, get().apiKey, controller.signal)
+      const result = await parseFile(file, get().isAIEnabled, controller.signal)
       if (runId !== parseRunId || controller.signal.aborted) return
       const endAt = new Date().toISOString()
       const sectionLine = result.parseLog.find((line: string) => line.startsWith('[result] sections:'))
@@ -389,7 +385,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       console.info(`[Resume Parser] success | file=${file.name} | ${summary} | start=${startedAt} | end=${endAt}`)
 
       set({
-        resumeData: applyReferenceTemplate(result.data),
+        resumeData: normalizeResumeData(applyReferenceTemplate(result.data)),
         rawText: result.rawText,
         parseStatus: 'success',
       })
@@ -403,7 +399,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       console.debug(`- size: ${file.size} bytes`)
       console.debug(`- type: ${file.type || 'unknown'}`)
       console.debug(`- AI enabled: ${get().isAIEnabled}`)
-      console.debug(`- API key configured: ${Boolean(get().apiKey?.trim())}`)
+      console.debug('- AI proxy configured: server-side')
       console.debug(`[${new Date().toISOString()}] ERROR: ${message}`)
       console.groupEnd()
       set({

@@ -51,7 +51,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const { resumeData } = useResumeStore()
   const { applications, isLoading, fetchApplications } = useApplicationStore()
   const { isAuthenticated } = useAuthStore()
-  const apiKey = (import.meta.env.VITE_MINIMAX_API_KEY as string)?.trim()
   const analysisControllerRef = useRef<AbortController | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
@@ -159,11 +158,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       setError('请先输入 JD 内容')
       return
     }
-    if (!apiKey?.trim()) {
-      setError('请先配置 MiniMax API 密钥')
-      return
-    }
-
     analysisControllerRef.current?.abort()
     const controller = new AbortController()
     analysisControllerRef.current = controller
@@ -171,7 +165,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
     try {
       const resumeText = buildResumeText(resumeData)
-      const result = await analyzeJDWithAI(jdText, resumeText, apiKey, controller.signal)
+      const result = await analyzeJDWithAI(jdText, resumeText, controller.signal)
       if (controller.signal.aborted || analysisControllerRef.current !== controller) return
       setAnalysisResult(result)
       setIsRightPanelCollapsed(false)

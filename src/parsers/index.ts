@@ -1,11 +1,12 @@
 ﻿import { createDefaultResumeData } from '../types/resume'
 import type { ParsedResult, ResumeData } from '../types/resume'
+import { getMiniMaxContent, requestMiniMaxChat } from '../lib/minimax'
+import { normalizeResumeData } from '../utils/resumeData'
 import { buildRichHtmlFromLines } from '../utils/richText'
 
 export async function parseFile(
   file: File,
   useAI: boolean = false,
-  apiKey: string = '',
   signal?: AbortSignal
 ): Promise<ParsedResult> {
   throwIfAborted(signal)
@@ -14,17 +15,17 @@ export async function parseFile(
   logs.push(`[parser] file size: ${file.size} bytes`)
   logs.push(`[parser] file type: ${file.type || 'unknown'}`)
   logs.push(`[parser] ai enabled: ${useAI}`)
-  logs.push(`[parser] api key provided: ${Boolean(apiKey?.trim())}`)
+  logs.push(`[parser] ai proxy enabled: ${useAI}`)
 
   const rawText = await extractText(file)
   throwIfAborted(signal)
   logs.push(`[extract] text length: ${rawText.length}`)
   logs.push(`[extract] text preview: ${rawText.slice(0, 120).replace(/\s+/g, ' ') || '(empty)'}`)
 
-  if (useAI && apiKey) {
+  if (useAI) {
     try {
       logs.push('[ai] request start')
-      const data = await parseByAI(rawText, apiKey, signal)
+      const data = await parseByAI(rawText, signal)
       logs.push('[ai] parse success')
       logs.push(
         `[result] sections: edu=${data.education?.length || 0}, intern=${data.internships?.length || 0}, proj=${data.projects?.length || 0}`
@@ -157,16 +158,9 @@ function parseAiJson(content: string): ResumeData {
   throw lastError instanceof Error ? lastError : new Error('Failed to parse AI JSON.')
 }
 
-async function repairJsonByAI(rawContent: string, apiKey: string, signal?: AbortSignal): Promise<string> {
-  const minimaxUrl = 'https://api.minimaxi.com/v1/chat/completions'
-  const response = await fetch(minimaxUrl, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey.trim()}`,
-    },
-    body: JSON.stringify({
+async function repairJsonByAI(rawContent: string, signal?: AbortSignal): Promise<string> {
+  const result = await requestMiniMaxChat(
+    {
       model: 'MiniMax-M2.5',
       max_tokens: 3000,
       temperature: 0,
@@ -181,26 +175,15 @@ async function repairJsonByAI(rawContent: string, apiKey: string, signal?: Abort
           content: `Repair this broken JSON while preserving data:\n\n${rawContent.slice(0, 12000)}`,
         },
       ],
-    }),
-  })
+    },
+    signal
+  )
 
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(`JSON repair API error: ${response.status} ${message}`)
-  }
-
-  const result = await response.json()
-  const content = result?.choices?.[0]?.message?.content
-  if (typeof content !== 'string') {
-    throw new Error('JSON repair model returned empty content.')
-  }
-  return content
+  return getMiniMaxContent(result)
 }
 
-async function parseByAI(rawText: string, apiKey: string, signal?: AbortSignal): Promise<ResumeData> {
+async function parseByAI(rawText: string, signal?: AbortSignal): Promise<ResumeData> {
   throwIfAborted(signal)
-  const normalizedApiKey = apiKey.trim()
-  const minimaxUrl = 'https://api.minimaxi.com/v1/chat/completions'
 
   const fidelityDirectives = `Module-first extraction rules:
 1) Fill data according to editor modules directly.
@@ -314,14 +297,8 @@ If some fields are missing in source, keep them empty by schema.
 Source resume text:
 ${rawText.slice(0, 12000)}`
 
-  const response = await fetch(minimaxUrl, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${normalizedApiKey}`,
-    },
-    body: JSON.stringify({
+  const result = await requestMiniMaxChat(
+    {
       model: 'MiniMax-M2.5',
       max_tokens: 4000,
       temperature: 0,
@@ -336,26 +313,16 @@ ${rawText.slice(0, 12000)}`
           content: `${fidelityDirectives}\n\n${prompt}`,
         },
       ],
-    }),
-  })
-
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(`MiniMax API error: ${response.status} ${message}`)
-  }
-
-  const result = await response.json()
-  const content = result?.choices?.[0]?.message?.content
-
-  if (typeof content !== 'string') {
-    throw new Error('MiniMax returned empty or invalid content.')
-  }
+    },
+    signal
+  )
+  const content = getMiniMaxContent(result)
 
   let parsed: ResumeData
   try {
     parsed = parseAiJson(content)
   } catch {
-    const repaired = await repairJsonByAI(content, normalizedApiKey, signal)
+    const repaired = await repairJsonByAI(content, signal)
     parsed = parseAiJson(repaired)
   }
 
@@ -380,7 +347,7 @@ ${rawText.slice(0, 12000)}`
   }
 
   fillSummaryFallbackFromRaw(safeData, rawText)
-  return safeData
+  return normalizeResumeData(safeData)
 }
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -424,7 +391,3 @@ function fillSummaryFallbackFromRaw(data: ResumeData, rawText: string) {
   data.summary.highlights = []
   data.summary.content = buildRichHtmlFromLines(summaryLines)
 }
-
-
-
-

@@ -7,6 +7,7 @@ import {
   type Resume,
 } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
+import { normalizeResumeData, resumeDataToRecord } from './resumeData'
 
 interface SaveCurrentResumeOptions {
   previewElement?: HTMLElement | null
@@ -76,11 +77,12 @@ export async function saveCurrentResumeToCloud({
     clearCurrentFile,
   } = useResumeStore.getState()
 
-  const title = resumeData.resumeTitle || resumeData.basic.name || '我的简历'
+  const normalizedResumeData = normalizeResumeData(resumeData)
+  const title = normalizedResumeData.resumeTitle || normalizedResumeData.basic.name || '我的简历'
   let resumeId = currentResumeId
 
   if (resumeId) {
-    const result = await updateResume(resumeId, title, resumeData as unknown as Record<string, unknown>)
+    const result = await updateResume(resumeId, title, resumeDataToRecord(normalizedResumeData))
     if (!result.success) {
       return { success: false, error: result.error || '保存失败' }
     }
@@ -96,7 +98,7 @@ export async function saveCurrentResumeToCloud({
       }
     }
 
-    const result = await createResume(title, resumeData as unknown as Record<string, unknown>, 'cloud', fileUrl)
+    const result = await createResume(title, resumeDataToRecord(normalizedResumeData), 'cloud', fileUrl)
     if (!result.success || !result.resume) {
       return { success: false, error: result.error || '保存失败' }
     }

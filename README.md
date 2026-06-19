@@ -7,7 +7,7 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Upload and parse resume files
 - Rule-based section extraction (basic info, education, internships, projects, summary, skills)
 - Visual editor + A4 preview
-- Save/load local draft
+- Save/load resumes with Supabase
 - Track applications and review delivery dashboard
 - JD analysis runs inside the resume editor
 - Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
@@ -35,5 +35,5 @@ npm run check:encoding
 
 ## Notes
 
-- Draft is stored in `localStorage` under key `resume_draft`.
+- MiniMax calls are proxied through the `minimax-chat` Supabase Edge Function. Configure `MINIMAX_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
 - Production build uses code splitting for parser/export modules.

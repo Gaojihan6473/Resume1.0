@@ -478,6 +478,7 @@ export function parseByRules(rawText: string): ResumeData {
   const sections = identifySection(cleanedText.split('\n'))
 
   const data: ResumeData = {
+    schemaVersion: 1,
     resumeTitle: '',
     basic: {
       name: '',
@@ -540,7 +541,6 @@ export function parseByRules(rawText: string): ResumeData {
 
   return data
 }
-
 
 
 

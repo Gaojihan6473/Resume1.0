@@ -11,6 +11,7 @@ import {
   createSectionAnchorKey,
   stripHtml,
 } from '../../utils/analysisAnchors'
+import { sanitizeRichHtml, textToSafeHtml } from '../../utils/richText'
 import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
@@ -125,7 +126,7 @@ export function PreviewContent({
               {edu.degree && ` | ${edu.degree}`}
               {edu.gpa && ` | GPA: ${edu.gpa}`}
             </div>
-            {edu.description && <div style={{ marginTop: `${tightSpacingPx}px`, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: edu.description.replace(/\n/g, '<br/>') }} />}
+            {edu.description && <div style={{ marginTop: `${tightSpacingPx}px`, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: textToSafeHtml(edu.description) }} />}
           </div>
         ))}
       </Section>
@@ -399,11 +400,12 @@ function HighlightedText({
 }
 
 function highlightHtml(html: string, marker?: string): string {
+  const safeHtml = sanitizeRichHtml(html)
   const cleanedMarker = stripHtml(marker || '').trim()
-  if (!cleanedMarker || typeof document === 'undefined') return html
+  if (!cleanedMarker || typeof document === 'undefined') return safeHtml
 
   const container = document.createElement('div')
-  container.innerHTML = html
+  container.innerHTML = safeHtml
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
   const markers = Array.from(new Set([cleanedMarker, cleanedMarker.replace(/\s+/g, ' ')]))
 
@@ -421,7 +423,7 @@ function highlightHtml(html: string, marker?: string): string {
       mark.textContent = text.slice(start, end)
 
       const parent = textNode.parentNode
-      if (!parent) return html
+      if (!parent) return safeHtml
 
       if (start > 0) parent.insertBefore(document.createTextNode(text.slice(0, start)), textNode)
       parent.insertBefore(mark, textNode)
@@ -433,7 +435,7 @@ function highlightHtml(html: string, marker?: string): string {
     node = walker.nextNode()
   }
 
-  return html
+  return safeHtml
 }
 
 function getAnalysisFocusClass(isFocused: boolean, locked = false): string {

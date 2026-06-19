@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import { X, Upload, FileText, Loader2, AlertCircle } from 'lucide-react'
 import { parseJDByAI, extractTextFromImage } from '../../parsers/jdParser'
-import { useResumeStore } from '../../store/resumeStore'
 import type { JDParsedResult } from '../../types/application'
 
 interface Props {
@@ -20,8 +19,6 @@ export function JDParseModal({ isOpen, onClose, onParsed }: Props) {
   const [isParsing, setIsParsing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { apiKey: userApiKey } = useResumeStore()
-  const apiKey = (import.meta.env.VITE_MINIMAX_API_KEY as string)?.trim() || userApiKey
 
   const handleModeSelect = (selectedMode: 'image' | 'text') => {
     setMode(selectedMode)
@@ -49,11 +46,6 @@ export function JDParseModal({ isOpen, onClose, onParsed }: Props) {
   }
 
   const handleParse = async () => {
-    if (!apiKey?.trim()) {
-      setError('请先在设置中配置API密钥')
-      return
-    }
-
     setIsParsing(true)
     setError(null)
 
@@ -71,7 +63,7 @@ export function JDParseModal({ isOpen, onClose, onParsed }: Props) {
       }
 
       const controller = new AbortController()
-      const result = await parseJDByAI(rawText, apiKey, controller.signal)
+      const result = await parseJDByAI(rawText, controller.signal)
       onParsed(result)
       handleInternalClose()
     } catch (err) {
@@ -216,7 +208,7 @@ export function JDParseModal({ isOpen, onClose, onParsed }: Props) {
               </button>
               <button
                 onClick={handleParse}
-                disabled={isParsing || !apiKey?.trim() || (mode === 'image' && !imageFile) || (mode === 'text' && !textInput.trim())}
+                disabled={isParsing || (mode === 'image' && !imageFile) || (mode === 'text' && !textInput.trim())}
                 className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
               >
                 {isParsing ? (

@@ -238,9 +238,9 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     } catch (err) {
       console.error('Save error:', err)
       toast('保存失败，请重试', 'error')
+    } finally {
+      setIsSaving(false)
     }
-
-    setIsSaving(false)
   }
 
   const iconSize = 'w-3.5 h-3.5'

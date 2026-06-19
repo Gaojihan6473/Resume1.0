@@ -1,5 +1,7 @@
 ﻿import type { ResumeData } from '../types/resume'
 
+import { sanitizeRichHtml } from './richText'
+
 function normalizePdfFileName(fileName: string): string {
   const trimmed = fileName.trim()
   if (!trimmed) return 'resume.pdf'
@@ -133,7 +135,7 @@ function createPrintPage(
 function richTextToLines(html: string): string[] {
   if (!html) return []
   const container = document.createElement('div')
-  container.innerHTML = html
+  container.innerHTML = sanitizeRichHtml(html)
 
   const blocks = Array.from(container.querySelectorAll('p, div, li'))
   if (blocks.length > 0) {
