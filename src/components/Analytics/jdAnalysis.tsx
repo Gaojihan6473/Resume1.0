@@ -9,9 +9,9 @@ import {
   type SuggestionItem,
 } from '../../types/analytics'
 import type { ResumeData } from '../../types/resume'
-import { getMiniMaxContent, requestMiniMaxChat } from '../../lib/minimax'
+import { getDeepSeekContent, requestDeepSeekChat } from '../../lib/deepseek'
 
-const JD_ANALYSIS_MODEL = 'MiniMax-M3'
+const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
 const JD_ANALYSIS_TIMEOUT_MS = 240000
 const JD_ANALYSIS_MAX_TOKENS = 6000
 
@@ -34,7 +34,7 @@ export function AnalysisEmptyState({ isAnalyzing }: { isAnalyzing: boolean }) {
         <div className="mt-5 text-center">
           <p className="text-base font-semibold text-slate-800">{isAnalyzing ? '正在生成优化建议' : '准备就绪'}</p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            {isAnalyzing ? 'M3 正在匹配 JD、简历模块与命中片段' : '选择岗位并开始分析后，建议会出现在这里'}
+            {isAnalyzing ? 'DeepSeek V4 Flash 正在匹配 JD、简历模块与命中片段' : '选择岗位并开始分析后，建议会出现在这里'}
           </p>
         </div>
 
@@ -212,7 +212,7 @@ export function getJDAnalysisErrorMessage(error: unknown): string {
   if (/请求超时|AbortError|timeout/i.test(normalized)) {
     return [
       '分析请求超时。',
-      '已等待约 4 分钟仍未收到完整结果。可能是 JD 或简历内容较长，或当前 MiniMax M3 响应较慢。',
+      '已等待约 4 分钟仍未收到完整结果。可能是 JD 或简历内容较长，或当前 DeepSeek V4 Flash 响应较慢。',
       '可以直接重试；如果连续超时，再考虑精简 JD 中的福利、流程、公司介绍等非职责内容。',
     ].join('\n')
   }
@@ -220,14 +220,14 @@ export function getJDAnalysisErrorMessage(error: unknown): string {
   if (/API 错误 401|API 错误 403/.test(normalized)) {
     return [
       '分析服务鉴权失败。',
-      '请检查 MiniMax API Key 是否配置正确、是否仍然有效，并确认当前环境变量已重新加载。',
+      '请检查 DeepSeek API Key 是否配置正确、是否仍然有效，并确认当前环境变量已重新加载。',
     ].join('\n')
   }
 
   if (/API 错误 429/.test(normalized)) {
     return [
       '分析服务请求过于频繁或额度不足。',
-      '请稍后重试，或检查 MiniMax 账号额度与限流状态。',
+      '请稍后重试，或检查 DeepSeek 账号额度与限流状态。',
     ].join('\n')
   }
 
@@ -336,19 +336,18 @@ async function requestAnalysisContent({
   }
 
   try {
-    const result = await requestMiniMaxChat(
+    const result = await requestDeepSeekChat(
       {
         model: JD_ANALYSIS_MODEL,
         max_tokens: JD_ANALYSIS_MAX_TOKENS,
         temperature: 0,
-        thinking: { type: 'disabled' },
         response_format: { type: 'json_object' },
         messages,
       },
       controller.signal
     )
 
-    return getMiniMaxContent(result)
+    return getDeepSeekContent(result)
   } catch (error) {
     if (didTimeout) {
       throw new Error('请求超时')
