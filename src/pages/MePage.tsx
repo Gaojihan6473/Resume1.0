@@ -63,6 +63,7 @@ export function MePage() {
   const [retryCount, setRetryCount] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const accountDisplayName = user?.keyName || user?.email || ''
 
   // 首次渲染使用缓存，后台静默刷新
   useEffect(() => {
@@ -299,7 +300,7 @@ export function MePage() {
 
         <div className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/70">
           <User className="w-4 h-4 text-indigo-500" />
-          <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+          <span className="text-sm font-medium text-slate-700">{accountDisplayName}</span>
         </div>
 
         <div className="ml-auto flex items-center gap-3">
@@ -483,7 +484,7 @@ export function MePage() {
                   <User className="w-5 h-5 text-indigo-500" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-slate-800">{user?.email}</h4>
+                  <h4 className="text-sm font-medium text-slate-800">{accountDisplayName}</h4>
                   <p className="text-xs text-slate-400 mt-0.5">当前登录账号</p>
                 </div>
               </div>
