@@ -7,7 +7,7 @@ import { useAnalyticsStore } from '../../store/analyticsStore'
 import { GroupedBar } from './GroupedBar'
 import { ResumeJobGraph } from './ResumeJobGraph'
 import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
-import { fetchResumes } from '../../lib/api'
+import { fetchResumes, isSameResumeAsset } from '../../lib/api'
 import type { Resume } from '../../lib/api'
 import { CustomSelect } from '../Application/CustomSelect'
 import { useResumeStore } from '../../store/resumeStore'
@@ -45,7 +45,10 @@ export function Dashboard({ applications }: DashboardProps) {
           cachedResumes.length !== result.resumes.length ||
           result.resumes.some((r) => {
             const cached = cachedResumes.find((c) => c.id === r.id)
-            return !cached || cached.updated_at !== r.updated_at || cached.preview_url !== r.preview_url
+            return !cached ||
+              cached.updated_at !== r.updated_at ||
+              !isSameResumeAsset(cached.preview_url, r.preview_url) ||
+              !isSameResumeAsset(cached.file_url, r.file_url)
           })
 
         if (hasChanges) {

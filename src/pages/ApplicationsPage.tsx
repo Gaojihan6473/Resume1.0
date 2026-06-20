@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Loader2, Fish, ChevronsRight, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
-import { fetchResumes, type Resume } from '../lib/api'
+import { fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
@@ -85,7 +85,10 @@ export function ApplicationsPage() {
           cachedResumes.length !== result.resumes.length ||
           result.resumes.some((r) => {
             const cached = cachedResumes.find((c) => c.id === r.id)
-            return !cached || cached.updated_at !== r.updated_at || cached.preview_url !== r.preview_url
+            return !cached ||
+              cached.updated_at !== r.updated_at ||
+              !isSameResumeAsset(cached.preview_url, r.preview_url) ||
+              !isSameResumeAsset(cached.file_url, r.file_url)
           })
 
         if (hasChanges) {

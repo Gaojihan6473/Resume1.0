@@ -26,7 +26,7 @@ import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Upload } from '../components/Upload/Upload'
 import { Sidebar } from '../components/Sidebar/Sidebar'
-import { createResume, deleteResume, fetchResumes, type Resume } from '../lib/api'
+import { createResume, deleteResume, fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useApplicationStore } from '../store/applicationStore'
 import {
   APPLICATION_CHANNEL_LABELS,
@@ -91,7 +91,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           const hasChanges = cachedResumes.length !== result.resumes.length ||
             result.resumes.some((r, i) => {
               const cached = cachedResumes[i]
-              return !cached || r.updated_at !== cached.updated_at || r.preview_url !== cached.preview_url
+              return !cached ||
+                r.updated_at !== cached.updated_at ||
+                !isSameResumeAsset(r.preview_url, cached.preview_url) ||
+                !isSameResumeAsset(r.file_url, cached.file_url)
             })
 
           if (hasChanges) {

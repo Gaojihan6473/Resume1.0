@@ -2,6 +2,9 @@ import { supabase } from '../supabase'
 
 const RESUME_BUCKET = 'resumes'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
+const SIGNED_URL_REFRESH_BUFFER_MS = 5 * 60 * 1000
+
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>()
 
 export function getResumeAssetPath(value: string | null | undefined): string | null {
   if (!value) return null
@@ -29,6 +32,11 @@ export async function getSignedResumeAssetUrl(value: string | null | undefined):
   const path = getResumeAssetPath(value)
   if (!path) return null
 
+  const cached = signedUrlCache.get(path)
+  if (cached && cached.expiresAt - SIGNED_URL_REFRESH_BUFFER_MS > Date.now()) {
+    return cached.url
+  }
+
   const { data, error } = await supabase.storage
     .from(RESUME_BUCKET)
     .createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
@@ -38,7 +46,24 @@ export async function getSignedResumeAssetUrl(value: string | null | undefined):
     return value || null
   }
 
+  signedUrlCache.set(path, {
+    url: data.signedUrl,
+    expiresAt: Date.now() + SIGNED_URL_TTL_SECONDS * 1000,
+  })
+
   return data.signedUrl
+}
+
+export function isSameResumeAsset(
+  left: string | null | undefined,
+  right: string | null | undefined
+): boolean {
+  return getResumeAssetPath(left) === getResumeAssetPath(right)
+}
+
+export function invalidateResumeAssetUrl(value: string | null | undefined) {
+  const path = getResumeAssetPath(value)
+  if (path) signedUrlCache.delete(path)
 }
 
 export async function resolveResumeAssetUrls<T extends { file_url: string | null; preview_url: string | null }>(
@@ -144,6 +169,7 @@ export async function uploadResumePreview(
     }
 
     console.log('[uploadResumePreview] Success, path:', fileName)
+    invalidateResumeAssetUrl(fileName)
     return { success: true, previewUrl: fileName }
   } catch (error) {
     console.error('[uploadResumePreview] Exception:', error)
