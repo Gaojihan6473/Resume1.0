@@ -1,5 +1,67 @@
 import { supabase } from '../supabase'
 
+const RESUME_BUCKET = 'resumes'
+const SIGNED_URL_TTL_SECONDS = 60 * 60
+
+export function getResumeAssetPath(value: string | null | undefined): string | null {
+  if (!value) return null
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const signedMarker = `/storage/v1/object/sign/${RESUME_BUCKET}/`
+  const publicMarker = `/storage/v1/object/public/${RESUME_BUCKET}/`
+  const marker = trimmed.includes(signedMarker)
+    ? signedMarker
+    : trimmed.includes(publicMarker)
+      ? publicMarker
+      : null
+
+  if (marker) {
+    const pathWithQuery = trimmed.slice(trimmed.indexOf(marker) + marker.length)
+    return decodeURIComponent(pathWithQuery.split('?')[0])
+  }
+
+  return trimmed.replace(new RegExp(`^${RESUME_BUCKET}/`), '')
+}
+
+export async function getSignedResumeAssetUrl(value: string | null | undefined): Promise<string | null> {
+  const path = getResumeAssetPath(value)
+  if (!path) return null
+
+  const { data, error } = await supabase.storage
+    .from(RESUME_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
+
+  if (error || !data?.signedUrl) {
+    console.error('Create signed resume asset URL error:', error)
+    return value || null
+  }
+
+  return data.signedUrl
+}
+
+export async function resolveResumeAssetUrls<T extends { file_url: string | null; preview_url: string | null }>(
+  resume: T
+): Promise<T> {
+  const [fileUrl, previewUrl] = await Promise.all([
+    getSignedResumeAssetUrl(resume.file_url),
+    getSignedResumeAssetUrl(resume.preview_url),
+  ])
+
+  return {
+    ...resume,
+    file_url: fileUrl,
+    preview_url: previewUrl,
+  }
+}
+
+export async function resolveResumesAssetUrls<T extends { file_url: string | null; preview_url: string | null }>(
+  resumes: T[]
+): Promise<T[]> {
+  return Promise.all(resumes.map(resolveResumeAssetUrls))
+}
+
 export async function uploadResumeFile(file: File): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -7,11 +69,11 @@ export async function uploadResumeFile(file: File): Promise<{ success: boolean; 
       return { success: false, error: '未登录' }
     }
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase()
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin'
     const fileName = `${session.user.id}/${Date.now()}.${fileExt}`
 
     const { error: uploadError } = await supabase.storage
-      .from('resumes')
+      .from(RESUME_BUCKET)
       .upload(fileName, file, {
         cacheControl: '3600',
         upsert: false,
@@ -22,11 +84,7 @@ export async function uploadResumeFile(file: File): Promise<{ success: boolean; 
       return { success: false, error: '上传文件失败' }
     }
 
-    const { data: urlData } = supabase.storage
-      .from('resumes')
-      .getPublicUrl(fileName)
-
-    return { success: true, fileUrl: urlData.publicUrl }
+    return { success: true, fileUrl: fileName }
   } catch {
     return { success: false, error: '网络异常' }
   }
@@ -39,13 +97,13 @@ export async function deleteResumeFile(fileUrl: string): Promise<{ success: bool
       return { success: false, error: '未登录' }
     }
 
-    const fileName = fileUrl.split('/resumes/')[1]
+    const fileName = getResumeAssetPath(fileUrl)
     if (!fileName) {
       return { success: true }
     }
 
     const { error: deleteError } = await supabase.storage
-      .from('resumes')
+      .from(RESUME_BUCKET)
       .remove([fileName])
 
     if (deleteError) {
@@ -70,11 +128,11 @@ export async function uploadResumePreview(
       return { success: false, error: '未登录' }
     }
 
-    const fileName = `previews/${resumeId}.png`
+    const fileName = `${session.user.id}/previews/${resumeId}.png`
     console.log('[uploadResumePreview] Uploading to:', fileName, 'blob size:', imageBlob.size)
 
     const { error: uploadError } = await supabase.storage
-      .from('resumes')
+      .from(RESUME_BUCKET)
       .upload(fileName, imageBlob, {
         cacheControl: '3600',
         upsert: true,
@@ -85,12 +143,8 @@ export async function uploadResumePreview(
       return { success: false, error: '上传预览失败' }
     }
 
-    const { data: urlData } = supabase.storage
-      .from('resumes')
-      .getPublicUrl(fileName)
-
-    console.log('[uploadResumePreview] Success, URL:', urlData.publicUrl)
-    return { success: true, previewUrl: urlData.publicUrl }
+    console.log('[uploadResumePreview] Success, path:', fileName)
+    return { success: true, previewUrl: fileName }
   } catch (error) {
     console.error('[uploadResumePreview] Exception:', error)
     return { success: false, error: '网络异常' }

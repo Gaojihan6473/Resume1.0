@@ -67,17 +67,6 @@ export async function fetchCurrentUser(): Promise<MeResponse> {
 
     return await response.json()
   } catch {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      return {
-        authenticated: true,
-        user: {
-          id: user.id,
-          email: user.email || '',
-          keyName: '已登录用户',
-        },
-      }
-    }
     return { authenticated: false, error: '网络异常' }
   }
 }

@@ -86,7 +86,7 @@ Unknown paths redirect to `/`.
 
 ## Authentication
 - Login uses the Supabase Edge Function `auth-sign-in` with an `sk-...` API key.
-- The function SHA-256 hashes the key, looks up `public.valid_keys.key_hash` where `is_active = true`, then signs in the linked Auth user.
+- The function SHA-256 hashes the key, looks up `public.valid_keys.key_hash` where `is_active = true`, then generates a Supabase magic-link token server-side and exchanges it for a session.
 - Session is stored in the Supabase client; auth state hydrates on app mount via `checkSession()`.
 - `ProtectedRoute` guards `/me`, `/applications`, `/analytics`. `AuthRequiredModal` is shown when an unauthenticated user tries `new` / `upload` from the Toolbar/Upload (the `auth:required` window event carries the original action so the login redirect can resume it).
 - API key for resume AI parsing lives in Zustand (`resumeStore.apiKey`); API key for JD analysis is read from `import.meta.env.VITE_MINIMAX_API_KEY` (see `.env.example`).
@@ -123,6 +123,7 @@ When `isDirty` is true and the user navigates away from `/` or to `/me`, `DirtyC
 - Create the linked Supabase Auth user via the **Auth Admin API** (not by direct SQL into `auth.users` — direct inserts can leave `auth.users` rows that `supabase.auth.admin.getUserById` still reports as "用户不存在").
 - Insert `public.valid_keys` with `user_id`, `key_hash`, `key_name`, `is_active = true`.
 - Call `auth-sign-in` with each new plaintext key and verify a session is returned before handing keys over.
+- Do not use shared or hardcoded Auth passwords for key login.
 - Plaintext keys are only recoverable at generation — deliver/store them immediately; the DB keeps only hashes. Never commit generated keys or service-role tokens.
 - If a temporary Edge Function calls the Auth Admin API, protect it during use and disable/remove it immediately after verification.
 

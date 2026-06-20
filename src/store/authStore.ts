@@ -11,7 +11,6 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
-  // Actions
   signIn: (key: string) => Promise<boolean>
   signOut: () => Promise<void>
   checkSession: () => Promise<void>
@@ -28,7 +27,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   signIn: async (key: string) => {
     set({ isLoading: true, error: null })
 
-    // Validate key format
     if (!key.startsWith('sk-')) {
       set({ error: '密钥格式不正确', isLoading: false })
       return false
@@ -91,6 +89,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           })
           return
         }
+
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
       }
 
       set({

@@ -54,7 +54,7 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 - `supabase/.temp` files are generated state; avoid manual edits unless explicitly needed.
 
 ## Login Key Creation
-- Login uses the `auth-sign-in` Edge Function. It hashes the submitted `sk-...` key with SHA-256, looks up `public.valid_keys.key_hash` where `is_active = true`, then signs in the linked Auth user with the fixed password expected by the current function (`testpassword123`).
+- Login uses the `auth-sign-in` Edge Function. It hashes the submitted `sk-...` key with SHA-256, looks up `public.valid_keys.key_hash` where `is_active = true`, then generates a Supabase magic-link token server-side and exchanges it for a session. Do not reintroduce shared or hardcoded Auth passwords.
 - To create new login keys, generate fresh `sk-...` plaintext keys, compute their SHA-256 hashes, create the corresponding Supabase Auth users through the Supabase Auth Admin API (not by direct SQL into `auth.users`), then insert `public.valid_keys` rows with `user_id`, `key_hash`, `key_name`, and `is_active = true`.
 - Do not directly SQL-insert Auth users: rows can appear in `auth.users` while `supabase.auth.admin.getUserById` still fails with `用户不存在`.
 - After creation, call `auth-sign-in` with each new plaintext key and verify a session is returned before giving the keys to the user.

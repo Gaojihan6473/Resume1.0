@@ -87,9 +87,10 @@ function normalizePayload(raw: unknown): Record<string, unknown> {
 async function getAuthenticatedUser(req: Request): Promise<Response | null> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const authHeader = req.headers.get('Authorization')
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
     return jsonResponse({ error: 'Supabase environment variables are missing.' }, 500)
   }
   if (!authHeader) {
@@ -103,6 +104,21 @@ async function getAuthenticatedUser(req: Request): Promise<Response | null> {
 
   if (error || !user) {
     return jsonResponse({ error: 'Invalid or expired session.' }, 401)
+  }
+
+  const admin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data: validKey, error: keyError } = await admin
+    .from('valid_keys')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (keyError || !validKey) {
+    return jsonResponse({ error: 'Session is no longer active.' }, 401)
   }
 
   return null

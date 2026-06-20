@@ -90,6 +90,7 @@ async function fetchApplicationsOnce(): Promise<Application[]> {
   const { data, error } = await supabase
     .from('applications')
     .select('*')
+    .eq('user_id', session.user.id)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -159,6 +160,7 @@ export async function updateApplication(
     .from('applications')
     .update(updateData)
     .eq('id', id)
+    .eq('user_id', session.user.id)
     .select()
     .single()
 
@@ -181,6 +183,7 @@ export async function deleteApplication(id: string): Promise<void> {
     .from('applications')
     .delete()
     .eq('id', id)
+    .eq('user_id', session.user.id)
 
   if (error) {
     throw new Error('删除投递记录失败')

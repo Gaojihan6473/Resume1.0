@@ -86,7 +86,7 @@ export function LoginPage() {
               密钥
             </label>
             <input
-              type="text"
+              type="password"
               id="key"
               value={key}
               onChange={(e) => {

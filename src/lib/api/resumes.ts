@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { getResumeAssetPath, resolveResumeAssetUrls, resolveResumesAssetUrls } from './storage'
 
 export interface Resume {
   id: string
@@ -42,13 +43,14 @@ async function fetchResumesOnce(): Promise<ResumesResponse> {
     const { data: resumes, error } = await supabase
       .from('resumes')
       .select('*')
+      .eq('user_id', session.user.id)
       .order('updated_at', { ascending: false })
 
     if (error) {
       return { success: false, error: '获取简历列表失败' }
     }
 
-    return { success: true, resumes }
+    return { success: true, resumes: await resolveResumesAssetUrls(resumes || []) }
   } catch {
     return { success: false, error: '网络异常' }
   }
@@ -74,8 +76,8 @@ export async function createResume(
         title,
         content,
         source,
-        file_url: fileUrl,
-        preview_url: previewUrl,
+        file_url: getResumeAssetPath(fileUrl),
+        preview_url: getResumeAssetPath(previewUrl),
       })
       .select()
       .single()
@@ -85,7 +87,7 @@ export async function createResume(
       return { success: false, error: '创建简历失败' }
     }
 
-    return { success: true, resume }
+    return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch {
     return { success: false, error: '网络异常' }
   }
@@ -105,10 +107,11 @@ export async function updateResumePreviewUrl(
     const { data: resume, error } = await supabase
       .from('resumes')
       .update({
-        preview_url: previewUrl,
+        preview_url: getResumeAssetPath(previewUrl),
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('user_id', session.user.id)
       .select()
       .single()
 
@@ -118,7 +121,7 @@ export async function updateResumePreviewUrl(
     }
 
     console.log('[updateResumePreviewUrl] Success:', resume)
-    return { success: true, resume }
+    return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch (error) {
     console.error('[updateResumePreviewUrl] Exception:', error)
     return { success: false, error: '网络异常' }
@@ -144,6 +147,7 @@ export async function updateResume(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('user_id', session.user.id)
       .select()
       .single()
 
@@ -151,7 +155,7 @@ export async function updateResume(
       return { success: false, error: '更新简历失败' }
     }
 
-    return { success: true, resume }
+    return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch {
     return { success: false, error: '网络异常' }
   }
@@ -168,6 +172,7 @@ export async function deleteResume(id: string): Promise<ResumesResponse> {
       .from('resumes')
       .delete()
       .eq('id', id)
+      .eq('user_id', session.user.id)
 
     if (error) {
       return { success: false, error: '删除简历失败' }
@@ -190,13 +195,14 @@ export async function getResume(id: string): Promise<ResumesResponse> {
       .from('resumes')
       .select('*')
       .eq('id', id)
+      .eq('user_id', session.user.id)
       .single()
 
     if (error) {
       return { success: false, error: '获取简历失败' }
     }
 
-    return { success: true, resume }
+    return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch {
     return { success: false, error: '网络异常' }
   }
