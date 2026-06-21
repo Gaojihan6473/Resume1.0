@@ -1,4 +1,5 @@
-import { FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, Wrench, Pencil } from 'lucide-react'
+import { FileSearch2, FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, Wrench, SquarePen } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { Resume } from '../../lib/api'
 import type { ResumeData } from '../../types/resume'
 import { PdfPreview } from './PdfPreview'
@@ -9,9 +10,10 @@ interface Props {
   isMinimized: boolean
   onClick: () => void
   onEdit?: () => void
+  onAnalyze?: () => void
 }
 
-export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, onEdit }: Props) {
+export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, onEdit, onAnalyze }: Props) {
   const content = resume.content as unknown as ResumeData
   const { basic, education, internships, skills } = content
   const hasPreview = !!resume.preview_url
@@ -150,20 +152,8 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
         <>
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
-              <span className="block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              {onEdit && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onEdit()
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-medium text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                >
-                  <Pencil className="w-3 h-3" />
-                  编辑
-                </button>
-              )}
+              <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
+              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
             </div>
           </div>
           <div className="flex-1 p-1 bg-slate-100 overflow-hidden flex items-center justify-center">
@@ -178,20 +168,8 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
         <>
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
-              <span className="block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              {onEdit && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onEdit()
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-medium text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                >
-                  <Pencil className="w-3 h-3" />
-                  编辑
-                </button>
-              )}
+              <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
+              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
             </div>
           </div>
           <div className="flex-1 p-1 bg-slate-100 overflow-hidden flex items-center justify-center">
@@ -202,20 +180,8 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
         <>
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
-              <span className="block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              {onEdit && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onEdit()
-                  }}
-                  className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-medium text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                >
-                  <Pencil className="w-3 h-3" />
-                  编辑
-                </button>
-              )}
+              <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
+              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
             </div>
           </div>
 
@@ -273,5 +239,69 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
         </>
       )}
     </div>
+  )
+}
+
+function ResumeCardActions({
+  onEdit,
+  onAnalyze,
+}: {
+  onEdit?: () => void
+  onAnalyze?: () => void
+}) {
+  if (!onEdit && !onAnalyze) return null
+
+  const buttonBase = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent outline-none transition-colors'
+
+  return (
+    <div className="-mr-1 flex shrink-0 items-center gap-0.5">
+      {onEdit && (
+        <IconActionWithTooltip label="编辑简历">
+          <button
+            type="button"
+            aria-label="编辑简历"
+            onClick={(event) => {
+              event.stopPropagation()
+              onEdit()
+            }}
+            className={`${buttonBase} text-slate-400 hover:bg-slate-100/80 hover:text-slate-600 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-100`}
+          >
+            <SquarePen className="h-4 w-4 translate-x-0.5" />
+          </button>
+        </IconActionWithTooltip>
+      )}
+      {onAnalyze && (
+        <IconActionWithTooltip label="JD分析">
+          <button
+            type="button"
+            aria-label="JD分析"
+            onClick={(event) => {
+              event.stopPropagation()
+              onAnalyze()
+            }}
+            className={`${buttonBase} text-indigo-500 hover:bg-blue-50 hover:text-blue-600 focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-100`}
+          >
+            <FileSearch2 className="h-4 w-4" />
+          </button>
+        </IconActionWithTooltip>
+      )}
+    </div>
+  )
+}
+
+function IconActionWithTooltip({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <span className="group/tooltip relative inline-flex">
+      {children}
+      <span className="pointer-events-none absolute right-0 top-full z-30 mt-1.5 whitespace-nowrap rounded-lg border border-slate-200/80 bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-600 opacity-0 shadow-lg shadow-slate-900/10 backdrop-blur transition-all duration-150 group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100 group-focus-within/tooltip:translate-y-0 group-focus-within/tooltip:opacity-100">
+        {label}
+      </span>
+    </span>
   )
 }

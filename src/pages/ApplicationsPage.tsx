@@ -236,6 +236,15 @@ const handleGoHome = () => {
     navigate('/')
   }
 
+  const handleAnalyzeResume = (resume: Resume) => {
+    setResumeData(resume.content as unknown as ResumeData)
+    setCurrentResumeId(resume.id)
+    setIsDirty(false)
+    setParseError(null)
+    setParseStatus('success')
+    navigate('/?tab=jd')
+  }
+
   const handleNewResume = () => {
     setResumeData(createDefaultResumeData())
     setCurrentResumeId(null)
@@ -309,6 +318,7 @@ const handleGoHome = () => {
                 selectedResumeId={selectedResumeId}
                 onSelectResume={(id) => setSelectedResumeId(id || null)}
                 onEditResume={handleEditResume}
+                onAnalyzeResume={handleAnalyzeResume}
               />
             )}
           </div>
