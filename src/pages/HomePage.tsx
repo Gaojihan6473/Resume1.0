@@ -48,7 +48,6 @@ interface HomePageProps {
   onAuthRequired?: (action: 'new' | 'upload' | 'me') => void
 }
 
-const HOME_RECENT_RESUME_LIMIT = 5
 const HOME_RECENT_APPLICATION_LIMIT = 8
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
@@ -75,7 +74,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     if (isAuthenticated) {
       // 优先使用缓存
       if (cachedResumes.length > 0) {
-        setRecentResumes(cachedResumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+        setRecentResumes(cachedResumes)
         setIsLoadingResumes(false)
       } else {
         setIsLoadingResumes(true)
@@ -98,10 +97,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
             })
 
           if (hasChanges) {
-            setRecentResumes(result.resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+            setRecentResumes(result.resumes)
             setCachedResumes(result.resumes, Date.now())
           } else if (cachedResumes.length === 0) {
-            setRecentResumes(result.resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+            setRecentResumes(result.resumes)
           }
         }
         setIsLoadingResumes(false)
@@ -187,7 +186,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   }, [navigate])
 
   const syncResumeList = (resumes: Resume[], fetchedAt: number) => {
-    setRecentResumes(resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+    setRecentResumes(resumes)
     setCachedResumes(resumes, fetchedAt)
   }
 
@@ -379,7 +378,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       )}
                     />
                   ) : (
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-5">
                       {recentResumes.map((resume) => (
                         <HomeResumeCard
                           key={resume.id}
@@ -434,7 +433,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       )}
                     />
                   ) : (
-                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
                       {recentApplications.map((application) => (
                         <HomeApplicationCard
                           key={application.id}
@@ -520,7 +519,7 @@ function LoggedInActionStrip({
 
   return (
     <section className="home-action-strip">
-      <div className="home-action-strip-content flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="home-action-strip-content flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <span className="home-action-mark">
             <Target className="h-4 w-4" />
@@ -658,10 +657,10 @@ function HomeGhostButton({
   className?: string
 }) {
   const sizeClass = menuAligned
-    ? 'h-11 justify-start px-4 text-sm'
+    ? 'h-10 justify-start px-3.5 text-sm'
     : compact
-      ? 'h-10 justify-center px-4 text-sm'
-      : 'h-11 justify-center px-5 text-sm'
+      ? 'h-9 justify-center px-3.5 text-xs'
+      : 'h-10 justify-center px-4 text-sm'
 
   return (
     <button
@@ -994,21 +993,21 @@ function HomeResumeCard({
       className={`group relative min-w-0 cursor-pointer text-left outline-none ${isMenuOpen ? 'z-30' : ''}`}
     >
       <div className="relative">
-        <div className="aspect-[210/297] overflow-hidden rounded-[18px] border border-slate-200 bg-white/95 shadow-md shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-xl group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
+        <div className="aspect-[210/297] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-lg group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
           {hasPreview ? (
-            <div className="flex h-full w-full items-center justify-center rounded-[18px] bg-white">
+            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white">
               <img
                 src={resume.preview_url!}
                 alt={title}
-                className="h-full w-full rounded-[18px] object-contain"
+                className="h-full w-full rounded-2xl object-contain"
               />
             </div>
           ) : hasPdf ? (
-            <div className="flex h-full w-full items-start justify-center rounded-[18px] bg-white">
-              <PdfPreview fileUrl={resume.file_url!} className="h-full w-full rounded-[18px] bg-white" />
+            <div className="flex h-full w-full items-start justify-center rounded-2xl bg-white">
+              <PdfPreview fileUrl={resume.file_url!} className="h-full w-full rounded-2xl bg-white" />
             </div>
           ) : (
-            <div className="h-full overflow-hidden rounded-[18px] bg-white p-4">
+            <div className="h-full overflow-hidden rounded-2xl bg-white p-4">
               <div className="border-b border-slate-100 pb-3 text-center">
                 <h3 className="truncate text-sm font-bold text-slate-800">
                   {content.basic?.name || '未命名'}
@@ -1050,7 +1049,7 @@ function HomeResumeCard({
         </div>
 
         <div
-          className={`absolute bottom-3 right-3 z-20 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+          className={`absolute bottom-2.5 right-2.5 z-20 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
@@ -1061,7 +1060,7 @@ function HomeResumeCard({
             aria-expanded={isMenuOpen}
             disabled={isLoading}
             onClick={onToggleMenu}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1099,11 +1098,11 @@ function HomeResumeCard({
           )}
         </div>
       </div>
-      <div className="mt-4 min-w-0">
-        <p className="truncate text-base font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
+      <div className="mt-3 min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
           {title}
         </p>
-        <p className="mt-1 text-xs font-medium text-slate-400">
+        <p className="mt-1 text-[11px] font-medium text-slate-400">
           {new Date(resume.updated_at).toLocaleDateString('zh-CN')}
         </p>
       </div>
@@ -1126,23 +1125,23 @@ function HomeApplicationCard({
   return (
     <button
       onClick={onClick}
-      className="group relative min-h-[140px] min-w-0 rounded-[20px] border border-slate-200 bg-white/95 p-5 text-left shadow-md shadow-slate-200/60 transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-xl hover:shadow-blue-100"
+      className="group relative min-h-[116px] min-w-0 rounded-2xl border border-slate-200 bg-white/95 p-4 text-left shadow-sm shadow-slate-200/60 transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-lg hover:shadow-blue-100"
     >
-      <div className="absolute right-5 top-5">
+      <div className="absolute right-4 top-4">
         <StatusPill status={application.status} />
       </div>
 
       <div className="min-w-0">
         <div className="min-w-0 pr-20">
-          <p className="truncate text-base font-bold text-slate-900">
+          <p className="truncate text-sm font-bold text-slate-900">
             {application.company || '未填写公司'}
           </p>
-          <p className="mt-1.5 truncate text-sm font-medium text-slate-500">
+          <p className="mt-1.5 truncate text-xs font-medium text-slate-500">
             {application.position || '未填写岗位'}
           </p>
         </div>
 
-        <div className="mt-5 flex min-w-0 items-center gap-3 overflow-hidden text-[11px] font-medium text-slate-500">
+        <div className="mt-4 flex min-w-0 items-center gap-2.5 overflow-hidden text-[11px] font-medium text-slate-500">
           {application.location && (
             <p className="flex min-w-0 max-w-[4.75rem] shrink-0 items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />

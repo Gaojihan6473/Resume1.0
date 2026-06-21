@@ -82,13 +82,13 @@ body {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: 76px;
+  min-height: 66px;
   border: 1px solid transparent;
-  border-radius: 28px;
+  border-radius: 24px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 252, 255, 0.88)) padding-box,
     linear-gradient(120deg, rgba(56, 189, 248, 0.5), rgba(129, 140, 248, 0.42), rgba(168, 85, 247, 0.34), rgba(45, 212, 191, 0.42)) border-box;
-  padding: 10px 14px 10px 20px;
+  padding: 8px 12px 8px 18px;
   box-shadow:
     0 0 0 1px rgba(129, 140, 248, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.94),
@@ -128,12 +128,12 @@ body {
 
 .home-action-mark {
   display: inline-flex;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
+  border-radius: 16px;
   color: #2563eb;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.78));
@@ -145,12 +145,12 @@ body {
 
 .home-action-kicker {
   display: inline-flex;
-  height: 24px;
+  height: 22px;
   align-items: center;
   gap: 5px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.62);
-  padding: 0 10px;
+  padding: 0 9px;
   color: #2563eb;
   font-size: 12px;
   font-weight: 700;
@@ -161,27 +161,27 @@ body {
 }
 
 .home-action-copy {
-  margin-top: 6px;
+  margin-top: 5px;
   color: #475569;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.55;
 }
 
 .home-action-button {
   display: inline-flex;
-  height: 48px;
+  height: 40px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: 8px;
   border: 0;
-  border-radius: 20px;
+  border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.78));
-  padding: 0 18px;
+  padding: 0 14px;
   color: #475569;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   outline: none;
