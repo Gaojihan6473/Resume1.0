@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
 import { toast } from '../../components/Toast'
+import { SidebarTriggerHint } from '../Sidebar/SidebarTriggerHint'
 import type { StyleSettings } from '../../types/resume'
 import { saveCurrentResumeToCloud } from '../../utils/saveResume'
 import {
@@ -269,6 +270,7 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
       </div>
+      <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
 
       {/* 中间区域 - 可滚动 */}
       <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar min-w-0 gap-1 px-2">

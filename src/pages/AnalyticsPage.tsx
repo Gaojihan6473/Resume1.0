@@ -5,6 +5,7 @@ import { useApplicationStore } from '../store/applicationStore'
 import { useResumeStore } from '../store/resumeStore'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { Dashboard } from '../components/Analytics/Dashboard'
 
 export function AnalyticsPage() {
@@ -39,6 +40,7 @@ export function AnalyticsPage() {
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={triggerRef} />
       </header>
 
       {/* 主体内容 */}

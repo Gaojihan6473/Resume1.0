@@ -26,6 +26,7 @@ import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Upload } from '../components/Upload/Upload'
 import { Sidebar } from '../components/Sidebar/Sidebar'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { createResume, deleteResume, fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useApplicationStore } from '../store/applicationStore'
 import {
@@ -300,6 +301,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
       </header>
 
       {/* 主体 */}

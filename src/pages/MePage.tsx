@@ -12,6 +12,7 @@ import { useResumeStore } from '../store/resumeStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { toast } from '../components/Toast'
 import {
   FileText,
@@ -297,6 +298,7 @@ export function MePage() {
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={triggerRef} />
 
         <div className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/70">
           <User className="w-4 h-4 text-indigo-500" />
