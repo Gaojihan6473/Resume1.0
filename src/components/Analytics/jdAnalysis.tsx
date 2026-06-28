@@ -11,7 +11,8 @@ import {
 import type { ResumeData } from '../../types/resume'
 import { getDeepSeekContent, requestDeepSeekChat } from '../../lib/deepseek'
 
-const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
+export const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
+export const JD_ANALYSIS_PROMPT_VERSION = '2026-06-28-v1'
 const JD_ANALYSIS_TIMEOUT_MS = 240000
 const JD_ANALYSIS_MAX_TOKENS = 6000
 
