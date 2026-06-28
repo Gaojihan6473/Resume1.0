@@ -25,7 +25,6 @@ const ALLOWED_STYLE_PROPERTIES = new Set([
   'background',
   'background-color',
   'border-radius',
-  'color',
   'margin-left',
   'padding',
   'padding-left',

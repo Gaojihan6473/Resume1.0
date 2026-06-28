@@ -29,11 +29,20 @@ export function RichTextEditor({
   placeholder,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
+  const onChangeRef = useRef(onChange)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
 
   useEffect(() => {
     if (!editorRef.current) return
-    if (editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || ''
+    const safeValue = sanitizeRichHtml(value || '')
+    if (editorRef.current.innerHTML !== safeValue) {
+      editorRef.current.innerHTML = safeValue
+    }
+    if ((value || '') !== safeValue) {
+      onChangeRef.current(safeValue)
     }
   }, [value])
 
