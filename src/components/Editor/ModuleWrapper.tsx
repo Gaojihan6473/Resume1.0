@@ -67,11 +67,13 @@ export function ModuleWrapper({
         )}
       </div>
       <div
-        className={`overflow-hidden transition-all duration-300 ease-out ${
-          expanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+        className={`grid overflow-hidden transition-all duration-300 ease-out ${
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
-        <div className="p-4 bg-gray-50/50">{children}</div>
+        <div className="min-h-0 overflow-hidden">
+          <div className="p-4 bg-gray-50/50">{children}</div>
+        </div>
       </div>
     </div>
   )
