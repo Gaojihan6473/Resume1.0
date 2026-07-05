@@ -10,11 +10,14 @@ function getPdfRenderUrl(): string {
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
+  const text = await response.text()
+  if (!text) return 'PDF 生成失败'
+
   try {
-    const body = await response.json() as { error?: string }
+    const body = JSON.parse(text) as { error?: string }
     return body.error || 'PDF 生成失败'
   } catch {
-    return await response.text() || 'PDF 生成失败'
+    return text
   }
 }
 
@@ -41,9 +44,9 @@ export async function renderResumePdf(
   }
 
   if (!response.ok) {
-    if (response.status === 404) {
+    if (response.status === 404 || response.status === 405) {
       throw new Error(
-        'PDF 渲染服务未找到。请确认 /render-resume-pdf 已部署，或设置 VITE_PDF_RENDER_URL 指向 PDF 渲染服务。'
+        'PDF 渲染接口未部署或未允许 POST。请确认 Vercel Function /render-resume-pdf 已部署，或设置 VITE_PDF_RENDER_URL 指向 PDF 渲染服务。'
       )
     }
     throw new Error(await readErrorMessage(response))
