@@ -2,12 +2,11 @@ import type { ResumeData } from '../../types/resume'
 import { getAuthHeaders } from './shared'
 
 const configuredPdfRenderUrl = import.meta.env.VITE_PDF_RENDER_URL as string | undefined
-const localPdfRenderUrl = '/render-resume-pdf'
+const defaultPdfRenderUrl = '/render-resume-pdf'
 
 function getPdfRenderUrl(): string {
-  if (import.meta.env.DEV) return localPdfRenderUrl
-  if (configuredPdfRenderUrl) return configuredPdfRenderUrl
-  return ''
+  const url = configuredPdfRenderUrl?.trim()
+  return url || defaultPdfRenderUrl
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -25,18 +24,28 @@ export async function renderResumePdf(
   html?: string
 ): Promise<Blob> {
   const pdfRenderUrl = getPdfRenderUrl()
-  if (!pdfRenderUrl) {
-    throw new Error('缺少 VITE_PDF_RENDER_URL，无法生成稳定 PDF')
+  const headers = await getAuthHeaders()
+  let response: Response
+
+  try {
+    response = await fetch(pdfRenderUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ resumeData, title, html }),
+    })
+  } catch (error) {
+    console.error('[PDF] Render service request failed:', error)
+    throw new Error(
+      'PDF 渲染服务不可用。请确认 /render-resume-pdf 已部署，或设置 VITE_PDF_RENDER_URL 指向 PDF 渲染服务。'
+    )
   }
 
-  const headers = await getAuthHeaders()
-  const response = await fetch(pdfRenderUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ resumeData, title, html }),
-  })
-
   if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(
+        'PDF 渲染服务未找到。请确认 /render-resume-pdf 已部署，或设置 VITE_PDF_RENDER_URL 指向 PDF 渲染服务。'
+      )
+    }
     throw new Error(await readErrorMessage(response))
   }
 
