@@ -1060,7 +1060,7 @@ function HomeResumeCard({
             aria-expanded={isMenuOpen}
             disabled={isLoading}
             onClick={onToggleMenu}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.18),0_2px_6px_rgba(15,23,42,0.1)] backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-[0_14px_30px_rgba(37,99,235,0.2),0_4px_10px_rgba(15,23,42,0.12)] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

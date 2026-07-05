@@ -219,6 +219,7 @@ function Annotation({
   const isInteractive = Boolean(target && (onSuggestionHover || onSuggestionClick))
   const excerptText = getSuggestionExcerpt(suggestion, fallbackContent)
   const problemReasonText = getProblemReasonText(suggestion)
+  const suggestionText = stripSuggestionPriority(suggestion.suggestion)
 
   const handleHover = () => {
     if (target) onSuggestionHover?.(target)
@@ -279,7 +280,7 @@ function Annotation({
 
           <AnnotationBlock
             label="优化建议"
-            text={suggestion.suggestion}
+            text={suggestionText}
             tone="suggestion"
           />
         </div>
@@ -325,13 +326,26 @@ function AnnotationBlock({
             <li key={`${point}-${pointIndex}`}>{point}</li>
           ))}
         </ul>
-      ) : (
+      ) : points.length === 1 ? (
         <p className={`jd-annotation-text ${allowList ? '' : 'line-clamp-3'}`}>
           {points[0]}
         </p>
-      )}
+      ) : null}
     </div>
   )
+}
+
+function stripSuggestionPriority(value?: string): string {
+  const source = value || ''
+  const priorityMatch = source.match(/优先级\s*[:：]\s*([^,，、；;\n。]+)/)
+  if (!priorityMatch) return source
+
+  return source
+    .replace(/优先级\s*[:：]\s*[^,，、；;\n。]+/, '')
+    .replace(/^[\s,，、；;。]+/, '')
+    .replace(/[\s,，、；;。]+$/, '')
+    .replace(/([,，、；;])\s*[,，、；;]/g, '$1')
+    .trim()
 }
 
 function getProblemReasonText(suggestion: SuggestionItem): string {
