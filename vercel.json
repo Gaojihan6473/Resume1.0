@@ -1,12 +1,12 @@
 {
   "framework": "vite",
   "buildCommand": "yarn build",
-  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 yarn install && PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium",
+  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 yarn install",
   "outputDirectory": "dist",
   "functions": {
     "api/render-resume-pdf.js": {
       "maxDuration": 60,
-      "includeFiles": "{scripts/resume-pdf-renderer.mjs,src/assets/hero.png,node_modules/playwright-core/.local-browsers/**/*,node_modules/@fontsource/noto-sans-sc/files/**/*,node_modules/@fontsource/noto-serif-sc/files/**/*}"
+      "includeFiles": "{scripts/resume-pdf-renderer.mjs,src/assets/hero.png,node_modules/@sparticuz/chromium/bin/**/*,node_modules/@fontsource/noto-sans-sc/files/**/*,node_modules/@fontsource/noto-serif-sc/files/**/*}"
     }
   },
   "rewrites": [

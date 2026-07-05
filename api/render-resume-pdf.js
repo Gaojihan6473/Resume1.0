@@ -4,14 +4,13 @@ export const config = {
   maxDuration: 60,
 }
 
-process.env.PLAYWRIGHT_BROWSERS_PATH ||= '0'
-
 const maxBodyBytes = Number(process.env.PDF_RENDER_MAX_BODY_BYTES || 5 * 1024 * 1024)
 const requireAuth = process.env.PDF_RENDER_REQUIRE_AUTH !== 'false'
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
 
 let browserPromise = null
+let serverlessChromiumPromise = null
 let chromiumPromise = null
 
 function allowedOrigin(req) {
@@ -119,15 +118,24 @@ async function verifyAuth(req) {
 }
 
 async function getBrowser() {
+  if (!serverlessChromiumPromise) {
+    serverlessChromiumPromise = import('@sparticuz/chromium').then((module) => module.default)
+  }
+
   if (!chromiumPromise) {
-    chromiumPromise = import('playwright').then((module) => module.chromium)
+    chromiumPromise = import('playwright-core').then((module) => module.chromium)
   }
 
   if (!browserPromise) {
-    const chromium = await chromiumPromise
+    const [serverlessChromium, chromium] = await Promise.all([
+      serverlessChromiumPromise,
+      chromiumPromise,
+    ])
+
     browserPromise = chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: serverlessChromium.args,
+      executablePath: await serverlessChromium.executablePath(),
+      headless: serverlessChromium.headless,
     })
   }
   return browserPromise
