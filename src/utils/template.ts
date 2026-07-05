@@ -6,6 +6,7 @@
   ResumeData,
 } from '../types/resume'
 import { buildRichHtmlFromLines, normalizeRichHtml } from './richText'
+import { sanitizeResumeText } from './textSanitizer'
 
 const REFERENCE_STYLE: ResumeData['style'] = {
   fontFamily: 'sans-serif',
@@ -18,11 +19,11 @@ const REFERENCE_STYLE: ResumeData['style'] = {
 }
 
 function cleanText(value: string): string {
-  return (value || '').replace(/\u00A0/g, ' ').trim()
+  return sanitizeResumeText(value || '').replace(/\u00A0/g, ' ').trim()
 }
 
 function cleanMultilineText(value: string): string {
-  return (value || '')
+  return sanitizeResumeText(value || '')
     .replace(/\r/g, '')
     .split('\n')
     .map((line) => line.trim())

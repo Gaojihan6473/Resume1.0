@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { buildResumePdfHtml, getEmbeddedFontCss } from './resume-pdf-renderer.mjs'
+import { buildResumePdfHtml, getEmbeddedFontCss, sanitizeResumeText } from './resume-pdf-renderer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -204,7 +204,7 @@ function stripResumeFontFaces(html) {
 
 function injectEmbeddedResumeFonts(html, fontFamily) {
   const fontCss = getEmbeddedFontCss(fontFamily)
-  const htmlWithoutExternalFonts = stripResumeFontFaces(html)
+  const htmlWithoutExternalFonts = stripResumeFontFaces(sanitizeResumeText(html))
 
   if (/<\/style>/i.test(htmlWithoutExternalFonts)) {
     return htmlWithoutExternalFonts.replace(/<\/style>/i, `\n${fontCss}\n</style>`)

@@ -1,5 +1,7 @@
-﻿function escapeHtml(value: string): string {
-  return value
+﻿import { sanitizeResumeText } from './textSanitizer'
+
+function escapeHtml(value: string): string {
+  return sanitizeResumeText(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
@@ -32,7 +34,7 @@ const ALLOWED_STYLE_PROPERTIES = new Set([
 ])
 
 function normalizeLines(lines: string[]): string[] {
-  return lines.map((line) => line.replace(/\r/g, '').trim()).filter(Boolean)
+  return lines.map((line) => sanitizeResumeText(line).replace(/\r/g, '').trim()).filter(Boolean)
 }
 
 function sanitizeStyle(value: string): string {
@@ -55,7 +57,7 @@ function sanitizeStyle(value: string): string {
 
 function sanitizeNode(node: Node, doc: Document): Node {
   if (node.nodeType === Node.TEXT_NODE) {
-    return doc.createTextNode(node.textContent || '')
+    return doc.createTextNode(sanitizeResumeText(node.textContent || ''))
   }
 
   if (node.nodeType !== Node.ELEMENT_NODE) {

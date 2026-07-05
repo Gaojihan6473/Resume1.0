@@ -12,6 +12,7 @@ import type {
 } from '../types/resume'
 import { createDefaultResumeData } from '../types/resume'
 import { normalizeRichHtml } from './richText'
+import { sanitizeResumeText } from './textSanitizer'
 
 export const RESUME_DATA_SCHEMA_VERSION = 1
 
@@ -22,7 +23,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asString(value: unknown): string {
-  return typeof value === 'string' ? value : ''
+  return typeof value === 'string' ? sanitizeResumeText(value) : ''
 }
 
 function asNumber(value: unknown, fallback: number): number {

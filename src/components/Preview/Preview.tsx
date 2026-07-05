@@ -497,14 +497,19 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
           {!previewReady && (
             <div
               aria-hidden="true"
-              className="absolute left-0 top-0 bg-white shadow-[0_10px_22px_rgba(15,23,42,0.12)]"
+              className="absolute left-0 top-0 flex items-center justify-center bg-white shadow-[0_10px_22px_rgba(15,23,42,0.12)]"
               style={{
                 width: A4_WIDTH,
                 height: A4_HEIGHT,
                 transform: `scale(${zoom})`,
                 transformOrigin: 'top left',
               }}
-            />
+            >
+              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm text-slate-500 shadow-sm">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                <span>预览生成中</span>
+              </div>
+            </div>
           )}
           <iframe
             ref={iframeRef}

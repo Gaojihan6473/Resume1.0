@@ -6,6 +6,7 @@ import {
   createResumeAnchorKey,
   createSectionAnchorKey,
 } from './analysisAnchors'
+import { sanitizeResumeText } from './textSanitizer'
 
 const schoolTagOptions = new Set(['985', '211'])
 const sectionIds = ['education', 'internships', 'projects', 'summary', 'skills']
@@ -67,7 +68,7 @@ function isRecord(value) {
 }
 
 function asString(value) {
-  return typeof value === 'string' ? value : ''
+  return typeof value === 'string' ? sanitizeResumeText(value) : ''
 }
 
 function asNumber(value, fallback) {
