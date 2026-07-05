@@ -6,13 +6,7 @@
   "functions": {
     "api/render-resume-pdf.js": {
       "maxDuration": 60,
-      "includeFiles": [
-        "scripts/resume-pdf-renderer.mjs",
-        "src/assets/hero.png",
-        "node_modules/playwright-core/.local-browsers/**/*",
-        "node_modules/@fontsource/noto-sans-sc/files/**/*",
-        "node_modules/@fontsource/noto-serif-sc/files/**/*"
-      ]
+      "includeFiles": "{scripts/resume-pdf-renderer.mjs,src/assets/hero.png,node_modules/playwright-core/.local-browsers/**/*,node_modules/@fontsource/noto-sans-sc/files/**/*,node_modules/@fontsource/noto-serif-sc/files/**/*}"
     }
   },
   "rewrites": [
