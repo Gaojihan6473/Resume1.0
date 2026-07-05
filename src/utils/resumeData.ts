@@ -31,7 +31,12 @@ function asNumber(value: unknown, fallback: number): number {
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  return Array.isArray(value)
+    ? value
+      .filter((item): item is string => typeof item === 'string')
+      .map(sanitizeResumeText)
+      .filter(Boolean)
+    : []
 }
 
 function asRecords(value: unknown): Record<string, unknown>[] {

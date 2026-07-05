@@ -17,6 +17,8 @@ const A4_HEIGHT = 1123
 const FIT_SIDE_GAP = 28
 const PAGE_GAP = 16
 const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
+const PREVIEW_DOCUMENT_CACHE_LIMIT = 10
+const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v2'
 const EMPTY_IFRAME_DOCUMENT = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style id="resume-preview-style"></style></head><body></body></html>'
 const SCREEN_PAGINATION_CSS = `
   html,
@@ -83,6 +85,62 @@ interface PreviewProps {
   fitToWidth?: boolean
 }
 
+interface PreviewDocumentCacheEntry {
+  html: string
+  height: number
+  sourceHtml: string
+}
+
+const previewDocumentCache = new Map<string, PreviewDocumentCacheEntry>()
+
+function createPreviewCacheKey(html: string): string {
+  let hash = 0x811c9dc5
+
+  for (let index = 0; index < html.length; index += 1) {
+    hash ^= html.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+
+  return `${PREVIEW_DOCUMENT_CACHE_VERSION}:${html.length}:${(hash >>> 0).toString(36)}`
+}
+
+function getCachedPreviewDocument(key: string, sourceHtml: string): PreviewDocumentCacheEntry | null {
+  const cached = previewDocumentCache.get(key)
+  if (!cached || cached.sourceHtml !== sourceHtml) return null
+  return cached
+}
+
+function cachePreviewDocument(key: string, sourceHtml: string, doc: Document, height: number) {
+  if (!doc.querySelector('#resume-page-stack .resume-page-frame')) return
+  if (doc.fonts && doc.fonts.status !== 'loaded') return
+
+  const html = `<!doctype html>${doc.documentElement.outerHTML}`
+  previewDocumentCache.delete(key)
+  previewDocumentCache.set(key, {
+    html,
+    height,
+    sourceHtml,
+  })
+
+  while (previewDocumentCache.size > PREVIEW_DOCUMENT_CACHE_LIMIT) {
+    const oldestKey = previewDocumentCache.keys().next().value
+    if (!oldestKey) break
+    previewDocumentCache.delete(oldestKey)
+  }
+}
+
+function restoreCachedPreviewDocument(doc: Document, cached: PreviewDocumentCacheEntry): boolean {
+  const parsed = new DOMParser().parseFromString(cached.html, 'text/html')
+  const cachedStack = parsed.querySelector('#resume-page-stack')
+  if (!cachedStack?.querySelector('.resume-page-frame')) return false
+
+  doc.documentElement.lang = parsed.documentElement.lang || 'zh-CN'
+  doc.title = parsed.title
+  doc.head.replaceChildren(...Array.from(parsed.head.childNodes).map((node) => doc.importNode(node, true)))
+  doc.body.replaceChildren(...Array.from(parsed.body.childNodes).map((node) => doc.importNode(node, true)))
+  return true
+}
+
 export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   analysisFocus,
   registerAnchor,
@@ -97,9 +155,20 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const renderGenerationRef = useRef(0)
   const scheduledFrameIdsRef = useRef<Set<number>>(new Set())
   const styleTextRef = useRef('')
+  const title = getResumePdfTitle(resumeData)
+  const previewHtml = useMemo(
+    () => buildResumeDocumentHtml(resumeData, title, { analysisFocus }),
+    [analysisFocus, resumeData, title]
+  )
+  const canCachePreview = !analysisFocus
+  const previewCacheKey = useMemo(() => createPreviewCacheKey(previewHtml), [previewHtml])
+  const initialCachedPreviewRef = useRef<PreviewDocumentCacheEntry | null>(
+    canCachePreview ? getCachedPreviewDocument(previewCacheKey, previewHtml) : null
+  )
+  const initialSrcDocRef = useRef(initialCachedPreviewRef.current?.html || EMPTY_IFRAME_DOCUMENT)
   const [containerWidth, setContainerWidth] = useState(0)
-  const [documentHeight, setDocumentHeight] = useState(A4_HEIGHT)
-  const [previewReady, setPreviewReady] = useState(false)
+  const [documentHeight, setDocumentHeight] = useState(initialCachedPreviewRef.current?.height || A4_HEIGHT)
+  const [previewReady, setPreviewReady] = useState(Boolean(initialCachedPreviewRef.current))
 
   useImperativeHandle(ref, () => scrollContainerRef.current as HTMLDivElement)
 
@@ -114,12 +183,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     resizeObserver.observe(element)
     return () => resizeObserver.disconnect()
   }, [])
-
-  const title = getResumePdfTitle(resumeData)
-  const previewHtml = useMemo(
-    () => buildResumeDocumentHtml(resumeData, title, { analysisFocus }),
-    [analysisFocus, resumeData, title]
-  )
 
   const isVisibleInPageFrame = useCallback((element: HTMLElement) => {
     const frame = element.closest('.resume-page-frame')
@@ -339,22 +402,42 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       doc.body.appendChild(nextStack)
     }
 
-    setDocumentHeight(Math.max(A4_HEIGHT, nextHeight))
+    const finalHeight = Math.max(A4_HEIGHT, nextHeight)
+    setDocumentHeight(finalHeight)
+    if (canCachePreview) {
+      cachePreviewDocument(previewCacheKey, previewHtml, doc, finalHeight)
+    }
     syncIframeAnchors()
     setPreviewReady(true)
-  }, [measureCssLength, syncIframeAnchors])
+  }, [canCachePreview, measureCssLength, previewCacheKey, previewHtml, syncIframeAnchors])
 
   const renderPreviewDocument = useCallback(() => {
     const iframe = iframeRef.current
     const doc = iframe?.contentDocument
     if (!doc) return
 
+    const cachedPreview = canCachePreview ? getCachedPreviewDocument(previewCacheKey, previewHtml) : null
+    if (cachedPreview && restoreCachedPreviewDocument(doc, cachedPreview)) {
+      renderGenerationRef.current += 1
+      cancelScheduledFrames()
+      styleTextRef.current = (doc.getElementById('resume-preview-style') as HTMLStyleElement | null)?.textContent || ''
+      setDocumentHeight(cachedPreview.height)
+      setPreviewReady(true)
+      syncIframeAnchors()
+      return cancelScheduledFrames
+    }
+
     const parsed = new DOMParser().parseFromString(previewHtml, 'text/html')
     const nextStyleText = `${parsed.querySelector('style')?.textContent || ''}\n${SCREEN_PAGINATION_CSS}`
     const nextMain = parsed.querySelector('main.resume-preview')
     if (!nextMain) return
     const hasVisiblePages = Boolean(doc.querySelector('#resume-page-stack .resume-page-frame'))
-    if (!hasVisiblePages) setPreviewReady(false)
+    if (hasVisiblePages) {
+      setPreviewReady(true)
+      syncIframeAnchors()
+    } else {
+      setPreviewReady(false)
+    }
 
     doc.documentElement.lang = parsed.documentElement.lang || 'zh-CN'
     doc.title = parsed.title
@@ -416,7 +499,16 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
 
     return cancelScheduledFrames
-  }, [cancelScheduledFrames, paginateIframeDocument, previewHtml, scheduleFrame, waitForPreviewFonts])
+  }, [
+    canCachePreview,
+    cancelScheduledFrames,
+    paginateIframeDocument,
+    previewCacheKey,
+    previewHtml,
+    scheduleFrame,
+    syncIframeAnchors,
+    waitForPreviewFonts,
+  ])
 
   useLayoutEffect(() => renderPreviewDocument(), [renderPreviewDocument])
 
@@ -514,7 +606,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
           <iframe
             ref={iframeRef}
             title="简历预览"
-            srcDoc={EMPTY_IFRAME_DOCUMENT}
+            srcDoc={initialSrcDocRef.current}
             onLoad={() => {
               styleTextRef.current = ''
               renderPreviewDocument()

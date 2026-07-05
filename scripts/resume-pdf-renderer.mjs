@@ -111,7 +111,10 @@ function asArray(value) {
 }
 
 function asStringArray(value) {
-  return asArray(value).filter((item) => typeof item === 'string')
+  return asArray(value)
+    .filter((item) => typeof item === 'string')
+    .map(sanitizeResumeText)
+    .filter(Boolean)
 }
 
 function normalizeResumeData(input) {
