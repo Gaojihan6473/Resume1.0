@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromium } from 'playwright'
+import { chromium } from 'playwright-core'
 import { buildResumePdfHtml } from './resume-pdf-renderer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -39,6 +39,25 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL ||
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
 
 let browserPromise = null
+const LOCAL_CHROMIUM_EXECUTABLES =
+  process.platform === 'win32'
+    ? [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      ]
+    : process.platform === 'darwin'
+      ? [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ]
+      : [
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium',
+          '/usr/bin/chromium-browser',
+        ]
 
 function getAllowedOrigin(req) {
   const origin = req.headers.origin || ''
@@ -133,11 +152,19 @@ async function verifyAuth(req) {
 
 async function getBrowser() {
   if (!browserPromise) {
+    const executablePath = getLocalChromiumExecutablePath()
     browserPromise = chromium.launch({
       headless: true,
+      ...(executablePath ? { executablePath } : {}),
     })
   }
   return browserPromise
+}
+
+function getLocalChromiumExecutablePath() {
+  const configured = process.env.PDF_CHROMIUM_EXECUTABLE_PATH?.trim()
+  if (configured) return configured
+  return LOCAL_CHROMIUM_EXECUTABLES.find((candidate) => fs.existsSync(candidate))
 }
 
 async function renderHtmlToPdf(html) {

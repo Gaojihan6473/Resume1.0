@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
+import fs from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { chromium, type Browser } from 'playwright'
+import { chromium, type Browser } from 'playwright-core'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -14,6 +15,25 @@ type ResumePdfRenderer = {
 let rendererPromise: Promise<ResumePdfRenderer> | null = null
 let browserPromise: Promise<Browser> | null = null
 const rendererModuleUrl = new URL('./scripts/resume-pdf-renderer.mjs', import.meta.url).href
+const LOCAL_CHROMIUM_EXECUTABLES =
+  process.platform === 'win32'
+    ? [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      ]
+    : process.platform === 'darwin'
+      ? [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ]
+      : [
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium',
+          '/usr/bin/chromium-browser',
+        ]
 
 function getRenderer(): Promise<ResumePdfRenderer> {
   if (!rendererPromise) {
@@ -22,9 +42,19 @@ function getRenderer(): Promise<ResumePdfRenderer> {
   return rendererPromise
 }
 
+function getLocalChromiumExecutablePath(): string | undefined {
+  const configured = process.env.PDF_CHROMIUM_EXECUTABLE_PATH?.trim()
+  if (configured) return configured
+  return LOCAL_CHROMIUM_EXECUTABLES.find((candidate) => fs.existsSync(candidate))
+}
+
 function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = chromium.launch({ headless: true })
+    const executablePath = getLocalChromiumExecutablePath()
+    browserPromise = chromium.launch({
+      headless: true,
+      ...(executablePath ? { executablePath } : {}),
+    })
   }
   return browserPromise
 }

@@ -136,7 +136,8 @@ export async function updateResumePreviewUrl(
 
 export async function updateResumeFileUrl(
   id: string,
-  fileUrl: string
+  fileUrl: string,
+  options: { touchUpdatedAt?: boolean } = {}
 ): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -144,12 +145,17 @@ export async function updateResumeFileUrl(
       return { success: false, error: '未登录' }
     }
 
+    const updates: { file_url: string | null; updated_at?: string } = {
+      file_url: getResumeAssetPath(fileUrl),
+    }
+
+    if (options.touchUpdatedAt !== false) {
+      updates.updated_at = new Date().toISOString()
+    }
+
     const { data: resume, error } = await supabase
       .from('resumes')
-      .update({
-        file_url: getResumeAssetPath(fileUrl),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .eq('user_id', session.user.id)
       .select()

@@ -40,7 +40,8 @@ const SCREEN_PAGINATION_CSS = `
     pointer-events: none;
   }
 
-  #resume-page-stack {
+  #resume-page-stack,
+  .resume-page-stack {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -48,6 +49,14 @@ const SCREEN_PAGINATION_CSS = `
     margin: 0;
     padding: 0;
     background: transparent;
+  }
+
+  .resume-page-stack[data-preview-staging='1'] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .resume-page-frame {
@@ -176,18 +185,25 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     scheduledFrameIdsRef.current.add(frameId)
   }, [])
 
-  const paginateIframeDocument = useCallback(() => {
+  const paginateIframeDocument = useCallback((generation: number) => {
     const doc = iframeRef.current?.contentDocument
     const source = doc?.getElementById('resume-preview-source') as HTMLElement | null
-    const stack = doc?.getElementById('resume-page-stack')
-    if (!doc || !source || !stack) return
+    const currentStack = doc?.getElementById('resume-page-stack')
+    if (!doc || !source) return
+
+    doc.querySelectorAll<HTMLElement>('.resume-page-stack[data-preview-staging="1"]').forEach((element) => {
+      element.remove()
+    })
 
     const computed = doc.defaultView?.getComputedStyle(source)
     const pageWidth = measureCssLength(doc, computed?.getPropertyValue('--page-width') || '', A4_WIDTH)
     const pageHeight = measureCssLength(doc, computed?.getPropertyValue('--page-height') || '', A4_HEIGHT)
     const pages: HTMLElement[] = []
     let currentPage: HTMLElement
-    stack.replaceChildren()
+    const nextStack = doc.createElement('div')
+    nextStack.className = 'resume-page-stack'
+    nextStack.dataset.previewStaging = '1'
+    doc.body.appendChild(nextStack)
 
     const fitsPage = (page: HTMLElement) => page.scrollHeight <= page.clientHeight + 1
 
@@ -206,7 +222,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
       frame.appendChild(page)
       pages.push(frame)
-      stack.appendChild(frame)
+      nextStack.appendChild(frame)
       return page
     }
 
@@ -296,6 +312,21 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     const nextHeight = pages.length > 0
       ? pages.length * pageHeight + Math.max(0, pages.length - 1) * PAGE_GAP
       : pageHeight
+
+    if (renderGenerationRef.current !== generation) {
+      nextStack.remove()
+      return
+    }
+
+    nextStack.removeAttribute('data-preview-staging')
+    nextStack.id = 'resume-page-stack'
+
+    if (currentStack) {
+      currentStack.replaceWith(nextStack)
+    } else {
+      doc.body.appendChild(nextStack)
+    }
+
     setDocumentHeight(Math.max(A4_HEIGHT, nextHeight))
     syncIframeAnchors()
   }, [measureCssLength, syncIframeAnchors])
@@ -329,10 +360,23 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     importedMain.id = 'resume-preview-source'
     importedMain.classList.add('screen-pagination-source')
 
-    const stack = doc.createElement('div')
-    stack.id = 'resume-page-stack'
-    doc.body.replaceChildren(importedMain, stack)
-    setDocumentHeight(A4_HEIGHT)
+    doc.querySelectorAll<HTMLElement>('.resume-page-stack[data-preview-staging="1"]').forEach((element) => {
+      element.remove()
+    })
+
+    const previousSource = doc.getElementById('resume-preview-source')
+    if (previousSource) {
+      previousSource.replaceWith(importedMain)
+    } else {
+      doc.body.prepend(importedMain)
+    }
+
+    if (!doc.getElementById('resume-page-stack')) {
+      const stack = doc.createElement('div')
+      stack.id = 'resume-page-stack'
+      stack.className = 'resume-page-stack'
+      doc.body.appendChild(stack)
+    }
 
     const generation = renderGenerationRef.current + 1
     renderGenerationRef.current = generation
@@ -340,7 +384,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
     const paginate = () => {
       if (renderGenerationRef.current !== generation) return
-      paginateIframeDocument()
+      paginateIframeDocument(generation)
     }
 
     scheduleFrame(paginate)

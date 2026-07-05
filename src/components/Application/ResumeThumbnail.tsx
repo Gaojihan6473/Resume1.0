@@ -12,6 +12,21 @@ interface Props {
   children: ReactNode
 }
 
+function scheduleIdleTask(callback: () => void): () => void {
+  const win = window as typeof window & {
+    requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+
+  if (win.requestIdleCallback) {
+    const handle = win.requestIdleCallback(callback, { timeout: 3000 })
+    return () => win.cancelIdleCallback?.(handle)
+  }
+
+  const handle = window.setTimeout(callback, 1000)
+  return () => window.clearTimeout(handle)
+}
+
 export function ResumeThumbnail({
   resume,
   alt,
@@ -22,24 +37,39 @@ export function ResumeThumbnail({
     getCachedGeneratedPreviewUrl(resume)
   )
   const previewUrl = resume.preview_url || generatedPreviewUrl
+  const resumeId = resume.id
+  const resumeFileUrl = resume.file_url
+  const resumePreviewUrl = resume.preview_url
 
   useEffect(() => {
     let cancelled = false
+    const resumeSnapshot = {
+      id: resumeId,
+      file_url: resumeFileUrl,
+      preview_url: resumePreviewUrl,
+    }
 
-    setGeneratedPreviewUrl(getCachedGeneratedPreviewUrl(resume))
+    setGeneratedPreviewUrl(getCachedGeneratedPreviewUrl(resumeSnapshot))
 
-    if (!resume.preview_url && resume.file_url) {
-      ensureResumePreviewImage(resume).then((url) => {
-        if (!cancelled && url) {
-          setGeneratedPreviewUrl(url)
-        }
+    if (!resumePreviewUrl && resumeFileUrl) {
+      const cancelIdleTask = scheduleIdleTask(() => {
+        ensureResumePreviewImage(resumeSnapshot).then((url) => {
+          if (!cancelled && url) {
+            setGeneratedPreviewUrl(url)
+          }
+        })
       })
+
+      return () => {
+        cancelled = true
+        cancelIdleTask()
+      }
     }
 
     return () => {
       cancelled = true
     }
-  }, [resume])
+  }, [resumeFileUrl, resumeId, resumePreviewUrl])
 
   if (previewUrl) {
     return <img src={previewUrl} alt={alt} className={className} />

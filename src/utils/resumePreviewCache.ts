@@ -8,11 +8,34 @@ import {
 import { useResumeStore } from '../store/resumeStore'
 import { generatePdfThumbnail } from './pdfThumbnail'
 
+const PREVIEW_FAILURE_TTL_MS = 5 * 60 * 1000
+
+type PreviewSourceResume = Pick<Resume, 'id' | 'file_url' | 'preview_url'>
+
 const generatedPreviewUrlCache = new Map<string, string>()
 const previewGenerationRequests = new Map<string, Promise<string | null>>()
+const previewGenerationFailures = new Map<string, number>()
 
 function getPreviewCacheKey(resume: Pick<Resume, 'id' | 'file_url'>): string {
   return `${resume.id}:${getResumeAssetPath(resume.file_url) ?? ''}`
+}
+
+function shouldSkipPreviewGeneration(cacheKey: string): boolean {
+  const retryAfter = previewGenerationFailures.get(cacheKey)
+  if (!retryAfter) return false
+
+  if (retryAfter > Date.now()) return true
+  previewGenerationFailures.delete(cacheKey)
+  return false
+}
+
+function rememberPreviewGenerationFailure(cacheKey: string) {
+  previewGenerationFailures.set(cacheKey, Date.now() + PREVIEW_FAILURE_TTL_MS)
+}
+
+function rememberPreviewGenerationSuccess(cacheKey: string, previewUrl: string) {
+  previewGenerationFailures.delete(cacheKey)
+  generatedPreviewUrlCache.set(cacheKey, previewUrl)
 }
 
 function mergeCachedResume(updatedResume: Resume) {
@@ -34,50 +57,58 @@ export function getCachedGeneratedPreviewUrl(resume: Pick<Resume, 'id' | 'file_u
   return generatedPreviewUrlCache.get(getPreviewCacheKey(resume)) ?? null
 }
 
-export function ensureResumePreviewImage(resume: Resume): Promise<string | null> {
+async function generateResumePreviewImage(resume: PreviewSourceResume, cacheKey: string): Promise<string | null> {
+  try {
+    const fileUrl = await getSignedResumeAssetUrl(resume.file_url)
+    if (!fileUrl) return null
+
+    const response = await fetch(fileUrl, { cache: 'force-cache' })
+    if (!response.ok) return null
+
+    const pdfBlob = await response.blob()
+    const thumbnailBlob = await generatePdfThumbnail(pdfBlob)
+    if (!thumbnailBlob) return null
+
+    const uploadResult = await uploadResumePreview(thumbnailBlob, resume.id)
+    if (!uploadResult.success || !uploadResult.previewUrl) return null
+
+    const updateResult = await updateResumePreviewUrl(resume.id, uploadResult.previewUrl, {
+      touchUpdatedAt: false,
+    })
+    if (!updateResult.success || !updateResult.resume) return null
+
+    const previewUrl = updateResult.resume.preview_url
+    if (!previewUrl) return null
+
+    rememberPreviewGenerationSuccess(cacheKey, previewUrl)
+    mergeCachedResume(updateResult.resume)
+    return previewUrl
+  } catch (error) {
+    console.error('[resumePreviewCache] Failed to generate preview image:', error)
+    return null
+  }
+}
+
+export function ensureResumePreviewImage(resume: PreviewSourceResume): Promise<string | null> {
   if (resume.preview_url) return Promise.resolve(resume.preview_url)
   if (!resume.file_url) return Promise.resolve(null)
 
   const cacheKey = getPreviewCacheKey(resume)
   const cachedUrl = generatedPreviewUrlCache.get(cacheKey)
   if (cachedUrl) return Promise.resolve(cachedUrl)
+  if (shouldSkipPreviewGeneration(cacheKey)) return Promise.resolve(null)
 
   const existingRequest = previewGenerationRequests.get(cacheKey)
   if (existingRequest) return existingRequest
 
-  const request = (async () => {
-    try {
-      const fileUrl = await getSignedResumeAssetUrl(resume.file_url)
-      if (!fileUrl) return null
-
-      const response = await fetch(fileUrl, { cache: 'force-cache' })
-      if (!response.ok) return null
-
-      const pdfBlob = await response.blob()
-      const thumbnailBlob = await generatePdfThumbnail(pdfBlob)
-      if (!thumbnailBlob) return null
-
-      const uploadResult = await uploadResumePreview(thumbnailBlob, resume.id)
-      if (!uploadResult.success || !uploadResult.previewUrl) return null
-
-      const updateResult = await updateResumePreviewUrl(resume.id, uploadResult.previewUrl, {
-        touchUpdatedAt: false,
-      })
-      if (!updateResult.success || !updateResult.resume) return null
-
-      const previewUrl = updateResult.resume.preview_url
-      if (!previewUrl) return null
-
-      generatedPreviewUrlCache.set(cacheKey, previewUrl)
-      mergeCachedResume(updateResult.resume)
+  const request = generateResumePreviewImage(resume, cacheKey)
+    .then((previewUrl) => {
+      if (!previewUrl) rememberPreviewGenerationFailure(cacheKey)
       return previewUrl
-    } catch (error) {
-      console.error('[resumePreviewCache] Failed to generate preview image:', error)
-      return null
-    } finally {
+    })
+    .finally(() => {
       previewGenerationRequests.delete(cacheKey)
-    }
-  })()
+    })
 
   previewGenerationRequests.set(cacheKey, request)
   return request
