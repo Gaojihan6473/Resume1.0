@@ -16,6 +16,7 @@ const A4_WIDTH = 794
 const A4_HEIGHT = 1123
 const FIT_SIDE_GAP = 28
 const PAGE_GAP = 16
+const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
 const EMPTY_IFRAME_DOCUMENT = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style id="resume-preview-style"></style></head><body></body></html>'
 const SCREEN_PAGINATION_CSS = `
   html,
@@ -98,6 +99,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const styleTextRef = useRef('')
   const [containerWidth, setContainerWidth] = useState(0)
   const [documentHeight, setDocumentHeight] = useState(A4_HEIGHT)
+  const [previewReady, setPreviewReady] = useState(false)
 
   useImperativeHandle(ref, () => scrollContainerRef.current as HTMLDivElement)
 
@@ -183,6 +185,16 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       callback()
     })
     scheduledFrameIdsRef.current.add(frameId)
+  }, [])
+
+  const waitForPreviewFonts = useCallback((doc: Document) => {
+    const fontsReady = doc.fonts?.ready?.catch(() => undefined)
+    if (!fontsReady) return Promise.resolve()
+
+    return Promise.race([
+      fontsReady,
+      new Promise<void>((resolve) => window.setTimeout(resolve, PREVIEW_FONT_READY_TIMEOUT_MS)),
+    ])
   }, [])
 
   const paginateIframeDocument = useCallback((generation: number) => {
@@ -329,6 +341,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
     setDocumentHeight(Math.max(A4_HEIGHT, nextHeight))
     syncIframeAnchors()
+    setPreviewReady(true)
   }, [measureCssLength, syncIframeAnchors])
 
   const renderPreviewDocument = useCallback(() => {
@@ -340,6 +353,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     const nextStyleText = `${parsed.querySelector('style')?.textContent || ''}\n${SCREEN_PAGINATION_CSS}`
     const nextMain = parsed.querySelector('main.resume-preview')
     if (!nextMain) return
+    const hasVisiblePages = Boolean(doc.querySelector('#resume-page-stack .resume-page-frame'))
+    if (!hasVisiblePages) setPreviewReady(false)
 
     doc.documentElement.lang = parsed.documentElement.lang || 'zh-CN'
     doc.title = parsed.title
@@ -387,8 +402,11 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       paginateIframeDocument(generation)
     }
 
-    scheduleFrame(paginate)
-    scheduleFrame(() => scheduleFrame(paginate))
+    void waitForPreviewFonts(doc).then(() => {
+      if (renderGenerationRef.current !== generation) return
+      scheduleFrame(paginate)
+      scheduleFrame(() => scheduleFrame(paginate))
+    })
 
     if (doc.fonts?.ready) {
       void doc.fonts.ready.then(() => {
@@ -398,7 +416,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
 
     return cancelScheduledFrames
-  }, [cancelScheduledFrames, paginateIframeDocument, previewHtml, scheduleFrame])
+  }, [cancelScheduledFrames, paginateIframeDocument, previewHtml, scheduleFrame, waitForPreviewFonts])
 
   useLayoutEffect(() => renderPreviewDocument(), [renderPreviewDocument])
 
@@ -471,10 +489,23 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       <div className="flex w-max min-w-full justify-center">
         <div
           style={{
+            position: 'relative',
             width: scaledPageWidth,
             height: scaledDocumentHeight,
           }}
         >
+          {!previewReady && (
+            <div
+              aria-hidden="true"
+              className="absolute left-0 top-0 bg-white shadow-[0_10px_22px_rgba(15,23,42,0.12)]"
+              style={{
+                width: A4_WIDTH,
+                height: A4_HEIGHT,
+                transform: `scale(${zoom})`,
+                transformOrigin: 'top left',
+              }}
+            />
+          )}
           <iframe
             ref={iframeRef}
             title="简历预览"
@@ -488,6 +519,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
               width: A4_WIDTH,
               height: documentHeight,
               backgroundColor: 'transparent',
+              opacity: previewReady ? 1 : 0,
+              transition: previewReady ? 'opacity 120ms ease' : 'none',
               transform: `scale(${zoom})`,
               transformOrigin: 'top left',
             }}

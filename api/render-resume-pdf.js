@@ -1,4 +1,4 @@
-import { buildResumePdfHtml } from '../scripts/resume-pdf-renderer.mjs'
+import { buildResumePdfHtml, getEmbeddedFontCss } from '../scripts/resume-pdf-renderer.mjs'
 
 export const config = {
   maxDuration: 60,
@@ -168,9 +168,32 @@ async function renderHtmlToPdf(html) {
   }
 }
 
+function getRequestedFontFamily(body) {
+  return body?.resumeData?.style?.fontFamily === 'serif' ? 'serif' : 'sans'
+}
+
+function stripResumeFontFaces(html) {
+  return html.replace(/@font-face\s*{[\s\S]*?font-family:\s*['"]Resume(?:Sans|Serif)['"][\s\S]*?}/g, '')
+}
+
+function injectEmbeddedResumeFonts(html, fontFamily) {
+  const fontCss = getEmbeddedFontCss(fontFamily)
+  const htmlWithoutExternalFonts = stripResumeFontFaces(html)
+
+  if (/<\/style>/i.test(htmlWithoutExternalFonts)) {
+    return htmlWithoutExternalFonts.replace(/<\/style>/i, `\n${fontCss}\n</style>`)
+  }
+
+  if (/<\/head>/i.test(htmlWithoutExternalFonts)) {
+    return htmlWithoutExternalFonts.replace(/<\/head>/i, `<style>${fontCss}</style></head>`)
+  }
+
+  return `<style>${fontCss}</style>${htmlWithoutExternalFonts}`
+}
+
 async function renderPdf(body) {
   if (typeof body.html === 'string' && body.html.trim()) {
-    return renderHtmlToPdf(body.html)
+    return renderHtmlToPdf(injectEmbeddedResumeFonts(body.html, getRequestedFontFamily(body)))
   }
 
   return renderHtmlToPdf(

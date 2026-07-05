@@ -48,7 +48,7 @@ const defaultResumeData = {
   sectionOrder: sectionIds,
 }
 
-let embeddedFontCss = null
+const embeddedFontCssCache = new Map()
 let defaultAvatarDataUrl = null
 
 function isRecord(value) {
@@ -211,63 +211,45 @@ function pt(value) {
   return `${Math.max(0, Number(number.toFixed(2)))}pt`
 }
 
-function getFontPackageDir(packageName) {
-  const packageDir = path.join(repoRoot, 'node_modules', '@fontsource', packageName)
-  if (!fs.existsSync(packageDir)) {
-    throw new Error(`Missing font package @fontsource/${packageName}. Run npm install before starting the PDF server.`)
+function fontFileDataUrl(packageName, fileName) {
+  const fontPath = path.join(repoRoot, 'node_modules', '@fontsource', packageName, 'files', fileName)
+  if (!fs.existsSync(fontPath)) {
+    throw new Error(`Missing font file ${fileName}. Run npm install before starting the PDF server.`)
   }
-  return packageDir
+
+  const base64 = fs.readFileSync(fontPath).toString('base64')
+  return `data:font/woff2;base64,${base64}`
 }
 
-function mimeForFont(filePath) {
-  return filePath.endsWith('.woff2') ? 'font/woff2' : 'font/woff'
+function embeddedFontFace(family, packageName, weight, fileName) {
+  return `
+    @font-face {
+      font-family: '${family}';
+      font-style: normal;
+      font-display: block;
+      font-weight: ${weight};
+      src: url('${fontFileDataUrl(packageName, fileName)}') format('woff2');
+    }
+  `
 }
 
-function embedFontUrls(css, packageDir) {
-  return css.replace(/src:\s*([^;]+);/g, (_match, srcValue) => {
-    const sources = String(srcValue)
-      .split(',')
-      .map((source) => {
-        const urlMatch = source.match(/url\((['"]?)(.*?)\1\)/)
-        if (!urlMatch) return ''
+export function getEmbeddedFontCss(fontFamily = 'sans') {
+  const familyKey = fontFamily === 'serif' ? 'serif' : 'sans'
+  if (!embeddedFontCssCache.has(familyKey)) {
+    const css = familyKey === 'serif'
+      ? [
+        embeddedFontFace('ResumeSerif', 'noto-serif-sc', 400, 'noto-serif-sc-chinese-simplified-400-normal.woff2'),
+        embeddedFontFace('ResumeSerif', 'noto-serif-sc', 700, 'noto-serif-sc-chinese-simplified-700-normal.woff2'),
+      ].join('\n')
+      : [
+        embeddedFontFace('ResumeSans', 'noto-sans-sc', 400, 'noto-sans-sc-chinese-simplified-400-normal.woff2'),
+        embeddedFontFace('ResumeSans', 'noto-sans-sc', 700, 'noto-sans-sc-chinese-simplified-700-normal.woff2'),
+      ].join('\n')
 
-        const relativePath = urlMatch[2].replace(/^\.\//, '')
-        const fontPath = path.join(packageDir, relativePath)
-        if (!fs.existsSync(fontPath)) return ''
-
-        const base64 = fs.readFileSync(fontPath).toString('base64')
-        return source.replace(/url\((['"]?).*?\1\)/, `url(data:${mimeForFont(fontPath)};base64,${base64})`)
-      })
-      .filter(Boolean)
-
-    return sources.length > 0 ? `src: ${sources.join(', ')};` : ''
-  })
-}
-
-function fontCssFromPackage(family, packageName, weights) {
-  const packageDir = getFontPackageDir(packageName)
-  const subsets = ['latin', 'latin-ext', 'chinese-simplified']
-
-  return weights.flatMap((weight) => subsets.map((subset) => {
-    const cssPath = path.join(packageDir, `${subset}-${weight}.css`)
-    if (!fs.existsSync(cssPath)) return ''
-
-    const css = fs.readFileSync(cssPath, 'utf8')
-      .replace(/font-family:\s*'[^']+';/g, `font-family: '${family}';`)
-      .replace(/font-display:\s*swap;/g, 'font-display: block;')
-
-    return embedFontUrls(css, packageDir)
-  })).join('\n')
-}
-
-function getEmbeddedFontCss() {
-  if (!embeddedFontCss) {
-    embeddedFontCss = [
-      fontCssFromPackage('ResumeSans', 'noto-sans-sc', [400, 700]),
-      fontCssFromPackage('ResumeSerif', 'noto-serif-sc', [400, 700]),
-    ].join('\n')
+    embeddedFontCssCache.set(familyKey, css)
   }
-  return embeddedFontCss
+
+  return embeddedFontCssCache.get(familyKey)
 }
 
 function getDefaultAvatarDataUrl() {
@@ -445,7 +427,7 @@ export function buildResumePdfHtml(input, title = '') {
   <meta charset="utf-8">
   <title>${escapeHtml(documentTitle)}</title>
   <style>
-    ${getEmbeddedFontCss()}
+    ${getEmbeddedFontCss(style.fontFamily === 'serif' ? 'serif' : 'sans')}
     @page {
       size: A4;
       margin: 0;

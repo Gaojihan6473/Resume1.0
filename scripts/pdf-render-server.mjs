@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { buildResumePdfHtml } from './resume-pdf-renderer.mjs'
+import { buildResumePdfHtml, getEmbeddedFontCss } from './resume-pdf-renderer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -194,6 +194,29 @@ async function renderHtmlToPdf(html) {
   }
 }
 
+function getRequestedFontFamily(body) {
+  return body?.resumeData?.style?.fontFamily === 'serif' ? 'serif' : 'sans'
+}
+
+function stripResumeFontFaces(html) {
+  return html.replace(/@font-face\s*{[\s\S]*?font-family:\s*['"]Resume(?:Sans|Serif)['"][\s\S]*?}/g, '')
+}
+
+function injectEmbeddedResumeFonts(html, fontFamily) {
+  const fontCss = getEmbeddedFontCss(fontFamily)
+  const htmlWithoutExternalFonts = stripResumeFontFaces(html)
+
+  if (/<\/style>/i.test(htmlWithoutExternalFonts)) {
+    return htmlWithoutExternalFonts.replace(/<\/style>/i, `\n${fontCss}\n</style>`)
+  }
+
+  if (/<\/head>/i.test(htmlWithoutExternalFonts)) {
+    return htmlWithoutExternalFonts.replace(/<\/head>/i, `<style>${fontCss}</style></head>`)
+  }
+
+  return `<style>${fontCss}</style>${htmlWithoutExternalFonts}`
+}
+
 async function renderPdf(resumeData, title) {
   return renderHtmlToPdf(buildResumePdfHtml(resumeData, title))
 }
@@ -220,7 +243,7 @@ async function handleRender(req, res) {
 
   try {
     const pdfBuffer = typeof body.html === 'string' && body.html.trim()
-      ? await renderHtmlToPdf(body.html)
+      ? await renderHtmlToPdf(injectEmbeddedResumeFonts(body.html, getRequestedFontFamily(body)))
       : await renderPdf(body.resumeData, typeof body.title === 'string' ? body.title : '')
     sendPdf(req, res, pdfBuffer)
   } catch (error) {

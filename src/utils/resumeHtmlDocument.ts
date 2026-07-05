@@ -28,7 +28,7 @@ function fontFace(family: string, weight: 400 | 700, url: string): string {
     @font-face {
       font-family: '${family}';
       font-style: normal;
-      font-display: block;
+      font-display: swap;
       font-weight: ${weight};
       src: url('${absoluteAssetUrl(url)}') format('woff2');
     }
