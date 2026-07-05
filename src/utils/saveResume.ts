@@ -2,16 +2,16 @@ import {
   createResume,
   updateResume,
   uploadResumeFile,
+  uploadGeneratedResumePdf,
   uploadResumePreview,
+  updateResumeFileUrl,
   updateResumePreviewUrl,
   type Resume,
 } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
 import { normalizeResumeData, resumeDataToRecord } from './resumeData'
-
-interface SaveCurrentResumeOptions {
-  previewElement?: HTMLElement | null
-}
+import { getResumePdfBlob, getResumePdfTitle } from './resumePdf'
+import { generatePdfThumbnail } from './pdfThumbnail'
 
 interface SaveCurrentResumeResult {
   success: boolean
@@ -33,41 +33,54 @@ function upsertCachedResume(resume: Resume) {
   setCachedResumes(nextResumes, Date.now())
 }
 
-async function updatePreviewImage(resumeId: string, previewElement: HTMLElement | null | undefined) {
-  if (!previewElement) {
-    console.log('[Preview] Skipped - resumeId:', resumeId, 'previewRef: null')
-    return
-  }
+async function updateGeneratedPdf(
+  resumeId: string,
+  data: ReturnType<typeof normalizeResumeData>
+): Promise<SaveCurrentResumeResult> {
+  try {
+    const pdfBlob = await getResumePdfBlob(data, getResumePdfTitle(data))
+    const uploadResult = await uploadGeneratedResumePdf(pdfBlob, resumeId)
 
-  console.log('[Preview] Starting preview generation for resume:', resumeId)
-  const { generatePreviewImage } = await import('./exporters')
-  const previewBlob = await generatePreviewImage(previewElement)
-  console.log('[Preview] Blob generated:', previewBlob ? `${previewBlob.size} bytes` : 'NULL')
+    if (!uploadResult.success || !uploadResult.fileUrl) {
+      return { success: false, resumeId, error: uploadResult.error || 'PDF 上传失败' }
+    }
 
-  if (!previewBlob) {
-    console.error('[Preview] Blob generation returned null')
-    return
-  }
+    const result = await updateResumeFileUrl(resumeId, uploadResult.fileUrl)
+    if (!result.success || !result.resume) {
+      return { success: false, resumeId, error: result.error || 'PDF 地址更新失败' }
+    }
 
-  const uploadResult = await uploadResumePreview(previewBlob, resumeId)
-  console.log('[Preview] Upload result:', uploadResult)
+    let latestResume = result.resume
+    const thumbnailBlob = await generatePdfThumbnail(pdfBlob)
+    if (thumbnailBlob) {
+      const previewUploadResult = await uploadResumePreview(thumbnailBlob, resumeId)
+      if (previewUploadResult.success && previewUploadResult.previewUrl) {
+        const previewResult = await updateResumePreviewUrl(resumeId, previewUploadResult.previewUrl, {
+          touchUpdatedAt: false,
+        })
+        if (previewResult.success && previewResult.resume) {
+          latestResume = previewResult.resume
+        } else {
+          console.warn('[PDF] Preview URL update failed:', previewResult.error)
+        }
+      } else {
+        console.warn('[PDF] Preview image upload failed:', previewUploadResult.error)
+      }
+    }
 
-  if (!uploadResult.success || !uploadResult.previewUrl) {
-    console.error('[Preview] Upload failed:', uploadResult.error)
-    return
-  }
-
-  const result = await updateResumePreviewUrl(resumeId, uploadResult.previewUrl)
-  if (result.success && result.resume) {
-    upsertCachedResume(result.resume)
-  } else {
-    console.error('[Preview] Preview URL update failed:', result.error)
+    upsertCachedResume(latestResume)
+    return { success: true, resumeId }
+  } catch (error) {
+    console.error('[PDF] Generate/upload failed:', error)
+    return {
+      success: false,
+      resumeId,
+      error: error instanceof Error ? error.message : 'PDF 生成失败',
+    }
   }
 }
 
-export async function saveCurrentResumeToCloud({
-  previewElement,
-}: SaveCurrentResumeOptions = {}): Promise<SaveCurrentResumeResult> {
+export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResult> {
   const {
     resumeData,
     currentResumeId,
@@ -109,7 +122,15 @@ export async function saveCurrentResumeToCloud({
     upsertCachedResume(result.resume)
   }
 
-  await updatePreviewImage(resumeId, previewElement)
+  const pdfResult = await updateGeneratedPdf(resumeId, normalizedResumeData)
+  if (!pdfResult.success) {
+    return {
+      success: false,
+      resumeId,
+      error: `简历内容已保存，但 PDF 未更新：${pdfResult.error || 'PDF 生成失败'}`,
+    }
+  }
+
   setIsDirty(false)
 
   return { success: true, resumeId }

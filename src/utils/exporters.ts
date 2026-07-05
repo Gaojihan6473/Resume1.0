@@ -1,5 +1,6 @@
 ﻿import type { ResumeData } from '../types/resume'
 
+import { getResumePdfBlob } from './resumePdf'
 import { sanitizeRichHtml } from './richText'
 
 function normalizePdfFileName(fileName: string): string {
@@ -8,129 +9,8 @@ function normalizePdfFileName(fileName: string): string {
   return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`
 }
 
-function stripExtension(fileName: string): string {
-  const normalized = normalizePdfFileName(fileName)
-  return normalized.replace(/\.pdf$/i, '')
-}
-
-function waitForImages(images: HTMLCollectionOf<HTMLImageElement>): Promise<void> {
-  const tasks = Array.from(images).map((image) => {
-    if (image.complete) return Promise.resolve()
-    return new Promise<void>((resolve) => {
-      image.addEventListener('load', () => resolve(), { once: true })
-      image.addEventListener('error', () => resolve(), { once: true })
-    })
-  })
-  return Promise.all(tasks).then(() => undefined)
-}
-
-function waitForStylesheets(doc: Document): Promise<void> {
-  const links = Array.from(
-    doc.querySelectorAll('link[rel="stylesheet"]')
-  ) as HTMLLinkElement[]
-
-  const tasks = links.map((link) => {
-    if (link.sheet) return Promise.resolve()
-    return new Promise<void>((resolve) => {
-      let settled = false
-      const done = () => {
-        if (settled) return
-        settled = true
-        resolve()
-      }
-
-      link.addEventListener('load', done, { once: true })
-      link.addEventListener('error', done, { once: true })
-      setTimeout(done, 8000)
-    })
-  })
-
-  return Promise.all(tasks).then(() => undefined)
-}
-
-function absolutizeStylesheetHref(link: HTMLLinkElement): void {
-  const href = link.getAttribute('href')
-  if (!href) return
-
-  try {
-    link.href = new URL(href, window.location.href).toString()
-  } catch {
-    // Keep original href when URL normalization fails.
-  }
-}
-
-function waitForPrintLayout(win: Window): Promise<void> {
-  return new Promise((resolve) => {
-    win.requestAnimationFrame(() => {
-      win.requestAnimationFrame(() => resolve())
-    })
-  })
-}
-
-function createPrintIframe(): Promise<HTMLIFrameElement> {
-  return new Promise((resolve, reject) => {
-    const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
-    iframe.style.visibility = 'hidden'
-
-    iframe.onload = () => resolve(iframe)
-    iframe.onerror = () => reject(new Error('Failed to create print frame.'))
-    iframe.src = 'about:blank'
-    document.body.appendChild(iframe)
-  })
-}
-
 const PREVIEW_A4_WIDTH_PX = 595
-const PREVIEW_A4_HEIGHT_PX = 842
-const MM_PER_INCH = 25.4
-const CSS_PX_PER_INCH = 96
-const A4_WIDTH_MM = 210
-const A4_HEIGHT_MM = 297
-const PREVIEW_TO_PRINT_SCALE = (A4_WIDTH_MM / MM_PER_INCH) * CSS_PX_PER_INCH / PREVIEW_A4_WIDTH_PX
 const SCHOOL_TAG_OPTIONS = ['985', '211']
-
-function getElementContentHeight(element: HTMLElement): number {
-  const ownRectHeight = Math.ceil(element.getBoundingClientRect().height)
-  const childHeights = Array.from(element.children).map((child) => {
-    const childElement = child as HTMLElement
-    return Math.ceil(
-      Math.max(childElement.scrollHeight, childElement.getBoundingClientRect().height)
-    )
-  })
-
-  return Math.max(element.scrollHeight, ownRectHeight, ...childHeights)
-}
-
-function getPrintPageCount(element: HTMLElement): number {
-  const contentHeight = Math.max(PREVIEW_A4_HEIGHT_PX, getElementContentHeight(element))
-  return Math.max(1, Math.ceil(contentHeight / PREVIEW_A4_HEIGHT_PX))
-}
-
-function createPrintPage(
-  printDoc: Document,
-  sourceElement: HTMLElement,
-  pageIndex: number
-): HTMLElement {
-  const page = printDoc.createElement('section')
-  const viewport = printDoc.createElement('div')
-  const pageClone = sourceElement.cloneNode(true) as HTMLElement
-
-  page.setAttribute('data-print-page', '1')
-  viewport.setAttribute('data-print-viewport', '1')
-  pageClone.style.width = '100%'
-  pageClone.style.transform = `translateY(-${pageIndex * PREVIEW_A4_HEIGHT_PX}px)`
-  pageClone.style.transformOrigin = 'top left'
-
-  viewport.appendChild(pageClone)
-  page.appendChild(viewport)
-
-  return page
-}
 
 function richTextToLines(html: string): string[] {
   if (!html) return []
@@ -180,121 +60,11 @@ export async function generatePreviewImage(
 }
 
 export async function exportToPdf(
-  element: HTMLElement,
+  data: ResumeData,
   fileName: string = 'resume.pdf'
 ): Promise<void> {
-  const printFileName = normalizePdfFileName(fileName)
-  const printTitle = stripExtension(printFileName)
-  const iframe = await createPrintIframe()
-  const printDoc = iframe.contentDocument
-  const printWindow = iframe.contentWindow
-
-  if (!printDoc || !printWindow) {
-    iframe.remove()
-    throw new Error('Print frame is unavailable.')
-  }
-
-  const originalTitle = document.title
-  const styleNodes = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-  await waitForImages(element.getElementsByTagName('img'))
-  if ('fonts' in document) {
-    await (document as Document & { fonts?: FontFaceSet }).fonts?.ready
-  }
-
-  const pageCount = getPrintPageCount(element)
-  const wrapper = printDoc.createElement('main')
-  wrapper.setAttribute('data-print-root', '1')
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-    wrapper.appendChild(createPrintPage(printDoc, element, pageIndex))
-  }
-
-  const printOverrides = printDoc.createElement('style')
-  printOverrides.textContent = `
-    @page { size: 210mm 297mm; margin: 0; }
-    html, body {
-      width: ${A4_WIDTH_MM}mm;
-      min-height: ${A4_HEIGHT_MM}mm;
-      height: auto;
-      margin: 0;
-      padding: 0;
-      overflow: visible;
-      background: #ffffff;
-    }
-    body {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    [data-print-root="1"] {
-      width: ${A4_WIDTH_MM}mm;
-      margin: 0;
-    }
-    [data-print-page="1"] {
-      width: ${A4_WIDTH_MM}mm;
-      height: ${A4_HEIGHT_MM}mm;
-      margin: 0;
-      overflow: hidden;
-      position: relative;
-      background: #ffffff;
-      break-after: page;
-      page-break-after: always;
-    }
-    [data-print-page="1"]:last-child {
-      break-after: auto;
-      page-break-after: auto;
-    }
-    [data-print-viewport="1"] {
-      width: ${PREVIEW_A4_WIDTH_PX}px;
-      height: ${PREVIEW_A4_HEIGHT_PX}px;
-      overflow: hidden;
-      transform: scale(${PREVIEW_TO_PRINT_SCALE});
-      transform-origin: top left;
-    }
-    [data-print-viewport="1"] > * {
-      margin: 0;
-    }
-  `
-
-  printDoc.head.innerHTML = ''
-  printDoc.body.innerHTML = ''
-  styleNodes.forEach((node) => {
-    const clonedNode = node.cloneNode(true) as HTMLElement
-    if (clonedNode instanceof HTMLLinkElement) {
-      absolutizeStylesheetHref(clonedNode)
-    }
-    printDoc.head.appendChild(clonedNode)
-  })
-  printDoc.head.appendChild(printOverrides)
-  printDoc.body.appendChild(wrapper)
-  printDoc.title = printTitle
-  document.title = printTitle
-
-  try {
-    await waitForStylesheets(printDoc)
-    if ('fonts' in printDoc) {
-      await (printDoc as Document & { fonts?: FontFaceSet }).fonts?.ready
-    }
-    await waitForImages(printDoc.images)
-    await waitForPrintLayout(printWindow)
-
-    await new Promise<void>((resolve) => {
-      let settled = false
-      const done = () => {
-        if (settled) return
-        settled = true
-        resolve()
-      }
-
-      printWindow.onafterprint = () => done()
-      setTimeout(done, 120000)
-
-      printWindow.focus()
-      printWindow.print()
-    })
-  } finally {
-    printWindow.onafterprint = null
-    document.title = originalTitle
-    iframe.remove()
-  }
+  const pdfBlob = await getResumePdfBlob(data)
+  downloadBlob(pdfBlob, normalizePdfFileName(fileName))
 }
 
 export async function exportToWord(

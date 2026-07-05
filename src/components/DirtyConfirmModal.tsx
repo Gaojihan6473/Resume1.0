@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { RefObject } from 'react'
 import { useResumeStore } from '../store/resumeStore'
 import { Cloud, X, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from './Toast'
@@ -9,7 +8,6 @@ type DirtyNavigationTarget = 'home' | 'me'
 
 interface DirtyConfirmModalProps {
   isOpen: boolean
-  previewRef: RefObject<HTMLDivElement | null>
   onClose: () => void
   navigationTarget: DirtyNavigationTarget | null
   onSaveAndNavigateHome: () => void
@@ -20,7 +18,6 @@ interface DirtyConfirmModalProps {
 
 export function DirtyConfirmModal({
   isOpen,
-  previewRef,
   onClose,
   navigationTarget,
   onSaveAndNavigateHome,
@@ -40,7 +37,7 @@ export function DirtyConfirmModal({
     setSaveError(null)
 
     try {
-      const result = await saveCurrentResumeToCloud({ previewElement: previewRef.current })
+      const result = await saveCurrentResumeToCloud()
       if (!result.success) {
         setSaveError(result.error || '保存失败')
         toast(result.error || '保存失败', 'error')

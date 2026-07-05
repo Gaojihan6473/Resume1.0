@@ -95,7 +95,8 @@ export async function createResume(
 
 export async function updateResumePreviewUrl(
   id: string,
-  previewUrl: string
+  previewUrl: string,
+  options: { touchUpdatedAt?: boolean } = {}
 ): Promise<ResumesResponse> {
   try {
     console.log('[updateResumePreviewUrl] Updating resume', id, 'with URL:', previewUrl)
@@ -104,12 +105,17 @@ export async function updateResumePreviewUrl(
       return { success: false, error: '未登录' }
     }
 
+    const updates: { preview_url: string | null; updated_at?: string } = {
+      preview_url: getResumeAssetPath(previewUrl),
+    }
+
+    if (options.touchUpdatedAt !== false) {
+      updates.updated_at = new Date().toISOString()
+    }
+
     const { data: resume, error } = await supabase
       .from('resumes')
-      .update({
-        preview_url: getResumeAssetPath(previewUrl),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', id)
       .eq('user_id', session.user.id)
       .select()
@@ -124,6 +130,39 @@ export async function updateResumePreviewUrl(
     return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch (error) {
     console.error('[updateResumePreviewUrl] Exception:', error)
+    return { success: false, error: '网络异常' }
+  }
+}
+
+export async function updateResumeFileUrl(
+  id: string,
+  fileUrl: string
+): Promise<ResumesResponse> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return { success: false, error: '未登录' }
+    }
+
+    const { data: resume, error } = await supabase
+      .from('resumes')
+      .update({
+        file_url: getResumeAssetPath(fileUrl),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', session.user.id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[updateResumeFileUrl] Error:', error)
+      return { success: false, error: '更新 PDF 失败' }
+    }
+
+    return { success: true, resume: await resolveResumeAssetUrls(resume) }
+  } catch (error) {
+    console.error('[updateResumeFileUrl] Exception:', error)
     return { success: false, error: '网络异常' }
   }
 }

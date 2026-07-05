@@ -35,8 +35,8 @@ import {
   type Application,
   type ApplicationStatus,
 } from '../types/application'
-import { PdfPreview } from '../components/Application/PdfPreview'
 import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
+import { ResumeThumbnail } from '../components/Application/ResumeThumbnail'
 import { toast } from '../components/Toast'
 
 interface HomePageProps {
@@ -996,17 +996,15 @@ function HomeResumeCard({
     >
       <div className="relative">
         <div className="aspect-[210/297] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-lg group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
-          {hasPreview ? (
+          {hasPreview || hasPdf ? (
             <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white">
-              <img
-                src={resume.preview_url!}
+              <ResumeThumbnail
+                resume={resume}
                 alt={title}
                 className="h-full w-full rounded-2xl object-contain"
-              />
-            </div>
-          ) : hasPdf ? (
-            <div className="flex h-full w-full items-start justify-center rounded-2xl bg-white">
-              <PdfPreview fileUrl={resume.file_url!} className="h-full w-full rounded-2xl bg-white" />
+              >
+                <div className="h-full w-full rounded-2xl bg-white" />
+              </ResumeThumbnail>
             </div>
           ) : (
             <div className="h-full overflow-hidden rounded-2xl bg-white p-4">

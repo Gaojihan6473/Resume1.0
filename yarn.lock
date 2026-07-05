@@ -245,6 +245,16 @@
     "@eslint/core" "^0.17.0"
     levn "^0.4.1"
 
+"@fontsource/noto-sans-sc@^5.2.8":
+  version "5.2.9"
+  resolved "https://registry.npmjs.org/@fontsource/noto-sans-sc/-/noto-sans-sc-5.2.9.tgz"
+  integrity sha512-bTUIWGBgJDpwi5qAr+x0/lcgv80IHTB9vl6s2f6EymZEa7qYV99yNRBZuKFT+SYDKVunZrjCEhWtpxqmbXWl5Q==
+
+"@fontsource/noto-serif-sc@^5.2.8":
+  version "5.2.9"
+  resolved "https://registry.npmjs.org/@fontsource/noto-serif-sc/-/noto-serif-sc-5.2.9.tgz"
+  integrity sha512-+wosdNmyrtRjnqJ/4A6i99jApm6ye34n8Nh7jUO3P/+6Hd1ZBY1gB9yGaI5jVxb56RS1lM2kTc0DzX1ifRO2MA==
+
 "@humanfs/core@^0.19.2":
   version "0.19.2"
   resolved "https://registry.npmjs.org/@humanfs/core/-/core-0.19.2.tgz"
@@ -1768,6 +1778,20 @@ picocolors@^1.1.1:
   resolved "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz"
   integrity sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==
 
+playwright-core@1.61.1:
+  version "1.61.1"
+  resolved "https://registry.npmjs.org/playwright-core/-/playwright-core-1.61.1.tgz"
+  integrity sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==
+
+playwright@^1.57.0:
+  version "1.61.1"
+  resolved "https://registry.npmjs.org/playwright/-/playwright-1.61.1.tgz"
+  integrity sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==
+  dependencies:
+    playwright-core "1.61.1"
+  optionalDependencies:
+    fsevents "2.3.2"
+
 postcss@^8.5.8:
   version "8.5.10"
   resolved "https://registry.npmjs.org/postcss/-/postcss-8.5.10.tgz"
@@ -1806,7 +1830,7 @@ raf@^3.4.1:
   dependencies:
     scheduler "^0.27.0"
 
-"react-is@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0":
+"react-is@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", react-is@^19.2.4:
   version "19.2.5"
   resolved "https://registry.npmjs.org/react-is/-/react-is-19.2.5.tgz"
   integrity sha512-Dn0t8IQhCmeIT3wu+Apm1/YVsJXsGWi6k4sPdnBIdqMVtHtv0IGi6dcpNpNkNac0zB2uUAqNX3MHzN8c+z2rwQ==

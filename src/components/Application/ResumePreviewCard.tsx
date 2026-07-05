@@ -2,7 +2,7 @@ import { FileSearch2, FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, W
 import type { ReactNode } from 'react'
 import type { Resume } from '../../lib/api'
 import type { ResumeData } from '../../types/resume'
-import { PdfPreview } from './PdfPreview'
+import { ResumeThumbnail } from './ResumeThumbnail'
 
 interface Props {
   resume: Resume
@@ -39,17 +39,15 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
         onClick={onClick}
         className="w-full h-full rounded-xl border-2 border-blue-400 bg-white shadow-lg shadow-blue-100 overflow-hidden cursor-pointer transition-all duration-300 flex flex-col"
       >
-        {hasPreview ? (
+        {hasPreview || hasPdf ? (
           <div className="flex-1 overflow-hidden p-2 flex items-center justify-center bg-slate-100">
-            <img
-              src={resume.preview_url!}
+            <ResumeThumbnail
+              resume={resume}
               alt={resume.title}
               className="max-h-full object-contain shadow-md"
-            />
-          </div>
-        ) : hasPdf ? (
-          <div className="flex-1 overflow-hidden p-2 flex items-center justify-center bg-slate-100">
-            <PdfPreview fileUrl={resume.file_url!} className="max-h-full shadow-md" />
+            >
+              <div className="h-full w-full bg-white" />
+            </ResumeThumbnail>
           </div>
         ) : (
           <div className="h-full overflow-y-auto p-5">
@@ -148,7 +146,7 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
       onClick={onClick}
       className="group w-full aspect-[210/297] rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-lg hover:shadow-blue-100/50 hover:scale-[1.02] transition-all duration-200 cursor-pointer overflow-hidden flex flex-col"
     >
-      {hasPreview ? (
+      {hasPreview || hasPdf ? (
         <>
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
@@ -157,23 +155,13 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
             </div>
           </div>
           <div className="flex-1 p-1 bg-slate-100 overflow-hidden flex items-center justify-center">
-            <img
-              src={resume.preview_url!}
+            <ResumeThumbnail
+              resume={resume}
               alt={resume.title}
               className="max-h-full w-full object-contain"
-            />
-          </div>
-        </>
-      ) : hasPdf ? (
-        <>
-          <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
-            <div className="flex items-center justify-between gap-2">
-              <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
-            </div>
-          </div>
-          <div className="flex-1 p-1 bg-slate-100 overflow-hidden flex items-center justify-center">
-            <PdfPreview fileUrl={resume.file_url!} className="max-h-full w-full shadow-sm" />
+            >
+              <div className="h-full w-full bg-white" />
+            </ResumeThumbnail>
           </div>
         </>
       ) : (

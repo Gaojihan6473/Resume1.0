@@ -26,7 +26,6 @@ import {
 } from 'lucide-react'
 
 interface ToolbarProps {
-  previewRef: RefObject<HTMLDivElement | null>
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
   onOpenSidebar: () => void
   onScheduleCloseSidebar: () => void
@@ -193,7 +192,7 @@ function CardButton({
   )
 }
 
-export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar }: ToolbarProps) {
+export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar }: ToolbarProps) {
   const navigate = useNavigate()
   const {
     resumeData,
@@ -208,12 +207,23 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     parseStatus,
   } = useResumeStore()
   useAuthStore()
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
   const handleExportPdf = async () => {
-    if (!previewRef.current) return
-    const { exportToPdf } = await import('../../utils/exporters')
-    const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.pdf` : '简历.pdf'
-    await exportToPdf(previewRef.current, fileName)
+    if (isExportingPdf) return
+    setIsExportingPdf(true)
+
+    try {
+      const { exportToPdf } = await import('../../utils/exporters')
+      const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.pdf` : '简历.pdf'
+      await exportToPdf(resumeData, fileName)
+    } catch (error) {
+      console.error('Export PDF error:', error)
+      toast(error instanceof Error ? error.message : 'PDF 生成失败', 'error')
+    } finally {
+      setIsExportingPdf(false)
+    }
   }
 
   const handleExportWord = async () => {
@@ -222,7 +232,6 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     await exportToWord(resumeData, fileName)
   }
 
-  const [isSaving, setIsSaving] = useState(false)
   const canNavigateToApplications = !!currentResumeId && !isDirty && !isSaving
 
   const handleSaveDraft = async () => {
@@ -230,7 +239,7 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
     setIsSaving(true)
 
     try {
-      const result = await saveCurrentResumeToCloud({ previewElement: previewRef.current })
+      const result = await saveCurrentResumeToCloud()
       if (!result.success) {
         toast(result.error || '保存失败', 'error')
         return
@@ -348,9 +357,9 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
 
         <CardButton
           onClick={handleExportPdf}
-          disabled={parseStatus === 'idle'}
+          disabled={parseStatus === 'idle' || isExportingPdf}
           icon={<FileDown className={iconSize} />}
-          label="PDF"
+          label={isExportingPdf ? '生成中' : 'PDF'}
           title="Export PDF"
           variant="primary"
           className="bg-slate-800 border-slate-800 text-white hover:bg-slate-700"

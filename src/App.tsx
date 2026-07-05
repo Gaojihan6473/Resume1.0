@@ -159,7 +159,6 @@ function AppContent() {
                 <div className="flex-1 flex flex-col overflow-hidden relative">
                   {/* 工具栏 */}
                   <Toolbar
-                    previewRef={previewRef}
                     sidebarTriggerRef={triggerRef}
                     onOpenSidebar={openSidebar}
                     onScheduleCloseSidebar={scheduleCloseSidebar}
@@ -210,7 +209,6 @@ function AppContent() {
       {/* Dirty Confirm Modal */}
       <DirtyConfirmModal
         isOpen={showDirtyModal}
-        previewRef={previewRef}
         onClose={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)

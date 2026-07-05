@@ -115,6 +115,38 @@ export async function uploadResumeFile(file: File): Promise<{ success: boolean; 
   }
 }
 
+export async function uploadGeneratedResumePdf(
+  pdfBlob: Blob,
+  resumeId: string
+): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return { success: false, error: '未登录' }
+    }
+
+    const fileName = `${session.user.id}/generated/${resumeId}.pdf`
+    const { error: uploadError } = await supabase.storage
+      .from(RESUME_BUCKET)
+      .upload(fileName, pdfBlob, {
+        cacheControl: '3600',
+        contentType: 'application/pdf',
+        upsert: true,
+      })
+
+    if (uploadError) {
+      console.error('[uploadGeneratedResumePdf] Upload error:', uploadError)
+      return { success: false, error: '上传 PDF 失败' }
+    }
+
+    invalidateResumeAssetUrl(fileName)
+    return { success: true, fileUrl: fileName }
+  } catch (error) {
+    console.error('[uploadGeneratedResumePdf] Exception:', error)
+    return { success: false, error: '网络异常' }
+  }
+}
+
 export async function deleteResumeFile(fileUrl: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { data: { session } } = await supabase.auth.getSession()

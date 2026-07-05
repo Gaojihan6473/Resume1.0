@@ -94,6 +94,15 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const historyLoadRunRef = useRef(0)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
+  const isSessionForCurrentResume = !sessionResumeId || sessionResumeId === currentResumeId
+  const visibleSelectedSourceKey = isSessionForCurrentResume ? selectedSourceKey : ''
+  const visibleJdText = isSessionForCurrentResume ? jdText : ''
+  const visibleIsAnalyzing = isSessionForCurrentResume ? isAnalyzing : false
+  const visibleAnalysisResult = isSessionForCurrentResume ? analysisResult : null
+  const visibleHasAnalysisStarted = isSessionForCurrentResume ? hasAnalysisStarted : false
+  const visibleIsRightPanelCollapsed = isSessionForCurrentResume ? isRightPanelCollapsed : true
+  const visibleError = isSessionForCurrentResume ? error : null
+  const visibleNotice = isSessionForCurrentResume ? notice : null
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -208,8 +217,8 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     [manualSuccessRecords]
   )
 
-  const selectedApplicationId = getSourceId(selectedSourceKey, 'application')
-  const selectedManualRecordId = getSourceId(selectedSourceKey, 'manual')
+  const selectedApplicationId = getSourceId(visibleSelectedSourceKey, 'application')
+  const selectedManualRecordId = getSourceId(visibleSelectedSourceKey, 'manual')
   const selectedApplication = useMemo(
     () => applicationsWithJD.find((app) => app.id === selectedApplicationId) || null,
     [applicationsWithJD, selectedApplicationId]
@@ -228,14 +237,14 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   useEffect(() => {
     if (isDirty) return
-    if (notice?.message.includes('未保存编辑')) {
+    if (visibleNotice?.message.includes('未保存编辑')) {
       setSession({ notice: null })
     }
-  }, [isDirty, notice?.message, setSession])
+  }, [isDirty, setSession, visibleNotice?.message])
 
   const activeTarget = useMemo(
-    () => hoverTarget ?? lockedTarget,
-    [hoverTarget, lockedTarget]
+    () => isSessionForCurrentResume ? hoverTarget ?? lockedTarget : null,
+    [hoverTarget, isSessionForCurrentResume, lockedTarget]
   )
   const activeSuggestionKey = activeTarget?.key ?? null
   const analysisFocus: ResumeAnalysisFocus | null = useMemo(
@@ -250,12 +259,16 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     [activeTarget, hoverTarget, lockedTarget]
   )
 
-  const suggestionCount = analysisResult?.sectionAnalyses.reduce(
+  const suggestionCount = visibleAnalysisResult?.sectionAnalyses.reduce(
     (count, section) => count + section.suggestions.length,
     0
   ) ?? 0
-  const shouldShowBookmark = hasAnalysisStarted || isAnalyzing || Boolean(analysisResult) || Boolean(error)
-  const gridClass = isRightPanelCollapsed
+  const shouldShowBookmark =
+    visibleHasAnalysisStarted ||
+    visibleIsAnalyzing ||
+    Boolean(visibleAnalysisResult) ||
+    Boolean(visibleError)
+  const gridClass = visibleIsRightPanelCollapsed
     ? 'grid-cols-[45%_minmax(0,1fr)_0]'
     : 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
 
@@ -381,6 +394,19 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const handleSourceSelect = useCallback(
     async (sourceKey: string) => {
+      if (
+        sessionResumeId === currentResumeId &&
+        sourceKey === selectedSourceKey &&
+        isAnalyzing
+      ) {
+        setSession({
+          resumeId: currentResumeId,
+          isRightPanelCollapsed: false,
+          error: null,
+        })
+        return
+      }
+
       historyLoadRunRef.current += 1
       const runId = historyLoadRunRef.current
       abortCurrentAnalysis()
@@ -421,9 +447,12 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       currentResumeId,
       getManualRecordBadges,
       getRecordBadges,
+      isAnalyzing,
       latestSuccessByApplication,
       loadHistoryRecord,
       manualSuccessRecords,
+      selectedSourceKey,
+      sessionResumeId,
       setSession,
     ]
   )
@@ -433,7 +462,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     setHoverTarget(null)
     setLockedTarget(null)
 
-    if (selectedSourceKey) {
+    if (visibleSelectedSourceKey) {
       setSession({
         resumeId: currentResumeId,
         selectedSourceKey: '',
@@ -468,8 +497,8 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }
 
   const handleToggleDetails = useCallback(() => {
-    setSession({ isRightPanelCollapsed: !isRightPanelCollapsed })
-  }, [isRightPanelCollapsed, setSession])
+    setSession({ isRightPanelCollapsed: !visibleIsRightPanelCollapsed })
+  }, [setSession, visibleIsRightPanelCollapsed])
 
   const createHistoryRecord = useCallback(
     async ({
@@ -546,7 +575,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       notice: null,
     })
 
-    const normalizedJdText = normalizeAnalysisText(jdText)
+    const normalizedJdText = normalizeAnalysisText(visibleJdText)
     if (!normalizedJdText) {
       setSession({ error: '请先输入 JD 内容' })
       return
@@ -642,7 +671,17 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
       const containerRect = container.getBoundingClientRect()
       const elementRect = element.getBoundingClientRect()
-      const nextTop = elementRect.top - containerRect.top + container.scrollTop - Math.round(container.clientHeight * 0.22)
+      const frameElement = element.ownerDocument?.defaultView?.frameElement
+      const frameRect = frameElement instanceof HTMLElement
+        ? frameElement.getBoundingClientRect()
+        : null
+      const frameScale = frameElement instanceof HTMLElement && frameRect && frameElement.offsetHeight > 0
+        ? frameRect.height / frameElement.offsetHeight
+        : 1
+      const elementTop = frameRect
+        ? frameRect.top + elementRect.top * frameScale
+        : elementRect.top
+      const nextTop = elementTop - containerRect.top + container.scrollTop - Math.round(container.clientHeight * 0.22)
       container.scrollTo({
         top: Math.max(0, nextTop),
         behavior: 'smooth',
@@ -697,15 +736,15 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             <JDInputPanel
               applications={applicationsWithJD}
               manualRecords={displayedManualSuccessRecords}
-              selectedSourceKey={selectedSourceKey}
-              jdText={jdText}
+              selectedSourceKey={visibleSelectedSourceKey}
+              jdText={visibleJdText}
               isLoadingApplications={isLoading}
               isLoadingHistory={isLoadingHistory}
-              isAnalyzing={isAnalyzing}
-              error={error}
+              isAnalyzing={visibleIsAnalyzing}
+              error={visibleError}
               analyzeBlockReason={analyzeBlockReason}
-              hasError={Boolean(error)}
-              hasAnalysisResult={Boolean(analysisResult)}
+              hasError={Boolean(visibleError)}
+              hasAnalysisResult={Boolean(visibleAnalysisResult)}
               getApplicationBadges={getApplicationBadges}
               getManualRecordBadges={getManualRecordBadges}
               onSourceSelect={handleSourceSelect}
@@ -723,25 +762,25 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           ref={previewRef}
           analysisFocus={analysisFocus}
           registerAnchor={registerAnchor}
-          fitToWidth={!isRightPanelCollapsed}
+          fitToWidth={!visibleIsRightPanelCollapsed}
           onScrollContainerChange={(element) => {
             previewScrollRef.current = element
           }}
         />
 
-        {shouldShowBookmark && isRightPanelCollapsed && (
+        {shouldShowBookmark && visibleIsRightPanelCollapsed && (
           <AnalysisBookmark
-            isOpen={!isRightPanelCollapsed}
-            isAnalyzing={isAnalyzing}
-            hasError={Boolean(error)}
+            isOpen={!visibleIsRightPanelCollapsed}
+            isAnalyzing={visibleIsAnalyzing}
+            hasError={Boolean(visibleError)}
             suggestionCount={suggestionCount}
-            onClick={() => setSession({ isRightPanelCollapsed: !isRightPanelCollapsed })}
+            onClick={() => setSession({ isRightPanelCollapsed: !visibleIsRightPanelCollapsed })}
           />
         )}
       </section>
 
       <aside className={`min-w-0 min-h-0 border-l border-slate-200 bg-slate-50 transition-opacity duration-200 ${
-        isRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
+        visibleIsRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
       }`}>
         <div className="flex min-h-full flex-col">
           <div className="flex-1 p-4">
@@ -757,18 +796,18 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
               </button>
             </div>
 
-            {notice && <AnalysisNoticeBox notice={notice} className="mb-4" />}
+            {visibleNotice && <AnalysisNoticeBox notice={visibleNotice} className="mb-4" />}
 
-            {error && (
+            {visibleError && (
               <div className="mb-4 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="whitespace-pre-line">{error}</span>
+                <span className="whitespace-pre-line">{visibleError}</span>
               </div>
             )}
 
-            {analysisResult ? (
+            {visibleAnalysisResult ? (
               <Suggestions
-                sectionAnalyses={analysisResult.sectionAnalyses}
+                sectionAnalyses={visibleAnalysisResult.sectionAnalyses}
                 activeSuggestionKey={activeSuggestionKey}
                 getSuggestionTarget={getSuggestionTarget}
                 onSuggestionHover={handleSuggestionHover}
@@ -776,7 +815,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
                 onSuggestionClick={handleSuggestionClick}
               />
             ) : (
-              <AnalysisEmptyState isAnalyzing={isAnalyzing} />
+              <AnalysisEmptyState isAnalyzing={visibleIsAnalyzing} />
             )}
           </div>
         </div>
