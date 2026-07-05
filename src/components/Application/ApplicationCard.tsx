@@ -263,8 +263,8 @@ export function ApplicationCard({
         <div className="px-4 py-3">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-medium text-slate-800">
+              <div className="flex min-w-0 items-center gap-2">
+                <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                   {application.company}
                   {application.position && (
                     <span className="text-slate-400 font-normal"> - {application.position}</span>
@@ -331,7 +331,7 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-lg font-medium px-2 py-0.5 text-xs ${bg} ${text}`}
+      className={`inline-flex shrink-0 items-center rounded-lg font-medium px-2 py-0.5 text-xs ${bg} ${text}`}
     >
       {label}
     </span>

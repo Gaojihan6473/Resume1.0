@@ -762,16 +762,16 @@ function UnauthenticatedLanding({
 }) {
   return (
     <>
-      <section className="relative mb-7 grid items-center gap-7 xl:grid-cols-[minmax(720px,1fr)_340px]">
-        <div className="pt-2 text-center xl:text-left">
+      <section className="relative mb-7 grid items-center gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 pt-2 text-center lg:text-left">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/50 backdrop-blur">
             <Target className="h-3.5 w-3.5" />
             JD 定制简历工作台
           </div>
-          <h1 className="mx-auto max-w-3xl text-[38px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl xl:mx-0 xl:max-w-none xl:whitespace-nowrap">
+          <h1 className="mx-auto max-w-3xl text-[38px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl lg:mx-0 lg:max-w-none lg:whitespace-nowrap">
             每个 <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">JD</span>，都有一版更匹配的简历
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-8 text-slate-500 xl:mx-0">
+          <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-8 text-slate-500 lg:mx-0 lg:max-w-none lg:truncate">
             先建立一份基础简历，再围绕不同岗位复制、调整和分析匹配点，让每次投递都有对应版本。
           </p>
         </div>
