@@ -8,6 +8,7 @@ const maxBodyBytes = Number(process.env.PDF_RENDER_MAX_BODY_BYTES || 5 * 1024 * 
 const requireAuth = process.env.PDF_RENDER_REQUIRE_AUTH !== 'false'
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
+const reuseBrowser = process.env.PDF_RENDER_REUSE_BROWSER === 'true'
 
 let browserPromise = null
 let serverlessChromiumPromise = null
@@ -126,29 +127,71 @@ async function getBrowser() {
     chromiumPromise = import('playwright-core').then((module) => module.chromium)
   }
 
-  if (!browserPromise) {
-    const [serverlessChromium, chromium] = await Promise.all([
-      serverlessChromiumPromise,
-      chromiumPromise,
-    ])
-
-    browserPromise = chromium.launch({
-      args: serverlessChromium.args,
-      executablePath: await serverlessChromium.executablePath(),
-      headless: serverlessChromium.headless,
-    })
+  if (!reuseBrowser) {
+    return launchBrowser()
   }
-  return browserPromise
+
+  if (!browserPromise) {
+    browserPromise = launchBrowser()
+      .then((browser) => {
+        browser.on('disconnected', () => {
+          browserPromise = null
+        })
+        return browser
+      })
+      .catch((error) => {
+        browserPromise = null
+        throw error
+      })
+  }
+
+  const browser = await browserPromise
+  if (!browser.isConnected()) {
+    browserPromise = null
+    return getBrowser()
+  }
+
+  return browser
 }
 
-async function renderHtmlToPdf(html) {
-  const browser = await getBrowser()
-  const page = await browser.newPage({
-    viewport: { width: 794, height: 1123 },
-    deviceScaleFactor: 1,
+async function launchBrowser() {
+  const [serverlessChromium, chromium] = await Promise.all([
+    serverlessChromiumPromise,
+    chromiumPromise,
+  ])
+
+  return chromium.launch({
+    args: serverlessChromium.args,
+    executablePath: await serverlessChromium.executablePath(),
+    headless: serverlessChromium.headless,
   })
+}
+
+function isClosedBrowserError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /Target page, context or browser has been closed|Target closed|Browser closed|browser.*closed/i.test(message)
+}
+
+async function closeBrowserAfterRender(browser) {
+  if (reuseBrowser) return
 
   try {
+    await browser.close()
+  } catch {
+    // Chromium may already be gone if it crashed or was reclaimed during rendering.
+  }
+}
+
+async function renderHtmlToPdfOnce(html) {
+  const browser = await getBrowser()
+  let page = null
+
+  try {
+    page = await browser.newPage({
+      viewport: { width: 794, height: 1123 },
+      deviceScaleFactor: 1,
+    })
+
     await page.emulateMedia({ media: 'print' })
     await page.setContent(html, { waitUntil: 'networkidle' })
     await page.evaluate(() => document.fonts.ready)
@@ -164,7 +207,26 @@ async function renderHtmlToPdf(html) {
       },
     })
   } finally {
-    await page.close()
+    if (page) {
+      try {
+        await page.close()
+      } catch {
+        // The page can already be closed when Chromium exits unexpectedly.
+      }
+    }
+    await closeBrowserAfterRender(browser)
+  }
+}
+
+async function renderHtmlToPdf(html) {
+  try {
+    return await renderHtmlToPdfOnce(html)
+  } catch (error) {
+    if (!isClosedBrowserError(error)) throw error
+
+    browserPromise = null
+    console.warn('[vercel-pdf-render] Chromium was closed during render, retrying once.')
+    return renderHtmlToPdfOnce(html)
   }
 }
 
