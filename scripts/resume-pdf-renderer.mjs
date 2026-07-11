@@ -392,13 +392,15 @@ function renderEducation(data) {
       .join('')
     const details = [edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).map(escapeHtml).join(' | ')
     return `
-      <div class="resume-item avoid-break">
+      <div class="resume-item education-item" data-pagination-item="education">
+        <div class="item-header pagination-keep-with-next">
         <div class="item-row item-row-top">
           <span class="item-primary school-name"><strong>${escapeHtml(edu.school)}</strong>${tags}</span>
           <span class="item-date">${escapeHtml(edu.startDate)} - ${escapeHtml(edu.endDate)}</span>
         </div>
         ${details ? `<div>${details}</div>` : ''}
-        ${edu.description ? `<div class="description">${textToHtml(edu.description)}</div>` : ''}
+        </div>
+        ${edu.description ? `<div class="description pagination-unit">${textToHtml(edu.description)}</div>` : ''}
       </div>
     `
   }).join('')
@@ -420,12 +422,14 @@ function renderInternships(data, bodyFontSize, lineHeight) {
       ].join('')).join('')
 
     return `
-      <div class="resume-item">
+      <div class="resume-item" data-pagination-item="rich">
+        <div class="item-header pagination-keep-with-next">
         <div class="item-row item-row-top avoid-break">
           <span class="item-primary"><strong>${escapeHtml(intern.company)}</strong></span>
           <span class="item-date">${escapeHtml(intern.startDate)} - ${escapeHtml(intern.endDate)}</span>
         </div>
         ${meta ? `<div class="avoid-break">${meta}</div>` : ''}
+        </div>
         <div class="rich-content" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${richContent}</div>
       </div>
     `
@@ -446,12 +450,14 @@ function renderProjects(data, bodyFontSize, lineHeight) {
       ].join('')
 
     return `
-      <div class="resume-item">
+      <div class="resume-item" data-pagination-item="rich">
+        <div class="item-header pagination-keep-with-next">
         <div class="item-row item-row-top avoid-break">
           <span class="item-primary"><strong>${escapeHtml(project.name)}</strong></span>
           <span class="item-date">${escapeHtml(project.startDate)} - ${escapeHtml(project.endDate)}</span>
         </div>
         ${project.role ? `<div class="avoid-break">${escapeHtml(project.role)}</div>` : ''}
+        </div>
         <div class="rich-content" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${richContent}</div>
       </div>
     `
@@ -469,7 +475,7 @@ function renderSummary(data, bodyFontSize, lineHeight) {
       ? `<ul>${summary.highlights.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
       : `<p>${textToHtml(summary.text)}</p>`
 
-  return renderSection('个人总结', `<div class="rich-content" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${content}</div>`)
+  return renderSection('个人总结', `<div class="rich-content" data-pagination-item="rich" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${content}</div>`)
 }
 
 function renderSkills(data) {
@@ -478,10 +484,10 @@ function renderSkills(data) {
   if (!hasSkills) return ''
 
   const rows = [
-    skills.technical.length > 0 ? `<div><strong>技术技能：</strong>${escapeHtml(skills.technical.join('、'))}</div>` : '',
-    skills.languages.length > 0 ? `<div><strong>语言能力：</strong>${escapeHtml(skills.languages.join('、'))}</div>` : '',
-    skills.certificates.length > 0 ? `<div><strong>证书资格：</strong>${escapeHtml(skills.certificates.join('、'))}</div>` : '',
-    skills.interests.length > 0 ? `<div><strong>兴趣爱好：</strong>${escapeHtml(skills.interests.join('、'))}</div>` : '',
+    skills.technical.length > 0 ? `<div class="pagination-unit"><strong>技术技能：</strong>${escapeHtml(skills.technical.join('、'))}</div>` : '',
+    skills.languages.length > 0 ? `<div class="pagination-unit"><strong>语言能力：</strong>${escapeHtml(skills.languages.join('、'))}</div>` : '',
+    skills.certificates.length > 0 ? `<div class="pagination-unit"><strong>证书资格：</strong>${escapeHtml(skills.certificates.join('、'))}</div>` : '',
+    skills.interests.length > 0 ? `<div class="pagination-unit"><strong>兴趣爱好：</strong>${escapeHtml(skills.interests.join('、'))}</div>` : '',
   ].join('')
 
   return renderSection('技能证书', `<div class="skills-block">${rows}</div>`)
@@ -617,6 +623,8 @@ export function buildResumePdfHtml(input, title = '') {
     .section-heading {
       break-inside: avoid;
       page-break-inside: avoid;
+      break-after: avoid;
+      page-break-after: avoid;
     }
     h2 {
       margin: 0 0 ${pt(tightSpacing)} 0;
@@ -635,9 +643,16 @@ export function buildResumePdfHtml(input, title = '') {
       margin-bottom: ${pt(itemSpacing)};
     }
     .avoid-break,
-    .item-row-top {
+    .item-row-top,
+    .item-header,
+    .pagination-unit {
       break-inside: avoid;
       page-break-inside: avoid;
+    }
+    .item-header,
+    .pagination-keep-with-next {
+      break-after: avoid;
+      page-break-after: avoid;
     }
     .item-row {
       display: flex;
@@ -686,6 +701,10 @@ export function buildResumePdfHtml(input, title = '') {
     .rich-content p,
     .rich-content div {
       margin: 2pt 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      orphans: 2;
+      widows: 2;
     }
     .rich-content ul,
     .rich-content ol {
@@ -694,10 +713,14 @@ export function buildResumePdfHtml(input, title = '') {
     }
     .rich-content li {
       margin: 2pt 0;
-    }
-    .skills-block {
       break-inside: avoid;
       page-break-inside: avoid;
+      orphans: 2;
+      widows: 2;
+    }
+    .skills-block {
+      break-inside: auto;
+      page-break-inside: auto;
     }
   </style>
 </head>

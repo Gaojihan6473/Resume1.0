@@ -20,7 +20,7 @@ const FIT_SIDE_GAP = 28
 const PAGE_GAP = 16
 const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
 const PREVIEW_DOCUMENT_CACHE_LIMIT = 10
-const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v2'
+const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v3-semantic-pagination'
 const EMPTY_IFRAME_DOCUMENT = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style id="resume-preview-style"></style></head><body></body></html>'
 const SCREEN_PAGINATION_CSS = `
   html,
@@ -354,39 +354,275 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
         if (appendNodeToPage(section, currentPage)) return
       }
 
-      const sectionChildren = Array.from(section.children)
+      const sectionChildren = Array.from(section.children) as HTMLElement[]
       const heading = sectionChildren.find((child) => child.classList.contains('section-heading'))
       const bodyChildren = sectionChildren.filter((child) => child !== heading)
-      let pageSection = section.cloneNode(false) as HTMLElement
+      let pageSection: HTMLElement
+      let sectionHasPlacedBody = false
+      let carryItemHeader = false
 
-      const startSectionOnCurrentPage = () => {
+      const startSection = (includeHeading: boolean) => {
         pageSection = section.cloneNode(false) as HTMLElement
-        if (heading) pageSection.appendChild(heading.cloneNode(true))
+        if (includeHeading && heading) pageSection.appendChild(heading.cloneNode(true))
         currentPage.appendChild(pageSection)
-        if (!fitsPage(currentPage) && currentPage.children.length === 1 && pageSection.children.length <= 1) {
+      }
+
+      const moveToNextPage = (carryHeading = false) => {
+        if (carryHeading) pageSection.remove()
+        currentPage = createPage()
+        startSection(carryHeading)
+      }
+
+      const cloneTextSlice = (sourceUnit: HTMLElement, startOffset: number, endOffset: number) => {
+        const clone = sourceUnit.cloneNode(false) as HTMLElement
+        const range = doc.createRange()
+        range.selectNodeContents(sourceUnit)
+        const walker = doc.createTreeWalker(sourceUnit, NodeFilter.SHOW_TEXT)
+        let cursor = 0
+        let node = walker.nextNode()
+        let startSet = startOffset === 0
+        if (startSet) range.setStart(sourceUnit, 0)
+
+        while (node) {
+          const length = node.textContent?.length || 0
+          if (!startSet && startOffset <= cursor + length) {
+            range.setStart(node, Math.max(0, startOffset - cursor))
+            startSet = true
+          }
+          if (endOffset <= cursor + length) {
+            range.setEnd(node, Math.max(0, endOffset - cursor))
+            clone.appendChild(range.cloneContents())
+            return clone
+          }
+          cursor += length
+          node = walker.nextNode()
+        }
+
+        range.setEnd(sourceUnit, sourceUnit.childNodes.length)
+        clone.appendChild(range.cloneContents())
+        return clone
+      }
+
+      const appendOversizedTextUnit = (
+        unit: HTMLElement,
+        initialContainer: HTMLElement,
+        resetContainer: () => HTMLElement,
+      ) => {
+        const textLength = unit.textContent?.length || 0
+        if (textLength === 0) {
+          initialContainer.appendChild(unit.cloneNode(true))
           return
+        }
+
+        let offset = 0
+        let container = initialContainer
+        while (offset < textLength) {
+          let low = offset + 1
+          let high = textLength
+          let best = offset
+          while (low <= high) {
+            const middle = Math.floor((low + high) / 2)
+            const candidate = cloneTextSlice(unit, offset, middle)
+            container.appendChild(candidate)
+            const fits = fitsPage(currentPage)
+            candidate.remove()
+            if (fits) {
+              best = middle
+              low = middle + 1
+            } else {
+              high = middle - 1
+            }
+          }
+
+          if (best === offset) {
+            container.appendChild(cloneTextSlice(unit, offset, textLength))
+            return
+          }
+
+          // Prefer a word/punctuation boundary without sacrificing more than a short line.
+          const text = unit.textContent || ''
+          if (best < textLength) {
+            if (textLength - best < 60 && best - offset > 60) best = textLength - 60
+            const boundary = text.slice(offset, best).search(/[\s，。；！？、,.!?;:]([^\s，。；！？、,.!?;:]*)$/)
+            if (boundary > Math.max(0, best - offset - 40)) best = offset + boundary + 1
+          }
+
+          container.appendChild(cloneTextSlice(unit, offset, best))
+          sectionHasPlacedBody = true
+          offset = best
+          if (offset < textLength) {
+            moveToNextPage()
+            container = resetContainer()
+          }
         }
       }
 
-      startSectionOnCurrentPage()
+      startSection(true)
 
-      bodyChildren.forEach((child) => {
-        const clone = child.cloneNode(true) as HTMLElement
-        pageSection.appendChild(clone)
-
-        if (fitsPage(currentPage)) return
-
-        clone.remove()
-
-        const hasSectionBody = pageSection.children.length > (heading ? 1 : 0)
-        if (!hasSectionBody) {
-          pageSection.appendChild(child.cloneNode(true))
+      const appendUnit = (
+        unit: HTMLElement,
+        createContainer: () => HTMLElement,
+        resetContainer: () => HTMLElement,
+      ) => {
+        let container = createContainer()
+        const clone = unit.cloneNode(true) as HTMLElement
+        container.appendChild(clone)
+        if (fitsPage(currentPage)) {
+          sectionHasPlacedBody = true
           return
         }
 
-        currentPage = createPage()
-        startSectionOnCurrentPage()
-        pageSection.appendChild(child.cloneNode(true))
+        clone.remove()
+        carryItemHeader = !sectionHasPlacedBody && Boolean(heading)
+        moveToNextPage(carryItemHeader)
+        container = resetContainer()
+        carryItemHeader = false
+        const freshClone = unit.cloneNode(true) as HTMLElement
+        container.appendChild(freshClone)
+        if (!fitsPage(currentPage)) {
+          freshClone.remove()
+          appendOversizedTextUnit(unit, container, resetContainer)
+        } else {
+          sectionHasPlacedBody = true
+        }
+      }
+
+      const appendRichContent = (
+        rich: HTMLElement,
+        createRichContainer: () => HTMLElement,
+        resetRichContainer: () => HTMLElement,
+      ) => {
+        let pageRich = createRichContainer()
+        Array.from(rich.children).forEach((child) => {
+          const element = child as HTMLElement
+          if (element.matches('ul, ol')) {
+            let pageList = element.cloneNode(false) as HTMLElement
+            pageRich.appendChild(pageList)
+            Array.from(element.children).forEach((listItem) => {
+              appendUnit(
+                listItem as HTMLElement,
+                () => pageList,
+                () => {
+                  pageRich = resetRichContainer()
+                  pageList = element.cloneNode(false) as HTMLElement
+                  pageRich.appendChild(pageList)
+                  return pageList
+                },
+              )
+            })
+            if (pageList.children.length === 0) pageList.remove()
+            return
+          }
+
+          appendUnit(
+            element,
+            () => pageRich,
+            () => {
+              pageRich = resetRichContainer()
+              return pageRich
+            },
+          )
+        })
+
+        if (rich.children.length === 0 && rich.textContent?.trim()) {
+          appendUnit(
+            rich,
+            () => pageSection,
+            () => pageSection,
+          )
+        }
+      }
+
+      bodyChildren.forEach((child) => {
+        const wholeChild = child.cloneNode(true) as HTMLElement
+        pageSection.appendChild(wholeChild)
+        if (fitsPage(currentPage)) {
+          sectionHasPlacedBody = true
+          return
+        }
+        wholeChild.remove()
+
+        if (pageSection.children.length > (heading ? 1 : 0)) moveToNextPage()
+
+        const rich = child.classList.contains('rich-content')
+          ? child
+          : child.querySelector<HTMLElement>(':scope > .rich-content')
+        const skills = child.classList.contains('skills-block') ? child : null
+
+        if (!rich && !skills) {
+          const educationDescription = child.querySelector<HTMLElement>(':scope > .description.pagination-unit')
+          const educationHeader = child.querySelector<HTMLElement>(':scope > .item-header')
+          if (educationDescription && educationHeader) {
+            let pageEducation = child.cloneNode(false) as HTMLElement
+            pageEducation.appendChild(educationHeader.cloneNode(true))
+            pageSection.appendChild(pageEducation)
+            appendUnit(
+              educationDescription,
+              () => pageEducation,
+              () => {
+                pageEducation = child.cloneNode(false) as HTMLElement
+                if (carryItemHeader) pageEducation.appendChild(educationHeader.cloneNode(true))
+                pageSection.appendChild(pageEducation)
+                return pageEducation
+              },
+            )
+            return
+          }
+
+          const moved = child.cloneNode(true) as HTMLElement
+          pageSection.appendChild(moved)
+          if (!fitsPage(currentPage) && currentPage.children.length > 1) {
+            moved.remove()
+            moveToNextPage()
+            pageSection.appendChild(child.cloneNode(true))
+          }
+          sectionHasPlacedBody = true
+          return
+        }
+
+        if (skills) {
+          let pageSkills = skills.cloneNode(false) as HTMLElement
+          pageSection.appendChild(pageSkills)
+          Array.from(skills.children).forEach((row) => {
+            appendUnit(
+              row as HTMLElement,
+              () => pageSkills,
+              () => {
+                pageSkills = skills.cloneNode(false) as HTMLElement
+                pageSection.appendChild(pageSkills)
+                return pageSkills
+              },
+            )
+          })
+          return
+        }
+
+        if (!rich) return
+        const richContent = rich
+
+        let pageItem = child.classList.contains('resume-item')
+          ? child.cloneNode(false) as HTMLElement
+          : null
+        const itemHeader = child.querySelector<HTMLElement>(':scope > .item-header')
+        if (pageItem) {
+          if (itemHeader) pageItem.appendChild(itemHeader.cloneNode(true))
+          pageSection.appendChild(pageItem)
+        }
+
+        const createRich = () => {
+          const pageRich = richContent.cloneNode(false) as HTMLElement
+          ;(pageItem || pageSection).appendChild(pageRich)
+          return pageRich
+        }
+        const resetRich = () => {
+          if (pageItem) {
+            pageItem = child.cloneNode(false) as HTMLElement
+            if (carryItemHeader && itemHeader) pageItem.appendChild(itemHeader.cloneNode(true))
+            pageSection.appendChild(pageItem)
+          }
+          return createRich()
+        }
+        appendRichContent(richContent, createRich, resetRich)
       })
     }
 
