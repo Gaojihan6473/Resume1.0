@@ -12,6 +12,7 @@ export interface MeResponse {
   authenticated: boolean
   user?: User
   error?: string
+  unavailable?: boolean
 }
 
 export async function signIn(key: string): Promise<SignInResponse> {
@@ -65,8 +66,26 @@ export async function fetchCurrentUser(): Promise<MeResponse> {
       headers,
     })
 
-    return await response.json()
+    const data = await response.json().catch(() => null) as MeResponse | null
+
+    if (response.status === 401) {
+      return data ?? { authenticated: false }
+    }
+
+    if (!response.ok) {
+      return {
+        authenticated: false,
+        unavailable: true,
+        error: data?.error || '认证服务暂时不可用',
+      }
+    }
+
+    return data ?? {
+      authenticated: false,
+      unavailable: true,
+      error: '认证服务返回异常',
+    }
   } catch {
-    return { authenticated: false, error: '网络异常' }
+    return { authenticated: false, unavailable: true, error: '网络异常' }
   }
 }

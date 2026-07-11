@@ -22,7 +22,9 @@ export function LoginPage() {
     if (action === 'new') {
       navigate('/?postLoginAction=new', { replace: true })
     } else if (action === 'upload') {
-      navigate('/?postLoginAction=upload', { replace: true })
+      // Upload is only the entry point to authentication. Reopening the upload
+      // modal immediately after login is surprising and obscures the home page.
+      navigate('/', { replace: true })
     } else if (action === 'me') {
       navigate('/me', { replace: true })
     } else if (safeRedirect) {

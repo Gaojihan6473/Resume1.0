@@ -217,7 +217,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
     try {
       const { exportToPdf } = await import('../../utils/exporters')
-      const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.pdf` : '简历.pdf'
+      const fileName = resumeData.resumeTitle.trim() || '未命名简历'
       await exportToPdf(resumeData, fileName)
     } catch (error) {
       console.error('Export PDF error:', error)

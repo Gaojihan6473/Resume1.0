@@ -32,6 +32,12 @@ function AppContent() {
   // Initialize auth session on app load
   useEffect(() => {
     checkSession()
+
+    const handleOnline = () => {
+      checkSession()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
   }, [checkSession])
 
   useEffect(() => {

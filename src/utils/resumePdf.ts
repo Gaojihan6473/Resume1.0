@@ -2,6 +2,10 @@ import type { ResumeData } from '../types/resume'
 import { renderResumePdf } from '../lib/api/pdfRender'
 import { buildResumeDocumentHtml } from './resumeHtmlDocument'
 import { normalizeResumeData, resumeDataToRecord } from './resumeData'
+import {
+  getResumePreviewPdfSnapshot,
+  waitForResumePreviewPdfSnapshot,
+} from './resumePdfPreviewSnapshot'
 
 interface PdfCacheEntry {
   signature: string
@@ -27,7 +31,14 @@ export async function getResumePdfBlob(
   title = getResumePdfTitle(data)
 ): Promise<Blob> {
   const normalized = normalizeResumeData(data)
-  const signature = createResumePdfSignature(normalized, title)
+  const resumeSignature = createResumePdfSignature(normalized, title)
+  const previewSnapshot =
+    getResumePreviewPdfSnapshot(resumeSignature) ??
+    await waitForResumePreviewPdfSnapshot(resumeSignature)
+  const html = previewSnapshot?.html ?? buildResumeDocumentHtml(normalized, title)
+  const signature = previewSnapshot
+    ? `${resumeSignature}:preview:${previewSnapshot.htmlSignature}`
+    : `${resumeSignature}:raw`
 
   if (cache?.signature === signature && cache.blob) {
     return cache.blob
@@ -37,7 +48,6 @@ export async function getResumePdfBlob(
     return cache.promise
   }
 
-  const html = buildResumeDocumentHtml(normalized, title)
   const promise = renderResumePdf(normalized, title, html)
     .then((blob) => {
       cache = { signature, blob }

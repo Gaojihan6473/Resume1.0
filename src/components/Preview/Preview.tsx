@@ -9,7 +9,11 @@ import {
 } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { buildResumeDocumentHtml } from '../../utils/resumeHtmlDocument'
-import { getResumePdfTitle } from '../../utils/resumePdf'
+import { createResumePdfSignature, getResumePdfTitle } from '../../utils/resumePdf'
+import {
+  buildResumePreviewPdfHtml,
+  publishResumePreviewPdfSnapshot,
+} from '../../utils/resumePdfPreviewSnapshot'
 import { isRichHtmlEmpty } from '../../utils/richText'
 import type { ResumeData } from '../../types/resume'
 import type { ResumeAnalysisFocus } from './PreviewContent'
@@ -20,7 +24,8 @@ const FIT_SIDE_GAP = 28
 const PAGE_GAP = 16
 const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
 const PREVIEW_DOCUMENT_CACHE_LIMIT = 10
-const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v3-semantic-pagination'
+const PREVIEW_PDF_FIT_GUARD_PX = 2
+const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v9-cross-frame-pagination'
 const EMPTY_IFRAME_DOCUMENT = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style id="resume-preview-style"></style></head><body></body></html>'
 const SCREEN_PAGINATION_CSS = `
   html,
@@ -209,7 +214,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
   const isVisibleInPageFrame = useCallback((element: HTMLElement) => {
     const frame = element.closest('.resume-page-frame')
-    if (!(frame instanceof HTMLElement)) return true
+    if (!frame) return true
 
     const elementRect = element.getBoundingClientRect()
     const frameRect = frame.getBoundingClientRect()
@@ -244,6 +249,19 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     registeredAnchorKeysRef.current = nextKeys
   }, [isVisibleInPageFrame, registerAnchor])
 
+  const publishPdfSnapshot = useCallback((doc: Document) => {
+    if (!canCachePreview) return
+    if (doc.fonts && doc.fonts.status !== 'loaded') return
+
+    const pdfHtml = buildResumePreviewPdfHtml(doc)
+    if (!pdfHtml) return
+
+    publishResumePreviewPdfSnapshot(
+      createResumePdfSignature(resumeData, title),
+      pdfHtml,
+    )
+  }, [canCachePreview, resumeData, title])
+
   const measureCssLength = useCallback((doc: Document, value: string, fallback: number) => {
     if (!value.trim()) return fallback
 
@@ -257,7 +275,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     doc.body.appendChild(probe)
     const rect = probe.getBoundingClientRect()
     probe.remove()
-    return Math.ceil(rect.width || rect.height || fallback)
+    const measured = rect.width || rect.height
+    return measured > 0 ? measured : fallback
   }, [])
 
   const cancelScheduledFrames = useCallback(() => {
@@ -303,7 +322,24 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     nextStack.dataset.previewStaging = '1'
     doc.body.appendChild(nextStack)
 
-    const fitsPage = (page: HTMLElement) => page.scrollHeight <= page.clientHeight + 1
+    const fitsPage = (page: HTMLElement) => {
+      const pageRect = page.getBoundingClientRect()
+      let contentBottom = pageRect.top
+
+      Array.from(page.children).forEach((child) => {
+        const childRect = child.getBoundingClientRect()
+        if (childRect.width === 0 && childRect.height === 0) return
+
+        const childStyle = doc.defaultView?.getComputedStyle(child)
+        const marginBottom = Number.parseFloat(childStyle?.marginBottom || '0') || 0
+        contentBottom = Math.max(contentBottom, childRect.bottom + marginBottom)
+      })
+
+      return (
+        page.scrollHeight <= page.clientHeight + 1 &&
+        contentBottom <= pageRect.bottom - PREVIEW_PDF_FIT_GUARD_PX
+      )
+    }
 
     const createPage = () => {
       const frame = doc.createElement('div')
@@ -349,17 +385,67 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     const appendSection = (section: HTMLElement) => {
       if (appendNodeToPage(section, currentPage)) return
 
-      if (currentPage.children.length > 0) {
-        currentPage = createPage()
-        if (appendNodeToPage(section, currentPage)) return
-      }
-
       const sectionChildren = Array.from(section.children) as HTMLElement[]
       const heading = sectionChildren.find((child) => child.classList.contains('section-heading'))
       const bodyChildren = sectionChildren.filter((child) => child !== heading)
       let pageSection: HTMLElement
       let sectionHasPlacedBody = false
       let carryItemHeader = false
+
+      const cloneLeadingRichContent = (rich: HTMLElement) => {
+        const leadingRich = rich.cloneNode(false) as HTMLElement
+        const firstUnit = rich.firstElementChild as HTMLElement | null
+        if (!firstUnit) {
+          leadingRich.append(...Array.from(rich.childNodes).map((node) => node.cloneNode(true)))
+          return leadingRich
+        }
+
+        if (firstUnit.matches('ul, ol')) {
+          const leadingList = firstUnit.cloneNode(false) as HTMLElement
+          const firstListItem = firstUnit.firstElementChild
+          if (firstListItem) leadingList.appendChild(firstListItem.cloneNode(true))
+          leadingRich.appendChild(leadingList)
+          return leadingRich
+        }
+
+        leadingRich.appendChild(firstUnit.cloneNode(true))
+        return leadingRich
+      }
+
+      const cloneLeadingBodyContent = (child: HTMLElement) => {
+        const rich = child.classList.contains('rich-content')
+          ? child
+          : child.querySelector<HTMLElement>(':scope > .rich-content')
+        if (child.classList.contains('resume-item')) {
+          const leadingItem = child.cloneNode(false) as HTMLElement
+          const itemHeader = child.querySelector<HTMLElement>(':scope > .item-header')
+          if (itemHeader) leadingItem.appendChild(itemHeader.cloneNode(true))
+          if (rich) leadingItem.appendChild(cloneLeadingRichContent(rich))
+          return leadingItem
+        }
+
+        if (rich) return cloneLeadingRichContent(rich)
+
+        if (child.classList.contains('skills-block')) {
+          const leadingSkills = child.cloneNode(false) as HTMLElement
+          const firstRow = child.firstElementChild
+          if (firstRow) leadingSkills.appendChild(firstRow.cloneNode(true))
+          return leadingSkills
+        }
+
+        return child.cloneNode(true) as HTMLElement
+      }
+
+      if (currentPage.children.length > 0 && heading && bodyChildren.length > 0) {
+        const leadingContent = section.cloneNode(false) as HTMLElement
+        leadingContent.appendChild(heading.cloneNode(true))
+        leadingContent.appendChild(cloneLeadingBodyContent(bodyChildren[0]))
+        currentPage.appendChild(leadingContent)
+        const canStartOnCurrentPage = fitsPage(currentPage)
+        leadingContent.remove()
+
+        if (!canStartOnCurrentPage) currentPage = createPage()
+      }
 
       const startSection = (includeHeading: boolean) => {
         pageSection = section.cloneNode(false) as HTMLElement
@@ -627,8 +713,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
 
     Array.from(source.children).forEach((child) => {
-      if (child instanceof HTMLElement && child.classList.contains('resume-section')) {
-        appendSection(child)
+      if (child.classList.contains('resume-section')) {
+        appendSection(child as HTMLElement)
       } else {
         appendSimpleBlock(child)
       }
@@ -666,9 +752,10 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     if (canCachePreview) {
       cachePreviewDocument(previewCacheKey, previewHtml, doc, finalHeight)
     }
+    publishPdfSnapshot(doc)
     syncIframeAnchors()
     setPreviewReady(true)
-  }, [canCachePreview, measureCssLength, previewCacheKey, previewHtml, syncIframeAnchors])
+  }, [canCachePreview, measureCssLength, previewCacheKey, previewHtml, publishPdfSnapshot, syncIframeAnchors])
 
   const renderPreviewDocument = useCallback(() => {
     const iframe = iframeRef.current
@@ -682,6 +769,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       styleTextRef.current = (doc.getElementById('resume-preview-style') as HTMLStyleElement | null)?.textContent || ''
       setDocumentHeight(cachedPreview.height)
       setPreviewReady(true)
+      publishPdfSnapshot(doc)
       syncIframeAnchors()
       return cancelScheduledFrames
     }
@@ -764,6 +852,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     paginateIframeDocument,
     previewCacheKey,
     previewHtml,
+    publishPdfSnapshot,
     scheduleFrame,
     syncIframeAnchors,
     waitForPreviewFonts,
