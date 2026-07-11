@@ -8,12 +8,13 @@ export interface JDAnalysisNotice {
   message: string
 }
 
-interface JDAnalysisSessionState {
+export interface JDAnalysisSessionState {
   resumeId: string | null
   selectedSourceKey: string
   jdText: string
   isAnalyzing: boolean
   analysisResult: JDAnalysisResult | null
+  analysisResumeHash: string | null
   hasAnalysisStarted: boolean
   isRightPanelCollapsed: boolean
   error: string | null
@@ -36,6 +37,7 @@ const initialSession = {
   jdText: '',
   isAnalyzing: false,
   analysisResult: null,
+  analysisResumeHash: null,
   hasAnalysisStarted: false,
   isRightPanelCollapsed: true,
   error: null,
@@ -90,6 +92,7 @@ export const useJDAnalysisSessionStore = create<JDAnalysisSessionState>((set, ge
   clearAnalysisDisplay: () => {
     set({
       analysisResult: null,
+      analysisResumeHash: null,
       hasAnalysisStarted: false,
       isRightPanelCollapsed: true,
       error: null,

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { useState, useEffect } from 'react'
 import { ChevronDown, GripVertical } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
@@ -40,6 +40,13 @@ export function SortableModuleWrapper({
     }
   }
 
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleToggle()
+  }
+
   useEffect(() => {
     if (parseStatus !== 'idle') {
       if (!isControlled) setInternalExpanded(false)
@@ -71,10 +78,14 @@ export function SortableModuleWrapper({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
         className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered && !isDragging ? 'bg-gray-50/80' : 'bg-white'
         }`}
         onClick={handleToggle}
+        onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex items-center gap-2.5">
           <button
@@ -99,7 +110,10 @@ export function SortableModuleWrapper({
         </div>
         {action && (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!expanded) handleToggle()
+            }}
             className="transition-opacity duration-200"
           >
             {action}
@@ -107,6 +121,7 @@ export function SortableModuleWrapper({
         )}
       </div>
       <div
+        hidden={!expanded}
         className={`grid overflow-hidden transition-all duration-300 ease-out ${
           expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}

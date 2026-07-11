@@ -10,6 +10,8 @@ import {
 import { useResumeStore } from '../../store/resumeStore'
 import { buildResumeDocumentHtml } from '../../utils/resumeHtmlDocument'
 import { getResumePdfTitle } from '../../utils/resumePdf'
+import { isRichHtmlEmpty } from '../../utils/richText'
+import type { ResumeData } from '../../types/resume'
 import type { ResumeAnalysisFocus } from './PreviewContent'
 
 const A4_WIDTH = 794
@@ -77,6 +79,27 @@ const SCREEN_PAGINATION_CSS = `
     overflow: hidden !important;
   }
 `
+
+function hasPreviewableContent(resumeData: ResumeData): boolean {
+  return Boolean(
+    resumeData.basic.name ||
+    resumeData.basic.phone ||
+    resumeData.basic.email ||
+    resumeData.basic.location ||
+    resumeData.basic.targetTitle ||
+    resumeData.basic.targetLocation ||
+    resumeData.education.length > 0 ||
+    resumeData.internships.length > 0 ||
+    resumeData.projects.length > 0 ||
+    !isRichHtmlEmpty(resumeData.summary.content) ||
+    resumeData.summary.text ||
+    resumeData.summary.highlights.length > 0 ||
+    resumeData.skills.technical.length > 0 ||
+    resumeData.skills.languages.length > 0 ||
+    resumeData.skills.certificates.length > 0 ||
+    resumeData.skills.interests.length > 0
+  )
+}
 
 interface PreviewProps {
   analysisFocus?: ResumeAnalysisFocus | null
@@ -546,17 +569,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
   }, [containerWidth, fitToWidth, fitZoom, setZoom])
 
-  const isEmpty =
-    !resumeData.basic.name &&
-    resumeData.education.length === 0 &&
-    resumeData.internships.length === 0 &&
-    resumeData.projects.length === 0 &&
-    !resumeData.summary.text &&
-    resumeData.summary.highlights.length === 0 &&
-    resumeData.skills.technical.length === 0 &&
-    resumeData.skills.languages.length === 0
-
-  if (isEmpty) {
+  if (!hasPreviewableContent(resumeData)) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-100">
         <div className="text-center text-gray-400">

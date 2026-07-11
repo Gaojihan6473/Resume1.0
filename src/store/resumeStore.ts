@@ -8,6 +8,8 @@ import { normalizeResumeData } from '../utils/resumeData'
 let activeParseController: AbortController | null = null
 let parseRunId = 0
 
+const cloneResumeData = (data: unknown) => normalizeResumeData(data)
+
 export const useResumeStore = create<AppState>((set, get) => ({
   resumeData: createDefaultResumeData(),
   parseStatus: 'idle',
@@ -19,6 +21,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
   currentResumeId: null,
   isDirty: false,
   currentFile: null,
+  savedResumeSnapshot: null,
 
   // 简历列表缓存
   cachedResumes: [],
@@ -362,8 +365,37 @@ export const useResumeStore = create<AppState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
   setRawText: (text) => set({ rawText: text }),
   setIsAIEnabled: (enabled) => set({ isAIEnabled: enabled }),
-  setCurrentResumeId: (id) => set({ currentResumeId: id }),
+  setCurrentResumeId: (id) => set((state) => ({
+    currentResumeId: id,
+    savedResumeSnapshot: id ? cloneResumeData(state.resumeData) : null,
+  })),
   setIsDirty: (dirty) => set({ isDirty: dirty }),
+  markCurrentResumeSaved: (data) => set((state) => ({
+    resumeData: data ? cloneResumeData(data) : state.resumeData,
+    savedResumeSnapshot: cloneResumeData(data ?? state.resumeData),
+    isDirty: false,
+  })),
+  discardCurrentChanges: () => set((state) => {
+    if (!state.currentResumeId || !state.savedResumeSnapshot) {
+      return {
+        resumeData: createDefaultResumeData(),
+        parseStatus: 'idle' as const,
+        parseError: null,
+        rawText: '',
+        currentResumeId: null,
+        isDirty: false,
+        currentFile: null,
+        savedResumeSnapshot: null,
+      }
+    }
+    return {
+      resumeData: cloneResumeData(state.savedResumeSnapshot),
+      isDirty: false,
+      currentFile: null,
+      parseError: null,
+      parseStatus: 'success' as const,
+    }
+  }),
 
   parseFile: async (file) => {
     parseRunId += 1
@@ -374,7 +406,12 @@ export const useResumeStore = create<AppState>((set, get) => ({
     const controller = new AbortController()
     activeParseController = controller
     const startedAt = new Date().toISOString()
-    set({ parseStatus: 'parsing', parseError: null })
+    set({
+      parseStatus: 'parsing',
+      parseError: null,
+      currentResumeId: null,
+      savedResumeSnapshot: null,
+    })
     try {
       const { parseFile } = await import('../parsers')
       const result = await parseFile(file, get().isAIEnabled, controller.signal)
@@ -388,6 +425,8 @@ export const useResumeStore = create<AppState>((set, get) => ({
         resumeData: normalizeResumeData(applyReferenceTemplate(result.data)),
         rawText: result.rawText,
         parseStatus: 'success',
+        currentResumeId: null,
+        isDirty: true,
       })
     } catch (error) {
       if (runId !== parseRunId || controller.signal.aborted) {
@@ -431,5 +470,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       rawText: '',
       currentResumeId: null,
       isDirty: false,
+      currentFile: null,
+      savedResumeSnapshot: null,
     }),
 }))

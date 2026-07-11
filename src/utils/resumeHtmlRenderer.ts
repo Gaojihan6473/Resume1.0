@@ -194,22 +194,75 @@ function textToHtml(value) {
   return escapeHtml(value).replace(/\r?\n/g, '<br>')
 }
 
+const htmlSpaceEntityRegex = /&(nbsp|ensp|emsp|thinsp|zwnj|zwj|lrm|rlm);|&#(?:160|8203|8204|8205|8288);|&#x(?:a0|200b|200c|200d|2060);/gi
+
 function isHtmlEmpty(html) {
-  return !html || html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim() === ''
+  return !html ||
+    sanitizeResumeText(
+      html
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<br\s*\/?>/gi, '')
+        .replace(/<[^>]*>/g, '')
+        .replace(htmlSpaceEntityRegex, ' ')
+    )
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() === ''
+}
+
+const allowedRichStyleProperties = new Set([
+  'background-color',
+  'margin-left',
+  'padding-left',
+  'text-align',
+])
+
+const allowedTextAlignValues = new Set(['left', 'center', 'right', 'justify'])
+
+function sanitizeStyleValue(property, value) {
+  if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) return ''
+  if (property === 'text-align') return allowedTextAlignValues.has(value.toLowerCase()) ? value.toLowerCase() : ''
+  if (property === 'background-color') {
+    return /^(?:#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}(?:\s*,\s*\d{1,3}){2}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)|transparent)$/i.test(value) ? value : ''
+  }
+  const match = value.match(/^(-?\d+(?:\.\d+)?)px$/i)
+  if (!match) return ''
+  return `${Math.max(0, Math.min(48, Number(match[1])))}px`
+}
+
+function sanitizeStyle(value) {
+  return value
+    .split(';')
+    .map((rule) => rule.trim())
+    .filter(Boolean)
+    .map((rule) => {
+      const separatorIndex = rule.indexOf(':')
+      if (separatorIndex === -1) return ''
+      const property = rule.slice(0, separatorIndex).trim().toLowerCase()
+      const rawValue = rule.slice(separatorIndex + 1).trim()
+      if (!allowedRichStyleProperties.has(property)) return ''
+      const safeValue = sanitizeStyleValue(property, rawValue)
+      return safeValue ? `${property}: ${safeValue}` : ''
+    })
+    .filter(Boolean)
+    .join('; ')
 }
 
 function sanitizeRichHtml(raw) {
   if (!raw) return ''
-  const allowedTags = new Set(['p', 'div', 'ul', 'ol', 'li', 'b', 'strong', 'i', 'em', 'br', 'span'])
+  const allowedTags = new Set(['p', 'div', 'ul', 'ol', 'li', 'b', 'strong', 'i', 'em', 'br', 'span', 'u', 'mark'])
   return raw
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(script|style|iframe|object|embed|link|meta|svg|math)[\s\S]*?<\/\1>/gi, '')
     .replace(/<(script|style|iframe|object|embed|link|meta|svg|math)[^>]*\/?>/gi, '')
-    .replace(/<\s*(\/?)\s*([a-z0-9-]+)(?:\s[^>]*)?>/gi, (_match, slash, tagName) => {
+    .replace(/<\s*(\/?)\s*([a-z0-9-]+)([^>]*)>/gi, (_match, slash, tagName, attrs) => {
       const tag = String(tagName).toLowerCase()
       if (!allowedTags.has(tag)) return ''
       if (tag === 'br') return '<br>'
-      return `<${slash ? '/' : ''}${tag}>`
+      if (slash) return `</${tag}>`
+      const styleMatch = String(attrs || '').match(/\sstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i)
+      const style = sanitizeStyle(styleMatch?.[1] || styleMatch?.[2] || styleMatch?.[3] || '')
+      return style ? `<${tag} style="${escapeHtml(style)}">` : `<${tag}>`
     })
 }
 
@@ -643,7 +696,7 @@ export function buildResumePdfHtml(
           ${targetLine ? `<div class="header-line target-line">${targetLine}</div>` : ''}
         </div>
         <div class="avatar-box">
-          <img src="${escapeHtml(avatarUrl)}" alt="头像">
+          <img src="${escapeHtml(avatarUrl)}" alt="头像"${options.defaultAvatarUrl ? ` onerror="this.onerror=null;this.src='${escapeHtml(options.defaultAvatarUrl)}'"` : ''}>
         </div>
       </div>
     </header>

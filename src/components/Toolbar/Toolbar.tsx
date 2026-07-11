@@ -208,6 +208,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   } = useResumeStore()
   useAuthStore()
   const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isExportingWord, setIsExportingWord] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   const handleExportPdf = async () => {
@@ -227,9 +228,19 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   }
 
   const handleExportWord = async () => {
-    const { exportToWord } = await import('../../utils/exporters')
-    const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.docx` : '简历.docx'
-    await exportToWord(resumeData, fileName)
+    if (isExportingWord) return
+    setIsExportingWord(true)
+
+    try {
+      const { exportToWord } = await import('../../utils/exporters')
+      const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.docx` : '简历.docx'
+      await exportToWord(resumeData, fileName)
+    } catch (error) {
+      console.error('Export Word error:', error)
+      toast(error instanceof Error ? error.message : 'Word 生成失败', 'error')
+    } finally {
+      setIsExportingWord(false)
+    }
   }
 
   const canNavigateToApplications = !!currentResumeId && !isDirty && !isSaving
@@ -357,7 +368,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
         <CardButton
           onClick={handleExportPdf}
-          disabled={parseStatus === 'idle' || isExportingPdf}
+          disabled={parseStatus !== 'success' || isExportingPdf}
           icon={<FileDown className={iconSize} />}
           label={isExportingPdf ? '生成中' : 'PDF'}
           title="Export PDF"
@@ -366,9 +377,9 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
         <CardButton
           onClick={handleExportWord}
-          disabled={parseStatus === 'idle'}
+          disabled={parseStatus !== 'success' || isExportingWord}
           icon={<FileDown className={iconSize} />}
-          label="Word"
+          label={isExportingWord ? '生成中' : 'Word'}
           title="Export Word"
         />
 

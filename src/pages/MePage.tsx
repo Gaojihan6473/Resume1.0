@@ -53,7 +53,7 @@ export function MePage() {
   const { user, signOut } = useAuthStore()
   const {
     resumeData, setResumeData, setParseStatus, setParseError, currentResumeId, setCurrentResumeId, setIsDirty,
-    cachedResumes, setCachedResumes, clearCachedResumes
+    cachedResumes, setCachedResumes, clearCachedResumes, clearCurrentFile
   } = useResumeStore()
 
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
@@ -118,6 +118,7 @@ export function MePage() {
       setResumeData(result.resume.content as unknown as ResumeData)
       setCurrentResumeId(result.resume.id)
       setIsDirty(false)
+      clearCurrentFile()
       setParseError(null)
       setParseStatus('success')
       toast('新建简历成功', 'success')
@@ -153,6 +154,7 @@ export function MePage() {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/')

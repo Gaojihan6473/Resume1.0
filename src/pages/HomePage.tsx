@@ -20,7 +20,7 @@ import {
   Target,
   Pencil,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
@@ -52,7 +52,7 @@ interface HomePageProps {
 const HOME_RECENT_APPLICATION_LIMIT = 8
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
-  const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
+  const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, clearCurrentFile, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
   const { isAuthenticated } = useAuthStore()
   const {
     applications,
@@ -60,6 +60,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     fetchApplications,
   } = useApplicationStore()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [recentResumes, setRecentResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(false)
@@ -70,6 +71,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [showCreateApplicationDropdown, setShowCreateApplicationDropdown] = useState(false)
   const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const consumedPostLoginActionRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -193,20 +195,24 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
   const getResumeListForAction = () => cachedResumes.length > 0 ? cachedResumes : recentResumes
 
-  const handleNewResume = () => {
+  const handleNewResume = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('new')
       return
     }
     setResumeData(createDefaultResumeData())
+    setCurrentResumeId(null)
+    setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-  }
+  }, [clearCurrentFile, isAuthenticated, onAuthRequired, setCurrentResumeId, setIsDirty, setParseError, setParseStatus, setResumeData])
 
   const handleSelectResume = (resume: Resume, options?: { tab?: 'jd' }) => {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate(options?.tab === 'jd' ? '/?tab=jd' : '/')
@@ -224,13 +230,30 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     handleSelectResume(latestResume, { tab: 'jd' })
   }
 
-  const handleOpenUpload = () => {
+  const handleOpenUpload = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('upload')
       return
     }
     setShowUploadModal(true)
-  }
+  }, [isAuthenticated, onAuthRequired])
+
+  useEffect(() => {
+    const postLoginAction = searchParams.get('postLoginAction')
+    if (!postLoginAction || !isAuthenticated) return
+    if (consumedPostLoginActionRef.current === postLoginAction) return
+    consumedPostLoginActionRef.current = postLoginAction
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('postLoginAction')
+    setSearchParams(nextSearchParams, { replace: true })
+
+    if (postLoginAction === 'new') {
+      handleNewResume()
+    } else if (postLoginAction === 'upload') {
+      handleOpenUpload()
+    }
+  }, [handleNewResume, handleOpenUpload, isAuthenticated, searchParams, setSearchParams])
 
   const handleDuplicateResume = async (resume: Resume) => {
     if (resumeActionLoadingId) return

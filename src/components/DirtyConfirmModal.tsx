@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import { useResumeStore } from '../store/resumeStore'
 import { Cloud, X, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from './Toast'
 import { saveCurrentResumeToCloud } from '../utils/saveResume'
 
-type DirtyNavigationTarget = 'home' | 'me'
+type DirtyNavigationTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
+
+const DIRTY_NAVIGATION_PATHS: Record<Exclude<DirtyNavigationTarget, 'home' | 'me'>, string> = {
+  applications: '/applications',
+  analytics: '/analytics',
+  login: '/login',
+}
 
 interface DirtyConfirmModalProps {
   isOpen: boolean
@@ -14,6 +19,8 @@ interface DirtyConfirmModalProps {
   onDiscardAndNavigateHome: () => void
   onSaveAndNavigateToMe: () => void
   onDiscardAndNavigateToMe: () => void
+  onSaveAndNavigateToPath: (path: string) => void
+  onDiscardAndNavigateToPath: (path: string) => void
 }
 
 export function DirtyConfirmModal({
@@ -24,8 +31,9 @@ export function DirtyConfirmModal({
   onDiscardAndNavigateHome,
   onSaveAndNavigateToMe,
   onDiscardAndNavigateToMe,
+  onSaveAndNavigateToPath,
+  onDiscardAndNavigateToPath,
 }: DirtyConfirmModalProps) {
-  const { setIsDirty } = useResumeStore()
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -52,6 +60,8 @@ export function DirtyConfirmModal({
         onSaveAndNavigateHome()
       } else if (navigationTarget === 'me') {
         onSaveAndNavigateToMe()
+      } else if (navigationTarget) {
+        onSaveAndNavigateToPath(DIRTY_NAVIGATION_PATHS[navigationTarget])
       }
     } catch (err) {
       console.error('Save error:', err)
@@ -63,12 +73,12 @@ export function DirtyConfirmModal({
 
   const handleDiscard = () => {
     if (isSaving) return
-    setIsDirty(false)
-
     if (navigationTarget === 'home') {
       onDiscardAndNavigateHome()
     } else if (navigationTarget === 'me') {
       onDiscardAndNavigateToMe()
+    } else if (navigationTarget) {
+      onDiscardAndNavigateToPath(DIRTY_NAVIGATION_PATHS[navigationTarget])
     }
   }
 

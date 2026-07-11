@@ -10,6 +10,7 @@ import {
 } from '../../types/analytics'
 import type { ResumeData } from '../../types/resume'
 import { getDeepSeekContent, requestDeepSeekChat } from '../../lib/deepseek'
+import { isRichHtmlEmpty } from '../../utils/richText'
 
 export const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
 export const JD_ANALYSIS_PROMPT_VERSION = '2026-06-28-v1'
@@ -108,7 +109,7 @@ export function buildResumeText(content: ResumeData): string {
       if (body) {
         parts.push(`具体内容:\n${body}`)
       }
-      if (intern.projects.length > 0) {
+      if (!body && intern.projects.length > 0) {
         parts.push('关联项目:')
         intern.projects.forEach((project, projectIndex) => {
           parts.push(`- ${projectIndex + 1}. ${project.title || '未命名项目'}`)
@@ -137,7 +138,9 @@ export function buildResumeText(content: ResumeData): string {
   }
 
   parts.push('\n【个人总结】')
-  const summaryContent = cleanText(content.summary.content || content.summary.text)
+  const summaryContent = !isRichHtmlEmpty(content.summary.content)
+    ? cleanText(content.summary.content)
+    : cleanText(content.summary.text)
   if (summaryContent) {
     parts.push(summaryContent)
   } else if (content.summary.highlights.length > 0) {

@@ -16,10 +16,10 @@ import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
 
-type DirtyNavTarget = 'home' | 'me'
+type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
 function AppContent() {
-  const { parseStatus, isDirty, currentResumeId } = useResumeStore()
+  const { parseStatus, isDirty } = useResumeStore()
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
@@ -33,6 +33,34 @@ function AppContent() {
   useEffect(() => {
     checkSession()
   }, [checkSession])
+
+  useEffect(() => {
+    if (!isDirty) return
+    let restoringHistory = false
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const handlePopState = () => {
+      if (restoringHistory) return
+      const shouldLeave = window.confirm('当前简历有未保存的修改，确定要放弃修改并离开吗？')
+      if (shouldLeave) {
+        useResumeStore.getState().discardCurrentChanges()
+        return
+      }
+      restoringHistory = true
+      window.history.forward()
+      window.setTimeout(() => {
+        restoringHistory = false
+      }, 0)
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [isDirty])
 
   // Listen for auth required events from Toolbar/Upload
   useEffect(() => {
@@ -66,7 +94,7 @@ function AppContent() {
 
   const handleNavigateToMe = () => {
     closeSidebar()
-    if (isDirty || currentResumeId === null) {
+    if (isDirty) {
       setDirtyNavTarget('me')
       setShowDirtyModal(true)
     } else {
@@ -76,17 +104,32 @@ function AppContent() {
 
   const handleNavigateToApplications = () => {
     closeSidebar()
-    navigate('/applications')
+    if (isDirty) {
+      setDirtyNavTarget('applications')
+      setShowDirtyModal(true)
+    } else {
+      navigate('/applications')
+    }
   }
 
   const handleNavigateToAnalytics = () => {
     closeSidebar()
-    navigate('/analytics')
+    if (isDirty) {
+      setDirtyNavTarget('analytics')
+      setShowDirtyModal(true)
+    } else {
+      navigate('/analytics')
+    }
   }
 
   const handleNavigateToLogin = () => {
     closeSidebar()
-    navigate('/login')
+    if (isDirty) {
+      setDirtyNavTarget('login')
+      setShowDirtyModal(true)
+    } else {
+      navigate('/login')
+    }
   }
 
   // Show loading while initializing auth
@@ -142,7 +185,7 @@ function AppContent() {
           path="/"
           element={
             <div className="h-screen flex flex-col bg-gray-50">
-              {parseStatus === 'idle' || parseStatus === 'parsing' ? (
+              {parseStatus !== 'success' ? (
                 <HomePage
                   sidebarOpen={sidebarOpen}
                   sidebarTriggerRef={triggerRef}
@@ -234,7 +277,19 @@ function AppContent() {
         onDiscardAndNavigateToMe={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
+          useResumeStore.getState().discardCurrentChanges()
           navigate('/me')
+        }}
+        onSaveAndNavigateToPath={(path) => {
+          setShowDirtyModal(false)
+          setDirtyNavTarget(null)
+          navigate(path)
+        }}
+        onDiscardAndNavigateToPath={(path) => {
+          setShowDirtyModal(false)
+          setDirtyNavTarget(null)
+          useResumeStore.getState().discardCurrentChanges()
+          navigate(path)
         }}
       />
 

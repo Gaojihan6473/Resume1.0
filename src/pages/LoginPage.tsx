@@ -19,24 +19,15 @@ export function LoginPage() {
   const [key, setKey] = useState('')
 
   const handleAction = useCallback(() => {
-    // Execute the action from URL param, then redirect
     if (action === 'new') {
-      // Navigate to home and trigger new resume
-      navigate('/', { replace: true })
-      // Dispatch custom event for new resume
-      window.dispatchEvent(new CustomEvent('resume:new'))
+      navigate('/?postLoginAction=new', { replace: true })
     } else if (action === 'upload') {
-      // Navigate to home and trigger upload
-      navigate('/', { replace: true })
-      // Dispatch custom event for upload
-      window.dispatchEvent(new CustomEvent('resume:upload'))
+      navigate('/?postLoginAction=upload', { replace: true })
     } else if (action === 'me') {
-      // Navigate to me page
       navigate('/me', { replace: true })
     } else if (safeRedirect) {
       navigate(safeRedirect, { replace: true })
     } else {
-      // Default: go to home
       navigate('/', { replace: true })
     }
   }, [action, navigate, safeRedirect])
@@ -52,10 +43,9 @@ export function LoginPage() {
     e.preventDefault()
     if (!key.trim()) return
 
-    const success = await signIn(key.trim())
-    if (success) {
-      handleAction()
-    }
+    // Authentication state is the single navigation trigger. Calling
+    // handleAction here as well races the auth effect and can run actions twice.
+    await signIn(key.trim())
   }
 
   return (

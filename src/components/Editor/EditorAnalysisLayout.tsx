@@ -79,6 +79,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     jdText,
     isAnalyzing,
     analysisResult,
+    analysisResumeHash,
     hasAnalysisStarted,
     isRightPanelCollapsed,
     error,
@@ -99,6 +100,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const visibleJdText = isSessionForCurrentResume ? jdText : ''
   const visibleIsAnalyzing = isSessionForCurrentResume ? isAnalyzing : false
   const visibleAnalysisResult = isSessionForCurrentResume ? analysisResult : null
+  const visibleAnalysisResumeHash = isSessionForCurrentResume ? analysisResumeHash : null
   const visibleHasAnalysisStarted = isSessionForCurrentResume ? hasAnalysisStarted : false
   const visibleIsRightPanelCollapsed = isSessionForCurrentResume ? isRightPanelCollapsed : true
   const visibleError = isSessionForCurrentResume ? error : null
@@ -282,6 +284,26 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     setLockedTarget(null)
   }, [clearSessionAnalysisDisplay])
 
+  const isVisibleAnalysisStale = Boolean(
+    visibleAnalysisResult &&
+    resumeHash &&
+    visibleAnalysisResumeHash &&
+    resumeHash !== visibleAnalysisResumeHash
+  )
+
+  useEffect(() => {
+    const staleMessage = '当前简历内容已变化，正在显示旧的 JD 分析结果；请保存后重新分析。'
+    if (isVisibleAnalysisStale) {
+      if (visibleNotice?.message !== staleMessage) {
+        setSession({ notice: { tone: 'warning', message: staleMessage } })
+      }
+      return
+    }
+    if (visibleNotice?.message === staleMessage) {
+      setSession({ notice: null })
+    }
+  }, [isVisibleAnalysisStale, setSession, visibleNotice?.message])
+
   const getRecordBadges = useCallback(
     (record: JDAnalysisRecord, currentJdHash?: string): HistoryBadges => {
       const badges: HistoryBadges = []
@@ -362,6 +384,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       setSession({
         resumeId: currentResumeId,
         analysisResult: record.analysis_result,
+        analysisResumeHash: record.resume_hash,
         hasAnalysisStarted: true,
         isRightPanelCollapsed: false,
         error: null,
@@ -468,6 +491,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         selectedSourceKey: '',
         jdText: value,
         analysisResult: null,
+        analysisResumeHash: null,
         hasAnalysisStarted: false,
         isRightPanelCollapsed: true,
         error: null,
@@ -481,6 +505,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         resumeId: currentResumeId,
         jdText: value,
         analysisResult: null,
+        analysisResumeHash: null,
         hasAnalysisStarted: false,
         isRightPanelCollapsed: true,
         error: null,
@@ -572,6 +597,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       hasAnalysisStarted: true,
       error: null,
       analysisResult: null,
+      analysisResumeHash: null,
       notice: null,
     })
 
@@ -600,6 +626,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
       setSession({
         analysisResult: result,
+        analysisResumeHash: runResumeHash,
         isRightPanelCollapsed: false,
       })
 

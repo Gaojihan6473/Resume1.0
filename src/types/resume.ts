@@ -118,6 +118,7 @@ export interface AppState {
   currentResumeId: string | null
   isDirty: boolean
   currentFile: File | null
+  savedResumeSnapshot: ResumeData | null
 
   // 简历列表缓存
   cachedResumes: Resume[]
@@ -162,6 +163,8 @@ export interface AppState {
   setIsAIEnabled: (enabled: boolean) => void
   setCurrentResumeId: (id: string | null) => void
   setIsDirty: (dirty: boolean) => void
+  markCurrentResumeSaved: (data?: ResumeData) => void
+  discardCurrentChanges: () => void
 
   parseFile: (file: File) => Promise<void>
   cancelParse: () => void

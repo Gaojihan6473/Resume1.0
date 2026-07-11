@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
@@ -33,6 +33,13 @@ export function ModuleWrapper({
     }
   }
 
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleToggle()
+  }
+
   return (
     <div
       className="mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-all duration-200 hover:shadow-md"
@@ -40,10 +47,14 @@ export function ModuleWrapper({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
         className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered ? 'bg-gray-50/80' : 'bg-white'
         }`}
         onClick={handleToggle}
+        onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex items-center gap-2.5">
           <div
@@ -59,7 +70,10 @@ export function ModuleWrapper({
         </div>
         {action && (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!expanded) handleToggle()
+            }}
             className="transition-opacity duration-200"
           >
             {action}
@@ -67,6 +81,7 @@ export function ModuleWrapper({
         )}
       </div>
       <div
+        hidden={!expanded}
         className={`grid overflow-hidden transition-all duration-300 ease-out ${
           expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}

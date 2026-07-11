@@ -11,7 +11,7 @@ import type {
   Summary,
 } from '../types/resume'
 import { createDefaultResumeData } from '../types/resume'
-import { normalizeRichHtml } from './richText'
+import { buildRichHtmlFromLines, isRichHtmlEmpty, normalizeRichHtml } from './richText'
 import { sanitizeResumeText } from './textSanitizer'
 
 export const RESUME_DATA_SCHEMA_VERSION = 1
@@ -88,7 +88,35 @@ function normalizeProjectDetail(item: Record<string, unknown>, index: number): P
   }
 }
 
+function buildProjectDetailContentFallback(projects: ProjectDetail[]): string {
+  const lines: string[] = []
+
+  for (const project of projects) {
+    if (project.title) lines.push(project.title)
+    if (project.description) lines.push(...project.description.split('\n'))
+    lines.push(...project.bullets)
+    lines.push(...project.achievements)
+  }
+
+  return buildRichHtmlFromLines(lines)
+}
+
+function buildProjectContentFallback(
+  description: string,
+  bullets: string[],
+  achievements: string[]
+): string {
+  return buildRichHtmlFromLines([
+    ...description.split('\n'),
+    ...bullets,
+    ...achievements,
+  ])
+}
+
 function normalizeInternshipItem(item: Record<string, unknown>, index: number): InternshipItem {
+  const projects = asRecords(item.projects).map(normalizeProjectDetail)
+  const content = normalizeRichHtml(asString(item.content))
+
   return {
     id: normalizeId(item.id, `internship-${index}`),
     company: asString(item.company),
@@ -97,35 +125,56 @@ function normalizeInternshipItem(item: Record<string, unknown>, index: number): 
     location: asString(item.location),
     startDate: asString(item.startDate),
     endDate: asString(item.endDate),
-    projects: asRecords(item.projects).map(normalizeProjectDetail),
-    content: normalizeRichHtml(asString(item.content)),
+    projects,
+    content: isRichHtmlEmpty(content) ? buildProjectDetailContentFallback(projects) : content,
     contentFontSize: asNumber(item.contentFontSize, 10),
   }
 }
 
 function normalizeProjectItem(item: Record<string, unknown>, index: number): ProjectItem {
+  const description = asString(item.description)
+  const bullets = asStringArray(item.bullets)
+  const achievements = asStringArray(item.achievements)
+  const content = normalizeRichHtml(asString(item.content))
+
   return {
     id: normalizeId(item.id, `project-${index}`),
     name: asString(item.name),
     role: asString(item.role),
     startDate: asString(item.startDate),
     endDate: asString(item.endDate),
-    description: asString(item.description),
-    bullets: asStringArray(item.bullets),
-    achievements: asStringArray(item.achievements),
-    content: normalizeRichHtml(asString(item.content)),
+    description,
+    bullets,
+    achievements,
+    content: isRichHtmlEmpty(content) ? buildProjectContentFallback(description, bullets, achievements) : content,
     contentFontSize: asNumber(item.contentFontSize, 10),
   }
+}
+
+function buildSummaryContentFallback(mode: Summary['mode'], text: string, highlights: string[]): string {
+  if (mode === 'highlights' && highlights.length > 0) {
+    return buildRichHtmlFromLines(highlights.map((item) => `- ${item}`))
+  }
+
+  if (text.trim()) {
+    return buildRichHtmlFromLines(text.split('\n'))
+  }
+
+  return buildRichHtmlFromLines(highlights.map((item) => `- ${item}`))
 }
 
 function normalizeSummary(value: unknown, defaults: Summary): Summary {
   const source = isRecord(value) ? value : {}
   const mode = source.mode === 'highlights' ? 'highlights' : 'text'
+  const text = asString(source.text)
+  const highlights = asStringArray(source.highlights)
+  const content = normalizeRichHtml(asString(source.content))
+
   return {
     mode,
-    text: asString(source.text),
-    highlights: asStringArray(source.highlights),
-    content: normalizeRichHtml(asString(source.content)),
+    text,
+    highlights,
+    content: isRichHtmlEmpty(content) ? buildSummaryContentFallback(mode, text, highlights) : content,
     contentFontSize: asNumber(source.contentFontSize, defaults.contentFontSize),
   }
 }

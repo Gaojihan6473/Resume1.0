@@ -25,6 +25,7 @@ export function ApplicationsPage() {
     setIsDirty,
     setParseError,
     setParseStatus,
+    clearCurrentFile,
     cachedResumes,
     setCachedResumes,
   } = useResumeStore()
@@ -231,6 +232,7 @@ const handleGoHome = () => {
     setResumeData(resume.content as unknown as ResumeData)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/')
@@ -240,6 +242,7 @@ const handleGoHome = () => {
     setResumeData(resume.content as unknown as ResumeData)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/?tab=jd')
@@ -249,6 +252,7 @@ const handleGoHome = () => {
     setResumeData(createDefaultResumeData())
     setCurrentResumeId(null)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/')

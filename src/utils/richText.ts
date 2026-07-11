@@ -24,14 +24,25 @@ const ALLOWED_RICH_TAGS = new Set([
 ])
 
 const ALLOWED_STYLE_PROPERTIES = new Set([
-  'background',
   'background-color',
-  'border-radius',
   'margin-left',
-  'padding',
   'padding-left',
   'text-align',
 ])
+
+const ALLOWED_TEXT_ALIGN = new Set(['left', 'center', 'right', 'justify'])
+
+function sanitizeStyleValue(property: string, value: string): string {
+  if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) return ''
+  if (property === 'text-align') return ALLOWED_TEXT_ALIGN.has(value.toLowerCase()) ? value.toLowerCase() : ''
+  if (property === 'background-color') {
+    return /^(?:#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}(?:\s*,\s*\d{1,3}){2}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)|transparent)$/i.test(value) ? value : ''
+  }
+  const match = value.match(/^(-?\d+(?:\.\d+)?)px$/i)
+  if (!match) return ''
+  const pixels = Math.max(0, Math.min(48, Number(match[1])))
+  return `${pixels}px`
+}
 
 function normalizeLines(lines: string[]): string[] {
   return lines.map((line) => sanitizeResumeText(line).replace(/\r/g, '').trim()).filter(Boolean)
@@ -48,8 +59,8 @@ function sanitizeStyle(value: string): string {
       const property = rule.slice(0, separatorIndex).trim().toLowerCase()
       const rawValue = rule.slice(separatorIndex + 1).trim()
       if (!ALLOWED_STYLE_PROPERTIES.has(property)) return ''
-      if (/url\s*\(|expression\s*\(|javascript:/i.test(rawValue)) return ''
-      return `${property}: ${rawValue}`
+      const safeValue = sanitizeStyleValue(property, rawValue)
+      return safeValue ? `${property}: ${safeValue}` : ''
     })
     .filter(Boolean)
     .join('; ')
@@ -113,6 +124,33 @@ export function sanitizeRichHtml(raw: string): string {
   return container.innerHTML
 }
 
+const HTML_SPACE_ENTITY_REGEX = /&(nbsp|ensp|emsp|thinsp|zwnj|zwj|lrm|rlm);|&#(?:160|8203|8204|8205|8288);|&#x(?:a0|200b|200c|200d|2060);/gi
+
+function fallbackHtmlTextContent(raw: string): string {
+  return raw
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(HTML_SPACE_ENTITY_REGEX, ' ')
+}
+
+export function isRichHtmlEmpty(raw: string | undefined | null): boolean {
+  if (!raw) return true
+
+  const textContent = typeof document === 'undefined'
+    ? fallbackHtmlTextContent(raw)
+    : (() => {
+        const template = document.createElement('template')
+        template.innerHTML = raw
+        return template.content.textContent || ''
+      })()
+
+  return sanitizeResumeText(textContent)
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() === ''
+}
+
 export function textToSafeHtml(value: string): string {
   return escapeHtml(value).replace(/\n/g, '<br/>')
 }
@@ -165,6 +203,10 @@ export function buildRichHtmlFromLines(lines: string[]): string {
 export function normalizeRichHtml(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return ''
-  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) return sanitizeRichHtml(trimmed)
+  if (isRichHtmlEmpty(trimmed)) return ''
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmed)) {
+    const sanitized = sanitizeRichHtml(trimmed)
+    return isRichHtmlEmpty(sanitized) ? '' : sanitized
+  }
   return buildRichHtmlFromLines(trimmed.split('\n'))
 }

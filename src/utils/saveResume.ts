@@ -113,7 +113,7 @@ export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResul
     currentResumeId,
     currentFile,
     setCurrentResumeId,
-    setIsDirty,
+    markCurrentResumeSaved,
     clearCurrentFile,
   } = useResumeStore.getState()
 
@@ -149,7 +149,7 @@ export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResul
     upsertCachedResume(result.resume)
   }
 
-  setIsDirty(false)
+  markCurrentResumeSaved(normalizedResumeData)
   scheduleResumePdfRefresh(resumeId, normalizedResumeData)
 
   return { success: true, resumeId }
