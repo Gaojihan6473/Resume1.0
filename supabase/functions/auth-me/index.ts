@@ -72,11 +72,15 @@ serve(async (req) => {
       .select('key_name')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .order('last_used_at', { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle()
 
-    if (keyError || !validKey) {
+    if (keyError) {
+      console.error('Valid key lookup error:', keyError)
+      return jsonResponse(req, { authenticated: false, error: '认证服务暂时不可用' }, 503)
+    }
+
+    if (!validKey) {
       return jsonResponse(req, { authenticated: false, error: '登录密钥已失效' }, 401)
     }
 
