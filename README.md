@@ -9,6 +9,7 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Visual editor + live A4 preview from the same HTML used for PDF export
 - Save/load resumes with Supabase
 - Track applications and review delivery dashboard
+- The signed-in homepage paginates resume cards 5 at a time and job cards 8 at a time with looping previous/next controls and a lightweight slide transition.
 - JD analysis runs inside the resume editor
 - Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
 - Export vector PDF / DOCX

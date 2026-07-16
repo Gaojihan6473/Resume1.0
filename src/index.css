@@ -1155,6 +1155,45 @@ body {
   opacity: 0.56;
 }
 
+@keyframes homePageSlideIn {
+  from {
+    opacity: 0.55;
+    transform: translateX(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes homePageSlideInReverse {
+  from {
+    opacity: 0.55;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.home-page-slide-in {
+  animation: homePageSlideIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.home-page-slide-in-reverse {
+  animation-name: homePageSlideInReverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page-slide-in {
+    animation: none;
+  }
+}
+
 /* Checkbox Toggle Animation */
 .toggle-thumb {
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);

@@ -10,6 +10,8 @@ import {
   MapPin,
   Calendar,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   ChevronsRight,
   GitBranch,
   Loader2,
@@ -49,7 +51,8 @@ interface HomePageProps {
   onAuthRequired?: (action: 'new' | 'upload' | 'me') => void
 }
 
-const HOME_RECENT_APPLICATION_LIMIT = 8
+const HOME_RESUME_PAGE_SIZE = 5
+const HOME_APPLICATION_PAGE_SIZE = 8
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
   const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, clearCurrentFile, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
@@ -68,6 +71,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [openResumeMenuId, setOpenResumeMenuId] = useState<string | null>(null)
   const [deleteResumeId, setDeleteResumeId] = useState<string | null>(null)
   const [resumeActionLoadingId, setResumeActionLoadingId] = useState<string | null>(null)
+  const [resumePage, setResumePage] = useState(0)
+  const [applicationPage, setApplicationPage] = useState(0)
+  const [resumePageDirection, setResumePageDirection] = useState<'next' | 'previous'>('next')
+  const [applicationPageDirection, setApplicationPageDirection] = useState<'next' | 'previous'>('next')
   const [showCreateApplicationDropdown, setShowCreateApplicationDropdown] = useState(false)
   const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,13 +131,55 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     }
   }, [fetchApplications, isAuthenticated])
 
-  const recentApplications = useMemo(
+  const sortedApplications = useMemo(
     () =>
       [...applications]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, HOME_RECENT_APPLICATION_LIMIT),
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [applications]
   )
+
+  const resumePageCount = Math.max(1, Math.ceil(recentResumes.length / HOME_RESUME_PAGE_SIZE))
+  const applicationPageCount = Math.max(1, Math.ceil(sortedApplications.length / HOME_APPLICATION_PAGE_SIZE))
+  const safeResumePage = Math.min(resumePage, resumePageCount - 1)
+  const safeApplicationPage = Math.min(applicationPage, applicationPageCount - 1)
+
+  const pagedResumes = useMemo(
+    () => recentResumes.slice(
+      safeResumePage * HOME_RESUME_PAGE_SIZE,
+      (safeResumePage + 1) * HOME_RESUME_PAGE_SIZE
+    ),
+    [recentResumes, safeResumePage]
+  )
+
+  const pagedApplications = useMemo(
+    () => sortedApplications.slice(
+      safeApplicationPage * HOME_APPLICATION_PAGE_SIZE,
+      (safeApplicationPage + 1) * HOME_APPLICATION_PAGE_SIZE
+    ),
+    [safeApplicationPage, sortedApplications]
+  )
+
+  const handleNextResumePage = useCallback(() => {
+    setOpenResumeMenuId(null)
+    setResumePageDirection('next')
+    setResumePage((current) => (Math.min(current, resumePageCount - 1) + 1) % resumePageCount)
+  }, [resumePageCount])
+
+  const handlePreviousResumePage = useCallback(() => {
+    setOpenResumeMenuId(null)
+    setResumePageDirection('previous')
+    setResumePage((current) => (Math.min(current, resumePageCount - 1) - 1 + resumePageCount) % resumePageCount)
+  }, [resumePageCount])
+
+  const handleNextApplicationPage = useCallback(() => {
+    setApplicationPageDirection('next')
+    setApplicationPage((current) => (Math.min(current, applicationPageCount - 1) + 1) % applicationPageCount)
+  }, [applicationPageCount])
+
+  const handlePreviousApplicationPage = useCallback(() => {
+    setApplicationPageDirection('previous')
+    setApplicationPage((current) => (Math.min(current, applicationPageCount - 1) - 1 + applicationPageCount) % applicationPageCount)
+  }, [applicationPageCount])
 
   useEffect(() => {
     if (!openResumeMenuId) return
@@ -364,7 +413,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
               <>
                 <LoggedInActionStrip
                   resumeCount={recentResumes.length}
-                  applicationCount={recentApplications.length}
+                  applicationCount={sortedApplications.length}
                   onNewResume={handleNewResume}
                   onAICreateApplication={handleAICreateApplication}
                   onOpenJdAnalysis={handleOpenLatestResumeJdAnalysis}
@@ -403,20 +452,32 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       )}
                     />
                   ) : (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-5">
-                      {recentResumes.map((resume) => (
-                        <HomeResumeCard
-                          key={resume.id}
-                          resume={resume}
-                          onClick={() => handleSelectResume(resume)}
-                          isMenuOpen={openResumeMenuId === resume.id}
-                          isLoading={resumeActionLoadingId === resume.id}
-                          onToggleMenu={() => setOpenResumeMenuId((current) => current === resume.id ? null : resume.id)}
-                          onDuplicate={() => handleDuplicateResume(resume)}
-                          onRequestDelete={() => handleRequestDeleteResume(resume)}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      <div
+                        key={`resume-page-${safeResumePage}`}
+                        className={`home-page-slide-in grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-5 ${resumePageDirection === 'previous' ? 'home-page-slide-in-reverse' : ''}`}
+                      >
+                        {pagedResumes.map((resume) => (
+                          <HomeResumeCard
+                            key={resume.id}
+                            resume={resume}
+                            onClick={() => handleSelectResume(resume)}
+                            isMenuOpen={openResumeMenuId === resume.id}
+                            isLoading={resumeActionLoadingId === resume.id}
+                            onToggleMenu={() => setOpenResumeMenuId((current) => current === resume.id ? null : resume.id)}
+                            onDuplicate={() => handleDuplicateResume(resume)}
+                            onRequestDelete={() => handleRequestDeleteResume(resume)}
+                          />
+                        ))}
+                      </div>
+                      <HomePager
+                        label="简历"
+                        page={safeResumePage}
+                        pageCount={resumePageCount}
+                        onPrevious={handlePreviousResumePage}
+                        onNext={handleNextResumePage}
+                      />
+                    </>
                   )}
                 </section>
 
@@ -424,9 +485,9 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                   <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <HomeSectionTitle
                       label="岗位"
-                      count={recentApplications.length}
+                      count={sortedApplications.length}
                     />
-                    {recentApplications.length > 0 && (
+                    {sortedApplications.length > 0 && (
                       <HomeSectionActions>
                         <HomeGhostButton
                           buttonRef={createApplicationButtonRef}
@@ -445,7 +506,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
                   {isLoadingApplications ? (
                     <HomeLoadingState text="岗位加载中..." compact />
-                  ) : recentApplications.length === 0 ? (
+                  ) : sortedApplications.length === 0 ? (
                     <HomeEmptyActionState
                       compact
                       title="还没有岗位"
@@ -458,16 +519,28 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                       )}
                     />
                   ) : (
-                    <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
-                      {recentApplications.map((application) => (
-                        <HomeApplicationCard
-                          key={application.id}
-                          application={application}
-                          resumes={cachedResumes}
-                          onClick={() => navigate(`/applications?applicationId=${application.id}`)}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      <div
+                        key={`application-page-${safeApplicationPage}`}
+                        className={`home-page-slide-in grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4 ${applicationPageDirection === 'previous' ? 'home-page-slide-in-reverse' : ''}`}
+                      >
+                        {pagedApplications.map((application) => (
+                          <HomeApplicationCard
+                            key={application.id}
+                            application={application}
+                            resumes={cachedResumes}
+                            onClick={() => navigate(`/applications?applicationId=${application.id}`)}
+                          />
+                        ))}
+                      </div>
+                      <HomePager
+                        label="岗位"
+                        page={safeApplicationPage}
+                        pageCount={applicationPageCount}
+                        onPrevious={handlePreviousApplicationPage}
+                        onNext={handleNextApplicationPage}
+                      />
+                    </>
                   )}
                 </section>
 
@@ -964,6 +1037,60 @@ function HomeSectionTitle({
       {description && (
         <p className="mt-2 text-sm font-medium text-slate-500">{description}</p>
       )}
+    </div>
+  )
+}
+
+function HomePager({
+  label,
+  page,
+  pageCount,
+  onPrevious,
+  onNext,
+}: {
+  label: string
+  page: number
+  pageCount: number
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  if (pageCount <= 1) return null
+
+  const isFirstPage = page === 0
+  const isLastPage = page === pageCount - 1
+  const previousActionLabel = isFirstPage ? `${label}返回最后一页` : `${label}上一页`
+  const actionLabel = isLastPage ? `${label}返回第一页` : `${label}下一页`
+
+  return (
+    <div className="mt-4 flex justify-end">
+      <div className="inline-flex h-10 items-center gap-0.5 rounded-full border border-slate-200/90 bg-white/90 px-0.5 py-1 shadow-sm shadow-blue-100/70 backdrop-blur-sm">
+        <button
+          type="button"
+          aria-label={previousActionLabel}
+          title={previousActionLabel}
+          onClick={onPrevious}
+          className="group relative flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none transition-colors duration-200 hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 active:scale-95"
+        >
+          <span className="pointer-events-none absolute h-7 w-7 scale-75 rounded-full bg-blue-50 opacity-0 transition-all duration-200 ease-out group-hover:scale-100 group-hover:opacity-100" />
+          <ChevronLeft className="relative h-4 w-4" strokeWidth={2.5} />
+        </button>
+        <span
+          aria-live="polite"
+          className="min-w-10 text-center text-xs font-bold tabular-nums text-slate-500"
+        >
+          {page + 1} / {pageCount}
+        </span>
+        <button
+          type="button"
+          aria-label={actionLabel}
+          title={actionLabel}
+          onClick={onNext}
+          className="group relative flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none transition-colors duration-200 hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 active:scale-95"
+        >
+          <span className="pointer-events-none absolute h-7 w-7 scale-75 rounded-full bg-blue-50 opacity-0 transition-all duration-200 ease-out group-hover:scale-100 group-hover:opacity-100" />
+          <ChevronRight className="relative h-4 w-4" strokeWidth={2.5} />
+        </button>
+      </div>
     </div>
   )
 }
