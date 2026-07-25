@@ -13,7 +13,7 @@ import { getDeepSeekContent, requestDeepSeekChat } from '../../lib/deepseek'
 import { isRichHtmlEmpty } from '../../utils/richText'
 
 export const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
-export const JD_ANALYSIS_PROMPT_VERSION = '2026-06-28-v1'
+export const JD_ANALYSIS_PROMPT_VERSION = '2026-07-25-v2'
 const JD_ANALYSIS_TIMEOUT_MS = 240000
 const JD_ANALYSIS_MAX_TOKENS = 6000
 
@@ -400,7 +400,7 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
 10. 建议必须聚焦成熟简历的差异化投递优化：特殊岗位关键词、相关经历表达、业务场景匹配、技能栈呈现、成果量化、职责与 JD 的对应关系、表达优先级。
 11. problemReason 必须按这个逻辑写：JD 差异点是什么；简历现状是什么；为什么影响匹配。不要写泛泛的"不够突出""需要强化"。
 12. suggestion 必须给具体修改策略：优先级、改法、避免事项。对已有事实，可给短语级或句子级改写方向；对无证据的 JD 要求，只能写"确认是否真实具备，有则补充具体证据；没有则不建议强行添加"，不要生成包含新事实的改写句。
-13. 某个模块没有明显优化点时，summary 简短说明原因，status 返回"暂无问题"，suggestions 返回空数组。
+13. 每个模块的 summary 必须是 20-40 个汉字的一句话。有建议时先概括简历已有的匹配优势，再指出最影响投递的一个核心缺口；没有建议时只简洁说明该模块与 JD 的匹配结论。不要在 summary 中复述 status 或建议数量。某个模块没有明显优化点时，status 返回"暂无问题"，suggestions 返回空数组。
 14. 总建议数控制在 4-7 条。宁可少而准，不要为了凑数量覆盖普通职责。
 15. matchScore 和 scoreBreakdown 仅作为兼容字段保留，简短估算即可；不要为了评分解释占用主要输出篇幅。
 
@@ -419,7 +419,7 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
       "section": "internships",
       "sectionLabel": "实习经历",
       "status": "重点优化",
-      "summary": "本模块与JD的匹配概述",
+      "summary": "已有相关实习成果支撑，但核心业务场景与JD关联仍需前置。",
       "suggestions": [
         {
           "type": "add|modify|highlight|remove",
@@ -436,22 +436,22 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
     {
       "section": "projects",
       "sectionLabel": "项目经历",
-      "status": "可小修",
-      "summary": "",
+      "status": "暂无问题",
+      "summary": "现有项目方法与岗位要求匹配，暂无需要优先调整的差异化缺口。",
       "suggestions": []
     },
     {
       "section": "summary",
       "sectionLabel": "个人总结",
       "status": "暂无问题",
-      "summary": "",
+      "summary": "个人定位已覆盖目标方向，现有关键词顺序与JD重点基本一致。",
       "suggestions": []
     },
     {
       "section": "skills",
       "sectionLabel": "技能与其他",
       "status": "暂无问题",
-      "summary": "",
+      "summary": "现有技能组合已覆盖该岗位的主要差异化要求，暂无明显缺口。",
       "suggestions": []
     }
   ],
@@ -462,7 +462,7 @@ const analyzeJDSystemPrompt = `你是一个资深求职辅导顾问，服务对�
 【重要规则】
 1. sectionAnalyses 必须包含且只包含上述 4 个模块，顺序固定。
 2. scoreBreakdown 必须包含 skills、experience、keywords、expression 四项，reason 一句话即可，不要长篇解释。
-3. 每个模块最多返回 2 条建议，总建议数控制在 4-7 条；如果没有高价值差异化建议，返回空数组。
+3. 每个模块最多返回 3 条建议，总建议数控制在 4-7 条；如果没有高价值差异化建议，返回空数组。
 4. itemTitle、originalContent、problemText、problemReason、suggestion 不能为空。
 5. problemReason 不要写改法；suggestion 不要写长篇分析，不要泛泛要求"突出""强化"，必须说明优先改哪里、怎么改、避免什么。若改法涉及简历没有的事实，只能写成真实性检查，不得生成具体措辞。
 6. matchScore 只需客观估算，不要因为常规产品经理能力覆盖较多就过高评分，也不要围绕分数展开解释。

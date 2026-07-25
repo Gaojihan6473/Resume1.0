@@ -734,41 +734,161 @@ body {
   }
 }
 
+.analysis-notice-compact-shell {
+  flex: 0 1 0%;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: right center;
+  transition:
+    flex-grow 300ms ease,
+    max-width 300ms ease,
+    opacity 180ms ease,
+    transform 300ms ease;
+}
+
+.analysis-notice-compact-shell.is-visible {
+  flex-grow: 1;
+  max-width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.analysis-notice-expanded-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition:
+    grid-template-rows 300ms ease,
+    margin-bottom 300ms ease,
+    opacity 180ms ease,
+    transform 300ms ease,
+    visibility 0s linear 300ms;
+}
+
+.analysis-notice-expanded-shell.is-visible {
+  grid-template-rows: 1fr;
+  margin-bottom: 1rem;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition:
+    grid-template-rows 300ms ease,
+    margin-bottom 300ms ease,
+    opacity 220ms ease 60ms,
+    transform 300ms ease,
+    visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-notice-compact-shell,
+  .analysis-notice-expanded-shell {
+    transition-duration: 0.01ms;
+  }
+}
+
 .jd-suggestion-section {
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 0.72);
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(248, 251, 255, 0.9), rgba(255, 255, 255, 0.72));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.86),
-    0 1px 2px rgba(15, 23, 42, 0.025);
+  border: 1px solid rgb(229, 231, 235);
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.jd-suggestion-section:hover,
+.jd-suggestion-section:focus-within {
+  border-color: rgba(203, 213, 225, 0.95);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
 .jd-suggestion-section-header {
-  padding: 14px 14px 10px;
+  display: block;
+  width: 100%;
+  min-height: 88px;
+  cursor: pointer;
+  border: 0;
+  background: #ffffff;
+  padding: 14px 16px;
+  text-align: left;
+  transition: background-color 200ms ease;
 }
 
-.jd-module-summary {
+.jd-suggestion-section-header:hover {
+  background: rgba(249, 250, 251, 0.8);
+}
+
+.jd-suggestion-section-header:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.65);
+  outline-offset: -3px;
+}
+
+.jd-suggestion-section-chevron {
   display: flex;
-  gap: 8px;
-  margin-top: 9px;
-  border-top: 1px solid rgba(226, 232, 240, 0.7);
-  padding-top: 9px;
-  color: #475569;
-  font-size: 0.875rem;
-  line-height: 1.65;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgb(243, 244, 246);
+  color: rgb(156, 163, 175);
+  transform: rotate(-90deg);
+  transition: color 300ms ease, background-color 300ms ease, transform 300ms ease;
 }
 
-.jd-module-summary-label {
-  flex-shrink: 0;
-  color: #2563eb;
-  font-size: 0.75rem;
-  font-weight: 650;
+.jd-suggestion-section.is-expanded .jd-suggestion-section-chevron {
+  background: rgb(59, 130, 246);
+  color: #ffffff;
+  transform: rotate(0deg);
+}
+
+.jd-module-summary-text {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 9px;
+  color: #64748b;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.jd-suggestion-section-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows 300ms ease-out,
+    opacity 220ms ease-out,
+    visibility 0s linear 300ms;
+}
+
+.jd-suggestion-section.is-expanded .jd-suggestion-section-collapse {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    grid-template-rows 300ms ease-out,
+    opacity 220ms ease-out,
+    visibility 0s;
 }
 
 .jd-suggestion-section-body {
-  padding: 0 12px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+  background: rgba(249, 250, 251, 0.5);
+  padding: 14px 12px 12px;
 }
 
 .jd-suggestion-item + .jd-suggestion-item {

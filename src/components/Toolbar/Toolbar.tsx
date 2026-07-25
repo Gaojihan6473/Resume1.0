@@ -210,6 +210,26 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [zoomInput, setZoomInput] = useState(() => `${Math.round(zoom * 100)}%`)
+  const [isZoomInputFocused, setIsZoomInputFocused] = useState(false)
+
+  useEffect(() => {
+    if (!isZoomInputFocused) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+    }
+  }, [zoom, isZoomInputFocused])
+
+  const commitZoomInput = () => {
+    const parsedZoom = Number.parseFloat(zoomInput.replace('%', '').trim())
+    if (!Number.isFinite(parsedZoom)) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+      return
+    }
+
+    const clampedZoom = Math.min(MAX_ZOOM * 100, Math.max(MIN_ZOOM * 100, parsedZoom))
+    setZoom(clampedZoom / 100)
+    setZoomInput(`${Math.round(clampedZoom)}%`)
+  }
 
   const handleExportPdf = async () => {
     if (isExportingPdf) return
@@ -348,7 +368,33 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
         <div className="flex items-center gap-0.5 px-1.5 rounded-xl border border-slate-200 bg-white shrink-0 h-8">
           <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(MIN_ZOOM, zoom - 0.1))} title="缩小" variant="ghost" />
-          <span className="text-xs font-mono w-10 text-center text-slate-700">{Math.round(zoom * 100)}%</span>
+          <label className="flex items-center justify-center h-6 rounded-md border border-transparent focus-within:border-blue-300 focus-within:bg-blue-50/50 transition-colors">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={zoomInput}
+              onChange={(event) => setZoomInput(event.target.value)}
+              onFocus={(event) => {
+                setIsZoomInputFocused(true)
+                event.currentTarget.select()
+              }}
+              onBlur={() => {
+                commitZoomInput()
+                setIsZoomInputFocused(false)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur()
+                } else if (event.key === 'Escape') {
+                  setZoomInput(`${Math.round(zoom * 100)}%`)
+                  event.currentTarget.blur()
+                }
+              }}
+              aria-label="预览缩放百分比"
+              title={`输入 ${MIN_ZOOM * 100}%–${MAX_ZOOM * 100}%`}
+              className="w-10 bg-transparent text-center text-xs font-mono text-slate-700 outline-none"
+            />
+          </label>
           <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(MAX_ZOOM, zoom + 0.1))} title="放大" variant="ghost" />
         </div>
       </div>

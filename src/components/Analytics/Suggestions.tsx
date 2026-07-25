@@ -1,4 +1,5 @@
-import { type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
+import { ChevronDown } from 'lucide-react'
 import {
   JD_ANALYSIS_SECTIONS,
   type JDAnalysisSectionId,
@@ -18,12 +19,16 @@ export interface SuggestionInteractionTarget {
 interface SuggestionsProps {
   sectionAnalyses?: JDSectionAnalysis[]
   suggestions?: SuggestionItem[]
+  resetKey?: number
   activeSuggestionKey?: string | null
   getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+  onExpandedSectionChange?: (section: JDAnalysisSectionId | null) => void
 }
+
+const EMPTY_SUGGESTIONS: SuggestionItem[] = []
 
 const STATUS_CONFIG: Record<JDSectionStatus, {
   color: string
@@ -41,21 +46,41 @@ const STATUS_CONFIG: Record<JDSectionStatus, {
 
 export function Suggestions({
   sectionAnalyses,
-  suggestions = [],
+  suggestions = EMPTY_SUGGESTIONS,
+  resetKey = 0,
   activeSuggestionKey,
   getSuggestionTarget,
   onSuggestionHover,
   onSuggestionLeave,
   onSuggestionClick,
+  onExpandedSectionChange,
 }: SuggestionsProps) {
-  const sections = normalizeSections(sectionAnalyses, suggestions)
+  const sections = useMemo(
+    () => normalizeSections(sectionAnalyses, suggestions),
+    [sectionAnalyses, suggestions]
+  )
+  const [expandedSection, setExpandedSection] = useState<JDAnalysisSectionId | null>(
+    () => getDefaultExpandedSection(sections)
+  )
+
+  useEffect(() => {
+    setExpandedSection(getDefaultExpandedSection(sections))
+  }, [resetKey, sections])
+
+  const handleSectionToggle = (section: JDAnalysisSectionId) => {
+    const nextSection = expandedSection === section ? null : section
+    setExpandedSection(nextSection)
+    onExpandedSectionChange?.(nextSection)
+  }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {sections.map((section) => (
         <SectionCard
           key={section.section}
           section={section}
+          expanded={expandedSection === section.section}
+          onToggle={() => handleSectionToggle(section.section)}
           activeSuggestionKey={activeSuggestionKey}
           getSuggestionTarget={getSuggestionTarget}
           onSuggestionHover={onSuggestionHover}
@@ -69,6 +94,8 @@ export function Suggestions({
 
 function SectionCard({
   section,
+  expanded,
+  onToggle,
   activeSuggestionKey,
   getSuggestionTarget,
   onSuggestionHover,
@@ -76,60 +103,82 @@ function SectionCard({
   onSuggestionClick,
 }: {
   section: JDSectionAnalysis
+  expanded: boolean
+  onToggle: () => void
   activeSuggestionKey?: string | null
   getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
 }) {
+  const bodyId = useId()
   const statusConfig = STATUS_CONFIG[section.status]
   const groups = groupSuggestionsByItem(section.suggestions)
+  const summary = getSectionSummary(section)
 
   return (
-    <section className="jd-suggestion-section">
-      <div className="jd-suggestion-section-header">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h4 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-            {section.sectionLabel}
-          </h4>
-          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${statusConfig.color}`}>
-            {section.status}
-          </span>
-          <span className="inline-flex shrink-0 items-center rounded-full bg-white/75 px-2 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-slate-200/60">
-            {section.suggestions.length} 条建议
-          </span>
+    <section className={`jd-suggestion-section ${expanded ? 'is-expanded' : ''}`}>
+      <button
+        type="button"
+        className="jd-suggestion-section-header"
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        onClick={onToggle}
+      >
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="jd-suggestion-section-chevron" aria-hidden="true">
+              <ChevronDown className="h-3 w-3" />
+            </span>
+            <h4 className="min-w-0 truncate text-sm font-semibold text-slate-800">
+              {section.sectionLabel}
+            </h4>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-medium ${statusConfig.color}`}>
+              {section.status}
+            </span>
+            <span className="inline-flex shrink-0 items-center rounded-full bg-white/80 px-2 py-0.5 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70">
+              {section.suggestions.length} 条建议
+            </span>
+          </div>
         </div>
 
-        {section.summary && (
-          <div className="jd-module-summary">
-            <span className="jd-module-summary-label">概览</span>
-            <span>{section.summary}</span>
-          </div>
-        )}
-      </div>
+        <p className="jd-module-summary-text">{summary}</p>
+      </button>
 
-      <div className="jd-suggestion-section-body">
-        {section.suggestions.length === 0 ? (
-          <EmptySectionState />
-        ) : (
-          <div className="space-y-4">
-            {groups.map((group, index) => {
-              return (
-                <ItemAnalysis
-                  key={`${section.section}-${index}`}
-                  sectionId={section.section}
-                  group={group}
-                  startIndex={getGroupStartIndex(groups, index)}
-                  activeSuggestionKey={activeSuggestionKey}
-                  getSuggestionTarget={getSuggestionTarget}
-                  onSuggestionHover={onSuggestionHover}
-                  onSuggestionLeave={onSuggestionLeave}
-                  onSuggestionClick={onSuggestionClick}
-                />
-              )
-            })}
+      <div
+        id={bodyId}
+        className="jd-suggestion-section-collapse"
+        aria-hidden={!expanded}
+        inert={!expanded}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="jd-suggestion-section-body">
+            {section.suggestions.length === 0 ? (
+              <EmptySectionState />
+            ) : (
+              <div className="space-y-4">
+                {groups.map((group, index) => {
+                  return (
+                    <ItemAnalysis
+                      key={`${section.section}-${index}`}
+                      sectionId={section.section}
+                      group={group}
+                      startIndex={getGroupStartIndex(groups, index)}
+                      activeSuggestionKey={activeSuggestionKey}
+                      getSuggestionTarget={getSuggestionTarget}
+                      onSuggestionHover={onSuggestionHover}
+                      onSuggestionLeave={onSuggestionLeave}
+                      onSuggestionClick={onSuggestionClick}
+                    />
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </section>
   )
@@ -480,6 +529,21 @@ function inferStatus(suggestionCount: number): JDSectionStatus {
   if (suggestionCount >= 2) return '重点优化'
   if (suggestionCount === 1) return '可小修'
   return '暂无问题'
+}
+
+function getDefaultExpandedSection(sections: JDSectionAnalysis[]): JDAnalysisSectionId | null {
+  return sections.find((section) => section.suggestions.length > 0)?.section
+    ?? sections[0]?.section
+    ?? null
+}
+
+function getSectionSummary(section: JDSectionAnalysis): string {
+  const summary = section.summary.trim()
+  if (summary) return summary
+  if (section.suggestions.length === 0) {
+    return '当前模块与 JD 匹配较好，暂无明显优化建议。'
+  }
+  return `发现 ${section.suggestions.length} 条可执行建议，展开查看具体优化方向。`
 }
 
 function uniqueStrings(values: string[]): string[] {

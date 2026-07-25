@@ -55,11 +55,18 @@ const SOURCE_PREFIX = {
   manual: 'manual:',
 } as const
 
+const NOTICE_AUTO_COLLAPSE_MS = 5000
+
 export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<EditorMainTab>('edit')
   const [hoverTarget, setHoverTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [lockedTarget, setLockedTarget] = useState<SuggestionInteractionTarget | null>(null)
+  const [analysisDisplayVersion, setAnalysisDisplayVersion] = useState(0)
+  const [rightNoticeState, setRightNoticeState] = useState({
+    key: '',
+    collapsed: true,
+  })
   const [resumeHash, setResumeHash] = useState('')
   const [applicationJdHashes, setApplicationJdHashes] = useState<Map<string, string>>(new Map())
 
@@ -94,6 +101,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   } = useJDAnalysisSessionStore()
   const historyLoadRunRef = useRef(0)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const analysisPanelScrollRef = useRef<HTMLElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
   const isSessionForCurrentResume = !sessionResumeId || sessionResumeId === currentResumeId
   const visibleSelectedSourceKey = isSessionForCurrentResume ? selectedSourceKey : ''
@@ -105,6 +113,23 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const visibleIsRightPanelCollapsed = isSessionForCurrentResume ? isRightPanelCollapsed : true
   const visibleError = isSessionForCurrentResume ? error : null
   const visibleNotice = isSessionForCurrentResume ? notice : null
+  const visibleNoticeKey = visibleNotice ? `${visibleNotice.tone}:${visibleNotice.message}` : ''
+  const isRightNoticeCollapsed =
+    rightNoticeState.key !== visibleNoticeKey || rightNoticeState.collapsed
+
+  useEffect(() => {
+    if (!visibleNoticeKey || visibleIsRightPanelCollapsed || isRightNoticeCollapsed) return
+
+    const timeout = window.setTimeout(() => {
+      setRightNoticeState((current) => (
+        current.key === visibleNoticeKey
+          ? { ...current, collapsed: true }
+          : current
+      ))
+    }, NOTICE_AUTO_COLLAPSE_MS)
+
+    return () => window.clearTimeout(timeout)
+  }, [isRightNoticeCollapsed, visibleIsRightPanelCollapsed, visibleNoticeKey])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -284,6 +309,20 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     setLockedTarget(null)
   }, [clearSessionAnalysisDisplay])
 
+  const resetAnalysisPresentation = useCallback(() => {
+    setHoverTarget(null)
+    setLockedTarget(null)
+    setAnalysisDisplayVersion((version) => version + 1)
+  }, [])
+
+  useEffect(() => {
+    if (analysisDisplayVersion === 0) return
+    const frame = requestAnimationFrame(() => {
+      analysisPanelScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [analysisDisplayVersion])
+
   const isVisibleAnalysisStale = Boolean(
     visibleAnalysisResult &&
     resumeHash &&
@@ -389,8 +428,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         isRightPanelCollapsed: false,
         error: null,
       })
-      setHoverTarget(null)
-      setLockedTarget(null)
+      resetAnalysisPresentation()
 
       const labels = getHistoryBadgeLabels(badges)
 
@@ -412,7 +450,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         })
       }
     },
-    [currentResumeId, setSession]
+    [currentResumeId, resetAnalysisPresentation, setSession]
   )
 
   const handleSourceSelect = useCallback(
@@ -629,6 +667,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         analysisResumeHash: runResumeHash,
         isRightPanelCollapsed: false,
       })
+      resetAnalysisPresentation()
 
       try {
         await createHistoryRecord({
@@ -753,6 +792,11 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     requestAnimationFrame(() => scrollToAnchor(target))
   }, [scrollToAnchor])
 
+  const handleExpandedSectionChange = useCallback(() => {
+    setHoverTarget(null)
+    setLockedTarget(null)
+  }, [])
+
   return (
     <div className={`flex-1 grid h-full min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ${gridClass}`}>
       <div className="min-h-0 min-w-0 border-r border-gray-200 overflow-hidden flex flex-col bg-white">
@@ -806,24 +850,69 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         )}
       </section>
 
-      <aside className={`min-w-0 min-h-0 border-l border-slate-200 bg-slate-50 transition-opacity duration-200 ${
+      <aside ref={analysisPanelScrollRef} className={`min-w-0 min-h-0 border-l border-slate-200 bg-slate-50 transition-opacity duration-200 ${
         visibleIsRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
       }`}>
         <div className="flex min-h-full flex-col">
           <div className="flex-1 p-4">
-            <div className="mb-3 flex justify-end">
+            <div className="mb-3 flex min-h-8 items-center gap-3">
+              {visibleNotice && (
+                <div className={`analysis-notice-compact-shell ${isRightNoticeCollapsed ? 'is-visible' : ''}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRightNoticeState({
+                        key: visibleNoticeKey,
+                        collapsed: false,
+                      })
+                    }}
+                    title="展开完整提示"
+                    aria-expanded={false}
+                    className={`flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg px-3 text-xs ring-1 transition-[filter] hover:brightness-[0.98] ${
+                      {
+                        info: 'bg-blue-50 text-blue-600 ring-blue-100',
+                        warning: 'bg-amber-50 text-amber-700 ring-amber-100',
+                        error: 'bg-red-50 text-red-600 ring-red-100',
+                      }[visibleNotice.tone]
+                    }`}
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-left">{visibleNotice.message}</span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setSession({ isRightPanelCollapsed: true })}
                 title="收起建议"
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 transition-all hover:bg-white hover:text-slate-700"
+                className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 transition-all hover:bg-white hover:text-slate-700"
               >
                 <PanelRightClose className="h-3.5 w-3.5" />
                 收起
               </button>
             </div>
 
-            {visibleNotice && <AnalysisNoticeBox notice={visibleNotice} className="mb-4" />}
+            {visibleNotice && (
+              <div
+                className={`analysis-notice-expanded-shell ${isRightNoticeCollapsed ? '' : 'is-visible'}`}
+                aria-hidden={isRightNoticeCollapsed}
+                inert={isRightNoticeCollapsed}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <AnalysisNoticeBox
+                    notice={visibleNotice}
+                    onClick={() => {
+                      setRightNoticeState({
+                        key: visibleNoticeKey,
+                        collapsed: true,
+                      })
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {visibleError && (
               <div className="mb-4 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
@@ -835,11 +924,13 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             {visibleAnalysisResult ? (
               <Suggestions
                 sectionAnalyses={visibleAnalysisResult.sectionAnalyses}
+                resetKey={analysisDisplayVersion}
                 activeSuggestionKey={activeSuggestionKey}
                 getSuggestionTarget={getSuggestionTarget}
                 onSuggestionHover={handleSuggestionHover}
                 onSuggestionLeave={handleSuggestionLeave}
                 onSuggestionClick={handleSuggestionClick}
+                onExpandedSectionChange={handleExpandedSectionChange}
               />
             ) : (
               <AnalysisEmptyState isAnalyzing={visibleIsAnalyzing} />
@@ -1192,9 +1283,11 @@ function getHistoryBadgeTitle(badges: HistoryBadges | null): string | undefined 
 function AnalysisNoticeBox({
   notice,
   className = '',
+  onClick,
 }: {
   notice: JDAnalysisNotice
   className?: string
+  onClick?: () => void
 }) {
   const toneClass = {
     info: 'bg-blue-50 text-blue-600 ring-blue-100',
@@ -1202,10 +1295,31 @@ function AnalysisNoticeBox({
     error: 'bg-red-50 text-red-600 ring-red-100',
   }[notice.tone]
 
+  const content = (
+    <>
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1 whitespace-pre-line text-left">{notice.message}</span>
+      {onClick && <ChevronDown className="h-4 w-4 shrink-0 rotate-180" aria-hidden="true" />}
+    </>
+  )
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="收起提示"
+        aria-expanded={true}
+        className={`flex w-full items-start gap-1.5 rounded-lg px-3 py-2 text-sm ring-1 transition-all hover:brightness-[0.98] ${toneClass} ${className}`}
+      >
+        {content}
+      </button>
+    )
+  }
+
   return (
     <div className={`flex items-start gap-1.5 rounded-lg px-3 py-2 text-sm ring-1 ${toneClass} ${className}`}>
-      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-      <span className="whitespace-pre-line">{notice.message}</span>
+      {content}
     </div>
   )
 }
