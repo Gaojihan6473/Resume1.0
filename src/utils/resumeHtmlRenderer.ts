@@ -5,6 +5,7 @@ import {
   buildProjectAnchorText,
   createResumeAnchorKey,
   createSectionAnchorKey,
+  createStableResumeAnchorKey,
 } from './analysisAnchors'
 import { sanitizeResumeText } from './textSanitizer'
 
@@ -20,6 +21,9 @@ interface ResumeHtmlRenderOptions {
     itemKey?: string
     problemText?: string
     locked?: boolean
+    flash?: boolean
+    flashMode?: 'once' | 'repeat' | 'fade'
+    flashKey?: number
   } | null
 }
 
@@ -194,6 +198,20 @@ function textToHtml(value) {
   return escapeHtml(value).replace(/\r?\n/g, '<br>')
 }
 
+function stripHtml(value) {
+  return String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|ul|ol)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 const htmlSpaceEntityRegex = /&(nbsp|ensp|emsp|thinsp|zwnj|zwj|lrm|rlm);|&#(?:160|8203|8204|8205|8288);|&#x(?:a0|200b|200c|200d|2060);/gi
 
 function isHtmlEmpty(html) {
@@ -290,21 +308,84 @@ function uniqueValues(values) {
   return Array.from(new Set(values.filter(Boolean)))
 }
 
+function asKeyList(itemKey = '') {
+  return Array.isArray(itemKey) ? itemKey.filter(Boolean) : [itemKey].filter(Boolean)
+}
+
 function anchorAttrs(section, itemKey = '') {
-  const keys = uniqueValues([createSectionAnchorKey(section), itemKey])
+  const keys = uniqueValues([createSectionAnchorKey(section), ...asKeyList(itemKey)])
   return ` data-section-id="${escapeHtml(section)}" data-anchor-keys="${escapeHtml(keys.join(' '))}"`
 }
 
 function isFocused(focus, section, itemKey = '') {
   if (!focus || focus.section !== section) return false
-  if (itemKey) return focus.itemKey === itemKey
+  const itemKeys = asKeyList(itemKey)
+  if (itemKeys.length > 0) return itemKeys.includes(focus.itemKey)
   if (!focus.itemKey || focus.itemKey === createSectionAnchorKey(section)) return true
   return section === 'summary' || section === 'skills'
 }
 
 function focusClass(focus, section, itemKey = '') {
   if (!isFocused(focus, section, itemKey)) return ''
-  return focus.locked ? ' analysis-focus analysis-focus-locked' : ' analysis-focus'
+  const flashClass = focus.flash
+    ? focus.flashMode === 'fade'
+      ? ' analysis-focus-fade'
+      : focus.flashMode === 'once'
+        ? ' analysis-focus-flash-once'
+        : ' analysis-focus-flash'
+    : ''
+  return `${focus.locked ? ' analysis-focus analysis-focus-locked' : ' analysis-focus'}${flashClass}`
+}
+
+function markerClass(focus) {
+  if (!focus?.flashKey) return 'analysis-marker'
+  if (focus.flashMode === 'fade') return 'analysis-marker analysis-marker-fade'
+  return focus.flashMode === 'once'
+    ? 'analysis-marker analysis-marker-flash-once'
+    : 'analysis-marker analysis-marker-flash'
+}
+
+function focusMarker(focus, section, itemKey = '') {
+  if (!isFocused(focus, section, itemKey)) return ''
+  return stripHtml(focus.problemText || '').trim()
+}
+
+function highlightHtmlForFocus(html, marker, focus) {
+  if (!marker || typeof document === 'undefined') return html
+
+  const container = document.createElement('div')
+  container.innerHTML = html
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const markers = Array.from(new Set([marker, marker.replace(/\s+/g, ' ')]))
+
+  let node = walker.nextNode()
+  while (node) {
+    const textNode = node
+    const text = textNode.nodeValue || ''
+    const markerToUse = markers.find((candidate) => candidate && text.includes(candidate))
+
+    if (markerToUse) {
+      const start = text.indexOf(markerToUse)
+      const end = start + markerToUse.length
+      const mark = document.createElement('mark')
+      mark.className = markerClass(focus)
+      if (focus?.flashKey) mark.setAttribute('data-flash-key', String(focus.flashKey))
+      mark.textContent = text.slice(start, end)
+
+      const parent = textNode.parentNode
+      if (!parent) return html
+
+      if (start > 0) parent.insertBefore(document.createTextNode(text.slice(0, start)), textNode)
+      parent.insertBefore(mark, textNode)
+      if (end < text.length) parent.insertBefore(document.createTextNode(text.slice(end)), textNode)
+      parent.removeChild(textNode)
+      return container.innerHTML
+    }
+
+    node = walker.nextNode()
+  }
+
+  return html
 }
 
 function joinWithSeparator(parts) {
@@ -365,9 +446,12 @@ function renderInternships(data, bodyFontSize, lineHeight, options = {}) {
     const itemTitle = [intern.company, intern.position].filter(Boolean).join('\n')
     const itemText = buildInternshipAnchorText(intern)
     const itemKey = createResumeAnchorKey('internships', itemText || itemTitle)
+    const stableItemKey = createStableResumeAnchorKey('internships', intern.id)
+    const itemKeys = [itemKey, stableItemKey]
+    const marker = focusMarker(options.analysisFocus, 'internships', itemKeys)
     const meta = [intern.position, intern.department, intern.location].filter(Boolean).map(escapeHtml).join(' | ')
     const contentFontSize = intern.contentFontSize || bodyFontSize
-    const richContent = !isHtmlEmpty(intern.content)
+    const rawRichContent = !isHtmlEmpty(intern.content)
       ? sanitizeRichHtml(intern.content)
       : intern.projects.map((project) => [
         project.title ? `<p><strong>${escapeHtml(project.title)}</strong></p>` : '',
@@ -375,9 +459,10 @@ function renderInternships(data, bodyFontSize, lineHeight, options = {}) {
         project.bullets.length > 0 ? `<ul>${project.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('')}</ul>` : '',
         project.achievements.length > 0 ? `<p>${escapeHtml(project.achievements.join(' | '))}</p>` : '',
       ].join('')).join('')
+    const richContent = highlightHtmlForFocus(rawRichContent, marker, options.analysisFocus)
 
     return `
-      <div class="resume-item${focusClass(options.analysisFocus, 'internships', itemKey)}" data-pagination-item="rich"${anchorAttrs('internships', itemKey)}>
+      <div class="resume-item${focusClass(options.analysisFocus, 'internships', itemKeys)}" data-pagination-item="rich"${anchorAttrs('internships', itemKeys)}>
         <div class="item-header pagination-keep-with-next">
         <div class="item-row item-row-top avoid-break">
           <span class="item-primary"><strong>${escapeHtml(intern.company)}</strong></span>
@@ -398,17 +483,21 @@ function renderProjects(data, bodyFontSize, lineHeight, options = {}) {
     const itemTitle = [project.name, project.role].filter(Boolean).join('\n')
     const itemText = buildProjectAnchorText(project)
     const itemKey = createResumeAnchorKey('projects', itemText || itemTitle)
+    const stableItemKey = createStableResumeAnchorKey('projects', project.id)
+    const itemKeys = [itemKey, stableItemKey]
+    const marker = focusMarker(options.analysisFocus, 'projects', itemKeys)
     const contentFontSize = project.contentFontSize || bodyFontSize
-    const richContent = !isHtmlEmpty(project.content)
+    const rawRichContent = !isHtmlEmpty(project.content)
       ? sanitizeRichHtml(project.content)
       : [
         project.description ? renderLinesAsParagraphs(project.description.split(/\r?\n/)) : '',
         project.bullets.length > 0 ? `<ul>${project.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('')}</ul>` : '',
         project.achievements.length > 0 ? `<p>${escapeHtml(project.achievements.join(' | '))}</p>` : '',
       ].join('')
+    const richContent = highlightHtmlForFocus(rawRichContent, marker, options.analysisFocus)
 
     return `
-      <div class="resume-item${focusClass(options.analysisFocus, 'projects', itemKey)}" data-pagination-item="rich"${anchorAttrs('projects', itemKey)}>
+      <div class="resume-item${focusClass(options.analysisFocus, 'projects', itemKeys)}" data-pagination-item="rich"${anchorAttrs('projects', itemKeys)}>
         <div class="item-header pagination-keep-with-next">
         <div class="item-row item-row-top avoid-break">
           <span class="item-primary"><strong>${escapeHtml(project.name)}</strong></span>
@@ -423,32 +512,35 @@ function renderProjects(data, bodyFontSize, lineHeight, options = {}) {
   return renderSection('项目经历', children)
 }
 
-function renderSummary(data, bodyFontSize, lineHeight) {
+function renderSummary(data, bodyFontSize, lineHeight, options = currentRenderOptions) {
   const { summary } = data
   if (isHtmlEmpty(summary.content) && !summary.text && summary.highlights.length === 0) return ''
   const contentFontSize = summary.contentFontSize || bodyFontSize
-  const content = !isHtmlEmpty(summary.content)
+  const marker = focusMarker(options.analysisFocus, 'summary')
+  const rawContent = !isHtmlEmpty(summary.content)
     ? sanitizeRichHtml(summary.content)
     : summary.mode === 'highlights'
       ? `<ul>${summary.highlights.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
       : `<p>${textToHtml(summary.text)}</p>`
+  const content = highlightHtmlForFocus(rawContent, marker, options.analysisFocus)
 
-  return renderSection('个人总结', `<div class="rich-content" data-pagination-item="rich" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${content}</div>`)
+  return renderSection('个人总结', `<div class="rich-content" data-pagination-item="rich" style="font-size:${pt(contentFontSize)};line-height:${pt(Math.max(1, Math.round(contentFontSize * lineHeight)))}">${content}</div>`, 'summary', options)
 }
 
-function renderSkills(data) {
+function renderSkills(data, options = currentRenderOptions) {
   const { skills } = data
   const hasSkills = skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0
   if (!hasSkills) return ''
+  const marker = focusMarker(options.analysisFocus, 'skills')
 
   const rows = [
-    skills.technical.length > 0 ? `<div class="pagination-unit"><strong>技术技能：</strong>${escapeHtml(skills.technical.join('、'))}</div>` : '',
-    skills.languages.length > 0 ? `<div class="pagination-unit"><strong>语言能力：</strong>${escapeHtml(skills.languages.join('、'))}</div>` : '',
-    skills.certificates.length > 0 ? `<div class="pagination-unit"><strong>证书资格：</strong>${escapeHtml(skills.certificates.join('、'))}</div>` : '',
-    skills.interests.length > 0 ? `<div class="pagination-unit"><strong>兴趣爱好：</strong>${escapeHtml(skills.interests.join('、'))}</div>` : '',
+    skills.technical.length > 0 ? `<div class="pagination-unit"><strong>技术技能：</strong>${highlightHtmlForFocus(escapeHtml(skills.technical.join('、')), marker, options.analysisFocus)}</div>` : '',
+    skills.languages.length > 0 ? `<div class="pagination-unit"><strong>语言能力：</strong>${highlightHtmlForFocus(escapeHtml(skills.languages.join('、')), marker, options.analysisFocus)}</div>` : '',
+    skills.certificates.length > 0 ? `<div class="pagination-unit"><strong>证书资格：</strong>${highlightHtmlForFocus(escapeHtml(skills.certificates.join('、')), marker, options.analysisFocus)}</div>` : '',
+    skills.interests.length > 0 ? `<div class="pagination-unit"><strong>兴趣爱好：</strong>${highlightHtmlForFocus(escapeHtml(skills.interests.join('、')), marker, options.analysisFocus)}</div>` : '',
   ].join('')
 
-  return renderSection('技能证书', `<div class="skills-block">${rows}</div>`)
+  return renderSection('技能证书', `<div class="skills-block">${rows}</div>`, 'skills', options)
 }
 
 function renderSections(data, bodyFontSize, lineHeight, options = {}) {
@@ -458,8 +550,8 @@ function renderSections(data, bodyFontSize, lineHeight, options = {}) {
     education: () => renderEducation(data),
     internships: () => renderInternships(data, bodyFontSize, lineHeight, options),
     projects: () => renderProjects(data, bodyFontSize, lineHeight, options),
-    summary: () => renderSummary(data, bodyFontSize, lineHeight),
-    skills: () => renderSkills(data),
+    summary: () => renderSummary(data, bodyFontSize, lineHeight, options),
+    skills: () => renderSkills(data, options),
   }
 
   try {
@@ -706,6 +798,73 @@ export function buildResumePdfHtml(
       background: #eff6ff;
       outline-color: #60a5fa;
       box-shadow: 0 0 0 2pt rgba(96, 165, 250, 0.18);
+    }
+    .analysis-marker {
+      border-radius: 2pt;
+      background: #fde68a;
+      color: #78350f;
+      padding: 0 1pt;
+    }
+    .analysis-marker-flash {
+      animation: analysisMarkerFlash 560ms ease-in-out 3;
+    }
+    .analysis-marker-flash-once {
+      animation: analysisMarkerFlash 640ms ease-in-out 1;
+    }
+    .analysis-marker-fade {
+      animation: analysisMarkerFade 420ms ease-out 1 forwards;
+    }
+    .analysis-focus-flash {
+      animation: analysisFocusFlash 560ms ease-in-out 3;
+    }
+    .analysis-focus-flash-once {
+      animation: analysisFocusFlash 640ms ease-in-out 1;
+    }
+    .analysis-focus-fade {
+      animation: analysisFocusFade 420ms ease-out 1 forwards;
+    }
+    @keyframes analysisMarkerFlash {
+      0%,
+      100% {
+        background: #fde68a;
+        color: #78350f;
+      }
+      50% {
+        background: #bbf7d0;
+        color: #065f46;
+        box-shadow: 0 0 0 2pt rgba(34, 197, 94, 0.16);
+      }
+    }
+    @keyframes analysisMarkerFade {
+      0% {
+        background: #fde68a;
+        color: #78350f;
+        box-shadow: 0 0 0 2pt rgba(37, 99, 235, 0.12);
+      }
+      100% {
+        background: rgba(253, 230, 138, 0);
+        color: inherit;
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+      }
+    }
+    @keyframes analysisFocusFlash {
+      0%,
+      100% {
+        box-shadow: 0 0 0 2pt rgba(96, 165, 250, 0.18);
+      }
+      50% {
+        box-shadow: 0 0 0 4pt rgba(34, 197, 94, 0.2);
+      }
+    }
+    @keyframes analysisFocusFade {
+      0% {
+        background-color: #eff6ff;
+        box-shadow: 0 0 0 1pt #93c5fd, 0 0 0 3pt rgba(37, 99, 235, 0.1);
+      }
+      100% {
+        background-color: rgba(239, 246, 255, 0);
+        box-shadow: 0 0 0 1pt rgba(147, 197, 253, 0), 0 0 0 0 rgba(37, 99, 235, 0);
+      }
     }
   </style>
 </head>

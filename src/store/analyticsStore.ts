@@ -45,7 +45,7 @@ const getWeekKey = (date: Date): string => {
 }
 
 export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
-  timeRange: '3m',
+  timeRange: 'all',
   selectedResumeId: null,
 
   setTimeRange: (range) => set({ timeRange: range }),

@@ -1,9 +1,24 @@
-import { useMemo, useState, useEffect } from 'react'
-import { TrendingUp, Target, Clock, Award, ChevronDown, ChevronUp, BarChart2, Table2, Inbox, Network } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import {
+  AlertCircle,
+  Award,
+  BarChart3,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Clock,
+  Inbox,
+  Network,
+  RotateCcw,
+  Table2,
+  Target,
+  TrendingUp,
+} from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
-import { APPLICATION_STATUS_LABELS, APPLICATION_CHANNEL_LABELS } from '../../types/application'
+import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
 import type { TimeRange } from '../../types/analytics'
-import { useAnalyticsStore } from '../../store/analyticsStore'
 import { GroupedBar } from './GroupedBar'
 import { ResumeJobGraph } from './ResumeJobGraph'
 import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
@@ -14,498 +29,979 @@ import { useResumeStore } from '../../store/resumeStore'
 
 interface DashboardProps {
   applications: Application[]
+  isLoading: boolean
+  error: string | null
+  onRetry: () => void | Promise<void>
 }
 
+type DashboardView = 'table' | 'distribution' | 'graph'
 type SortField = 'company' | 'appliedAt' | 'status'
+type SortOrder = 'asc' | 'desc'
+
+interface ResumeStatusDatum {
+  resumeId: string
+  resumeName: string
+  company: string
+  position: string
+  status: ApplicationStatus
+  count: number
+  companies: string[]
+}
+
+const UNBOUND_RESUME_ID = 'unbound'
+const PAGE_SIZE = 10
+const DASHBOARD_VIEWS: DashboardView[] = ['table', 'distribution', 'graph']
+const SORT_FIELDS: SortField[] = ['company', 'appliedAt', 'status']
+const SORT_ORDERS: SortOrder[] = ['asc', 'desc']
+const TIME_RANGES: TimeRange[] = ['1m', '3m', '6m', 'all']
 
 const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
-  { value: '1m', label: '近1个月' },
-  { value: '3m', label: '近3个月' },
-  { value: '6m', label: '近6个月' },
-  { value: 'all', label: '全部' },
+  { value: '1m', label: '近 1 个月' },
+  { value: '3m', label: '近 3 个月' },
+  { value: '6m', label: '近 6 个月' },
+  { value: 'all', label: '全部时间' },
 ]
 
-export function Dashboard({ applications }: DashboardProps) {
-  const { timeRange, setTimeRange, selectedResumeId, setSelectedResumeId } = useAnalyticsStore()
-  const [sortField, setSortField] = useState<SortField>('appliedAt')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [resumes, setResumes] = useState<Resume[]>([])
-  const { cachedResumes, setCachedResumes } = useResumeStore()
+const VIEW_CONFIG: Record<DashboardView, {
+  label: string
+  title: string
+  description: string
+  icon: typeof Table2
+}> = {
+  table: {
+    label: '岗位明细',
+    title: '岗位明细',
+    description: '查看每一次投递的完整记录',
+    icon: Table2,
+  },
+  distribution: {
+    label: '状态分布',
+    title: '各简历投递状态分布',
+    description: '横轴按简历分组，对比不同版本的投递表现',
+    icon: BarChart3,
+  },
+  graph: {
+    label: '关系图谱',
+    title: '简历岗位关系图谱',
+    description: '探索简历版本与目标岗位之间的关联',
+    icon: Network,
+  },
+}
 
-  // 获取简历列表（与投递页保持一致的缓存逻辑）
+export function Dashboard({
+  applications,
+  isLoading,
+  error,
+  onRetry,
+}: DashboardProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const searchKey = searchParams.toString()
+  const setCachedResumes = useResumeStore((state) => state.setCachedResumes)
+  const [resumes, setResumes] = useState<Resume[]>([])
+  const [isResumesLoading, setIsResumesLoading] = useState(true)
+  const [resumesLoadedSuccessfully, setResumesLoadedSuccessfully] = useState(false)
+  const [resumeError, setResumeError] = useState<string | null>(null)
+  const [resumeReloadKey, setResumeReloadKey] = useState(0)
+
+  const activeView = parseView(searchParams.get('view'))
+  const timeRange = parseTimeRange(searchParams.get('range'))
+  const selectedResumeId = searchParams.get('resume') || null
+  const sortField = parseSortField(searchParams.get('sort'))
+  const sortOrder = parseSortOrder(searchParams.get('order'))
+  const requestedPage = parsePage(searchParams.get('page'))
+  const [mountedViews, setMountedViews] = useState<Set<DashboardView>>(
+    () => new Set([activeView]),
+  )
+
   useEffect(() => {
+    let cancelled = false
+    const cachedResumes = useResumeStore.getState().cachedResumes
+
     if (cachedResumes.length > 0) {
       setResumes(cachedResumes)
+      setResumesLoadedSuccessfully(true)
     }
 
     async function loadResumes() {
+      setIsResumesLoading(cachedResumes.length === 0)
+      setResumeError(null)
       const result = await fetchResumes()
-      if (result.success && result.resumes) {
-        const hasChanges =
-          cachedResumes.length !== result.resumes.length ||
-          result.resumes.some((r) => {
-            const cached = cachedResumes.find((c) => c.id === r.id)
-            return !cached ||
-              cached.updated_at !== r.updated_at ||
-              !isSameResumeAsset(cached.preview_url, r.preview_url) ||
-              !isSameResumeAsset(cached.file_url, r.file_url)
-          })
+      if (cancelled) return
 
-        if (hasChanges) {
-          setResumes(result.resumes)
-          setCachedResumes(result.resumes, Date.now())
-        } else {
-          setResumes((prev) => {
-            const updated = prev.map((p) => {
-              const fresh = result.resumes!.find((r) => r.id === p.id)
-              return fresh ? { ...p, ...fresh } : p
-            })
-            return updated
-          })
-        }
+      if (!result.success || !result.resumes) {
+        setResumeError(result.error || '简历列表加载失败')
+        setIsResumesLoading(false)
+        return
+      }
+
+      const hasChanges =
+        cachedResumes.length !== result.resumes.length ||
+        result.resumes.some((resume) => {
+          const cached = cachedResumes.find((item) => item.id === resume.id)
+          return !cached ||
+            cached.updated_at !== resume.updated_at ||
+            !isSameResumeAsset(cached.preview_url, resume.preview_url) ||
+            !isSameResumeAsset(cached.file_url, resume.file_url)
+        })
+
+      setResumes(result.resumes)
+      setResumesLoadedSuccessfully(true)
+      setIsResumesLoading(false)
+
+      if (hasChanges) {
+        setCachedResumes(result.resumes, Date.now())
       }
     }
-    loadResumes()
-  }, [cachedResumes, setCachedResumes])
 
-  // 简历ID到标题的映射
+    void loadResumes()
+    return () => {
+      cancelled = true
+    }
+  }, [resumeReloadKey, setCachedResumes])
+
+  useEffect(() => {
+    setMountedViews((current) => {
+      if (current.has(activeView)) return current
+      const next = new Set(current)
+      next.add(activeView)
+      return next
+    })
+  }, [activeView])
+
+  const updateSearchParams = useCallback((
+    changes: Record<string, string | null>,
+    options?: { replace?: boolean },
+  ) => {
+    const next = new URLSearchParams(searchKey)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value === null || value === '') {
+        next.delete(key)
+      } else {
+        next.set(key, value)
+      }
+    })
+    setSearchParams(next, { replace: options?.replace ?? false })
+  }, [searchKey, setSearchParams])
+
+  const hasUnboundApplications = useMemo(
+    () => applications.some((application) => !application.resume_id),
+    [applications],
+  )
+
   const resumeTitleMap = useMemo(() => {
     const map = new Map<string, string>()
-    resumes.forEach((r) => map.set(r.id, r.title))
-    return map
-  }, [resumes])
-
-  // 获取简历选项（包含所有简历，不只是有关联应用的）
-  const resumeOptions = useMemo(() => {
-    // 添加所有从 API 获取的简历
-    const resumeMap = new Map<string, string>()
-    resumes.forEach((r) => {
-      resumeMap.set(r.id, r.title)
-    })
-    // 再添加有关联应用的简历（以防万一有漏的）
-    applications.forEach((app) => {
-      if (app.resume_id && !resumeMap.has(app.resume_id)) {
-        resumeMap.set(app.resume_id, `${app.company} - ${app.position}`)
+    resumes.forEach((resume) => map.set(resume.id, resume.title))
+    applications.forEach((application) => {
+      if (application.resume_id && !map.has(application.resume_id)) {
+        map.set(
+          application.resume_id,
+          [application.company, application.position].filter(Boolean).join(' · ') || '未知简历',
+        )
       }
     })
-    return Array.from(resumeMap.entries()).map(([id, title]) => ({ id, title }))
+    return map
   }, [applications, resumes])
 
-  // 表格专用筛选：上排图表保持全量概览，只有明细表跟随这些条件
-  const filteredTableApplications = useMemo(() => {
-    let result = [...applications]
+  const resumeOptions = useMemo(() => {
+    const options = Array.from(resumeTitleMap.entries()).map(([id, title]) => ({ id, title }))
+    if (hasUnboundApplications) {
+      options.push({ id: UNBOUND_RESUME_ID, title: '未关联简历' })
+    }
+    return options
+  }, [hasUnboundApplications, resumeTitleMap])
 
-    if (timeRange !== 'all') {
-      const now = new Date()
-      const threshold = new Date()
-      if (timeRange === '1m') threshold.setMonth(now.getMonth() - 1)
-      else if (timeRange === '3m') threshold.setMonth(now.getMonth() - 3)
-      else if (timeRange === '6m') threshold.setMonth(now.getMonth() - 6)
+  const resumeValidationKey = useMemo(
+    () => resumeOptions.map((option) => option.id).join('|'),
+    [resumeOptions],
+  )
+  const resumeSelectOptions = useMemo(
+    () => [
+      { value: '', label: '全部简历' },
+      ...resumeOptions.map((option) => ({ value: option.id, label: option.title })),
+    ],
+    [resumeOptions],
+  )
 
-      result = result.filter((app) => {
-        const date = app.appliedAt ? new Date(app.appliedAt) : new Date(app.created_at)
-        return date >= threshold
-      })
+  useEffect(() => {
+    const current = new URLSearchParams(searchKey)
+    let changed = false
+    const rawView = current.get('view')
+    const rawRange = current.get('range')
+    const rawSort = current.get('sort')
+    const rawOrder = current.get('order')
+    const rawPage = current.get('page')
+    const rawResume = current.get('resume')
+
+    if (rawView && !isDashboardView(rawView)) {
+      current.delete('view')
+      changed = true
+    }
+    if (rawRange && !isTimeRange(rawRange)) {
+      current.delete('range')
+      changed = true
+    }
+    if (rawSort && !isSortField(rawSort)) {
+      current.delete('sort')
+      changed = true
+    }
+    if (rawOrder && !isSortOrder(rawOrder)) {
+      current.delete('order')
+      changed = true
+    }
+    if (rawPage && (!/^\d+$/.test(rawPage) || Number(rawPage) < 1)) {
+      current.delete('page')
+      changed = true
+    }
+    if (
+      rawResume &&
+      resumesLoadedSuccessfully &&
+      !isLoading &&
+      !resumeOptions.some((option) => option.id === rawResume)
+    ) {
+      current.delete('resume')
+      current.delete('page')
+      changed = true
     }
 
-    if (selectedResumeId) {
-      result = result.filter((app) => app.resume_id === selectedResumeId)
+    if (changed) {
+      setSearchParams(current, { replace: true })
     }
+  }, [
+    isLoading,
+    resumeOptions,
+    resumeValidationKey,
+    resumesLoadedSuccessfully,
+    searchKey,
+    setSearchParams,
+  ])
 
-    return result
-  }, [applications, timeRange, selectedResumeId])
+  const filteredApplications = useMemo(() => {
+    const threshold = getDateThreshold(timeRange)
 
-  // 分组柱状图数据：按简历+状态统计，使用全量岗位记录
-  const resumeStatusData = useMemo(() => {
-    const data: { resumeId: string; resumeName: string; company: string; position: string; status: ApplicationStatus; count: number; companies: string[] }[] = []
-
-    // 1. 收集所有有应用的简历
-    const resumeWithApps = new Set<string>()
-    applications.forEach((app) => {
-      if (app.resume_id) resumeWithApps.add(app.resume_id)
-    })
-
-    // 2. 收集所有简历（包含有应用的和没有应用的）
-    const allResumeIds = new Set<string>()
-    resumes.forEach((r) => allResumeIds.add(r.id))
-    resumeWithApps.forEach((id) => allResumeIds.add(id))
-
-    // 3. 展示所有简历
-    const allResumeIdsArray = Array.from(allResumeIds)
-
-    // 4. 按简历分组处理数据
-    allResumeIdsArray.forEach((resumeId) => {
-      const resumeApps = applications.filter((app) => app.resume_id === resumeId)
-      const resumeTitle = resumeTitleMap.get(resumeId) || '未关联简历'
-
-      // 按状态分组统计
-      const statusApps: Record<ApplicationStatus, { company: string; position: string }[]> = {
-        interested: [], applied: [], interviewing: [], offered: [], rejected: [], ghosted: []
+    return applications.filter((application) => {
+      if (threshold) {
+        const applicationDate = new Date(application.appliedAt || application.created_at)
+        if (applicationDate < threshold) return false
       }
 
-      resumeApps.forEach((app) => {
-        statusApps[app.status].push({ company: app.company, position: app.position })
-      })
-
-      STATUS_ORDER.forEach((status) => {
-        const apps = statusApps[status]
-        data.push({
-          resumeId,
-          resumeName: resumeTitle,
-          company: apps[0]?.company || '',
-          position: apps[0]?.position || '',
-          companies: apps.map((a) => `${a.company} - ${a.position}`),
-          status,
-          count: apps.length,
-        })
-      })
-    })
-
-    // 5. 处理没有关联简历的岗位（resume_id 为 null 或空）
-    const unboundApps = applications.filter((app) => !app.resume_id)
-    if (unboundApps.length > 0) {
-      const statusApps: Record<ApplicationStatus, { company: string; position: string }[]> = {
-        interested: [], applied: [], interviewing: [], offered: [], rejected: [], ghosted: []
+      if (selectedResumeId === UNBOUND_RESUME_ID) {
+        return !application.resume_id
       }
+      if (selectedResumeId && application.resume_id !== selectedResumeId) {
+        return false
+      }
+      return true
+    })
+  }, [applications, selectedResumeId, timeRange])
 
-      unboundApps.forEach((app) => {
-        statusApps[app.status].push({ company: app.company, position: app.position })
-      })
-
-      STATUS_ORDER.forEach((status) => {
-        const apps = statusApps[status]
-        data.push({
-          resumeId: 'unbound',
-          resumeName: '未绑定简历',
-          company: apps[0]?.company || '',
-          position: apps[0]?.position || '',
-          companies: apps.map((a) => `${a.company} - ${a.position}`),
-          status,
-          count: apps.length,
-        })
-      })
-    }
-
-    return data
-  }, [applications, resumeTitleMap, resumes])
-
-  // 统计
   const stats = useMemo(() => {
-    const total = applications.length
+    const submittedApplications = applications.filter(
+      (application) => application.status !== 'interested',
+    )
     const statusCounts = STATUS_ORDER.map((status) => ({
       status,
-      count: applications.filter((app) => app.status === status).length,
+      count: applications.filter((application) => application.status === status).length,
     }))
-    const offerCount = statusCounts.find((s) => s.status === 'offered')?.count || 0
-    const rejectCount = statusCounts.find((s) => s.status === 'rejected')?.count || 0
-    const ghostCount = statusCounts.find((s) => s.status === 'ghosted')?.count || 0
-    const passRate = offerCount + rejectCount + ghostCount > 0
-      ? Math.round((offerCount / (offerCount + rejectCount + ghostCount)) * 100)
-      : 0
+    const offerCount = statusCounts.find((item) => item.status === 'offered')?.count || 0
+    const rejectCount = statusCounts.find((item) => item.status === 'rejected')?.count || 0
+    const ghostCount = statusCounts.find((item) => item.status === 'ghosted')?.count || 0
+    const resolvedCount = offerCount + rejectCount + ghostCount
+    const passRate = resolvedCount > 0 ? Math.round((offerCount / resolvedCount) * 100) : 0
 
-    const channelCounts: Record<string, number> = {}
-    applications.forEach((app) => {
-      channelCounts[app.channel] = (channelCounts[app.channel] || 0) + 1
+    const channelCounts = new Map<Application['channel'], number>()
+    submittedApplications.forEach((application) => {
+      channelCounts.set(application.channel, (channelCounts.get(application.channel) || 0) + 1)
     })
-    const topChannel = Object.entries(channelCounts).sort((a, b) => b[1] - a[1])[0]
+    const topChannel = Array.from(channelCounts.entries()).sort((a, b) => b[1] - a[1])[0]
 
-    return { total, statusCounts, passRate, topChannel }
+    return {
+      total: submittedApplications.length,
+      statusCounts,
+      passRate,
+      topChannel,
+    }
   }, [applications])
 
-  // 表格排序后的数据
-  const sortedTableApplications = useMemo(() => {
-    const result = [...filteredTableApplications]
-
-    result.sort((a, b) => {
+  const sortedApplications = useMemo(() => {
+    const result = [...filteredApplications]
+    result.sort((left, right) => {
       let comparison = 0
       if (sortField === 'company') {
-        comparison = a.company.localeCompare(b.company)
+        comparison = left.company.localeCompare(right.company)
       } else if (sortField === 'appliedAt') {
-        const dateA = a.appliedAt ? new Date(a.appliedAt).getTime() : new Date(a.created_at).getTime()
-        const dateB = b.appliedAt ? new Date(b.appliedAt).getTime() : new Date(b.created_at).getTime()
-        comparison = dateA - dateB
-      } else if (sortField === 'status') {
-        comparison = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
+        comparison =
+          new Date(left.appliedAt || left.created_at).getTime() -
+          new Date(right.appliedAt || right.created_at).getTime()
+      } else {
+        comparison = STATUS_ORDER.indexOf(left.status) - STATUS_ORDER.indexOf(right.status)
       }
       return sortOrder === 'asc' ? comparison : -comparison
     })
-
     return result
-  }, [filteredTableApplications, sortField, sortOrder])
+  }, [filteredApplications, sortField, sortOrder])
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortOrder('desc')
-    }
+  const totalPages = Math.max(1, Math.ceil(sortedApplications.length / PAGE_SIZE))
+  const currentPage = Math.min(requestedPage, totalPages)
+  const paginatedApplications = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return sortedApplications.slice(start, start + PAGE_SIZE)
+  }, [currentPage, sortedApplications])
+
+  useEffect(() => {
+    if (isLoading || requestedPage <= totalPages) return
+    updateSearchParams(
+      { page: totalPages === 1 ? null : String(totalPages) },
+      { replace: true },
+    )
+  }, [isLoading, requestedPage, totalPages, updateSearchParams])
+
+  const resumeStatusData = useMemo<ResumeStatusDatum[]>(() => {
+    const data: ResumeStatusDatum[] = []
+    const filteredByResume = new Map<string, Application[]>()
+
+    filteredApplications.forEach((application) => {
+      const resumeId = application.resume_id || UNBOUND_RESUME_ID
+      const existing = filteredByResume.get(resumeId) || []
+      existing.push(application)
+      filteredByResume.set(resumeId, existing)
+    })
+
+    const visibleResumeIds = selectedResumeId
+      ? [selectedResumeId]
+      : resumeOptions.map((option) => option.id)
+
+    visibleResumeIds.forEach((resumeId) => {
+      if (resumeId === UNBOUND_RESUME_ID && !hasUnboundApplications) return
+      const resumeApplications = filteredByResume.get(resumeId) || []
+      const resumeName = resumeId === UNBOUND_RESUME_ID
+        ? '未关联简历'
+        : resumeTitleMap.get(resumeId) || '未知简历'
+
+      STATUS_ORDER.forEach((status) => {
+        const statusApplications = resumeApplications.filter(
+          (application) => application.status === status,
+        )
+        data.push({
+          resumeId,
+          resumeName,
+          company: statusApplications[0]?.company || '',
+          position: statusApplications[0]?.position || '',
+          status,
+          count: statusApplications.length,
+          companies: statusApplications.map(
+            (application) => `${application.company} - ${application.position}`,
+          ),
+        })
+      })
+    })
+
+    return data
+  }, [
+    filteredApplications,
+    hasUnboundApplications,
+    resumeOptions,
+    resumeTitleMap,
+    selectedResumeId,
+  ])
+
+  const filterResetKey = `${timeRange}:${selectedResumeId || 'all'}`
+  const activeViewConfig = VIEW_CONFIG[activeView]
+  const ActiveViewIcon = activeViewConfig.icon
+  const workspaceCount = activeView === 'table'
+    ? `共 ${filteredApplications.length} 条`
+    : activeView === 'distribution'
+      ? `共 ${new Set(resumeStatusData.map((item) => item.resumeId)).size} 份简历`
+      : `共 ${filteredApplications.length} 条关系`
+  const visibleError = error || resumeError
+
+  const handleRetry = () => {
+    void onRetry()
+    setResumeReloadKey((value) => value + 1)
   }
 
-  const renderSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ChevronDown className="w-4 h-4 text-slate-300" />
-    return sortOrder === 'asc'
-      ? <ChevronUp className="w-4 h-4 text-blue-500" />
-      : <ChevronDown className="w-4 h-4 text-blue-500" />
+  const handleTimeRangeChange = (range: TimeRange) => {
+    updateSearchParams({
+      range,
+      page: null,
+    })
+  }
+
+  const handleResumeChange = (resumeId: string) => {
+    updateSearchParams({
+      resume: resumeId || null,
+      page: null,
+    })
+  }
+
+  const handleSort = (field: SortField) => {
+    const nextOrder = sortField === field
+      ? (sortOrder === 'asc' ? 'desc' : 'asc')
+      : 'desc'
+    updateSearchParams({
+      sort: field,
+      order: nextOrder,
+      page: null,
+    })
+  }
+
+  if (isLoading && applications.length === 0) {
+    return <DashboardSkeleton />
+  }
+
+  if (error && applications.length === 0) {
+    return <DashboardFailure message={error} onRetry={handleRetry} />
   }
 
   return (
-    <div className="p-6 space-y-4">
-      {/* 顶部统计概览 - 4个卡片 */}
-      <div className="grid grid-cols-4 gap-4">
+    <div className="relative mx-auto min-h-full w-full max-w-[1600px] px-4 pb-32 pt-4 sm:px-6 lg:px-8">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed right-[8%] top-24 -z-10 h-48 w-48 rounded-full bg-violet-300/15 blur-3xl"
+      />
+
+      <section aria-label="全量概览" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          icon={<TrendingUp className="w-5 h-5 text-blue-500" />}
+          icon={<TrendingUp className="h-5 w-5" />}
+          iconClassName="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-200/80"
           label="总投递数"
           value={stats.total}
-          subText={`${stats.passRate}% 通过率`}
+          subText={`${stats.passRate}% 结果通过率`}
         />
         <StatCard
-          icon={<Target className="w-5 h-5 text-emerald-500" />}
+          icon={<Target className="h-5 w-5" />}
+          iconClassName="bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-violet-200/80"
           label="面试中"
-          value={stats.statusCounts.find((s) => s.status === 'interviewing')?.count || 0}
-          subText={`${stats.statusCounts.find((s) => s.status === 'offered')?.count || 0} Offer`}
+          value={stats.statusCounts.find((item) => item.status === 'interviewing')?.count || 0}
+          subText={`${stats.statusCounts.find((item) => item.status === 'offered')?.count || 0} Offer`}
         />
         <StatCard
-          icon={<Clock className="w-5 h-5 text-amber-500" />}
+          icon={<Clock className="h-5 w-5" />}
+          iconClassName="bg-gradient-to-br from-teal-400 to-emerald-500 text-white shadow-emerald-200/80"
           label="无回音"
-          value={stats.statusCounts.find((s) => s.status === 'ghosted')?.count || 0}
-          subText={`${stats.statusCounts.find((s) => s.status === 'rejected')?.count || 0} 已拒绝`}
+          value={stats.statusCounts.find((item) => item.status === 'ghosted')?.count || 0}
+          subText={`${stats.statusCounts.find((item) => item.status === 'rejected')?.count || 0} 已拒绝`}
         />
         <StatCard
-          icon={<Award className="w-5 h-5 text-violet-500" />}
+          icon={<Award className="h-5 w-5" />}
+          iconClassName="bg-gradient-to-br from-rose-400 to-orange-400 text-white shadow-rose-200/80"
           label="常用渠道"
-          value={stats.topChannel ? APPLICATION_CHANNEL_LABELS[stats.topChannel[0] as keyof typeof APPLICATION_CHANNEL_LABELS] : '-'}
+          value={stats.topChannel ? APPLICATION_CHANNEL_LABELS[stats.topChannel[0]] : '-'}
           subText={stats.topChannel ? `${stats.topChannel[1]} 次` : ''}
         />
-      </div>
+      </section>
 
-      {/* 表格明细 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-        {/* 表格筛选导航栏 */}
-        <div className="flex items-center justify-between px-5 min-h-12 bg-slate-50/80 border-b border-slate-100/60">
-          <div className="flex flex-wrap items-center gap-4 py-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <Table2 className="w-4 h-4 text-blue-500" />
-              岗位明细
+      <section className="relative mt-4 overflow-visible rounded-[28px] bg-gradient-to-br from-sky-300/70 via-violet-200/65 to-cyan-300/70 p-px shadow-[0_24px_70px_-36px_rgba(79,70,229,0.58)]">
+        <div className="relative min-h-[360px] overflow-visible rounded-[27px] bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
+        <div className="relative z-20 flex flex-col gap-3 rounded-t-[27px] border-b border-slate-100/80 bg-white/90 px-4 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <ActiveViewIcon className="h-5 w-5" />
             </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-slate-800">
+                {activeViewConfig.title}
+              </h2>
+              <p className="hidden truncate text-xs text-slate-400 sm:block">
+                {activeViewConfig.description}
+              </p>
+            </div>
+          </div>
 
-            <div className="h-6 w-px bg-slate-200" />
-
-            <div className="flex items-center gap-0.5">
-              {TIME_RANGE_OPTIONS.map((opt) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-xl border border-white/75 bg-white/35 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-xl">
+              {TIME_RANGE_OPTIONS.map((option) => (
                 <button
-                  key={opt.value}
-                  onClick={() => setTimeRange(opt.value)}
-                  className={`h-8 px-3 rounded-md text-xs font-medium transition-all duration-200 ${
-                    timeRange === opt.value
-                      ? 'text-slate-800 font-semibold'
-                      : 'text-slate-400 hover:text-slate-600'
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleTimeRangeChange(option.value)}
+                  aria-pressed={timeRange === option.value}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition motion-reduce:transition-none sm:px-3 ${
+                    timeRange === option.value
+                      ? 'bg-white/75 text-blue-600 shadow-[0_6px_16px_-10px_rgba(37,99,235,0.85)]'
+                      : 'text-slate-400 hover:bg-white/35 hover:text-slate-700'
                   }`}
                 >
-                  {opt.label}
+                  {option.label}
                 </button>
               ))}
             </div>
-
-            <div className="h-6 w-px bg-slate-200" />
-
-            {resumeOptions.length > 0 && (
-              <CustomSelect
-                value={selectedResumeId || ''}
-                onChange={(value) => setSelectedResumeId(value || null)}
-                options={[{ value: '', label: '全部简历' }, ...resumeOptions.map((opt) => ({ value: opt.id, label: opt.title }))]}
-                className="w-40"
-              />
-            )}
-          </div>
-
-          <div className="text-sm text-slate-500 whitespace-nowrap">
-            共 <span className="font-semibold text-slate-700">{filteredTableApplications.length}</span> 条
+            <CustomSelect
+              value={selectedResumeId || ''}
+              onChange={handleResumeChange}
+              options={resumeSelectOptions}
+              className="w-40 sm:w-48"
+            />
+            <span className="ml-auto whitespace-nowrap text-xs font-medium text-slate-400 lg:ml-1">
+              {workspaceCount}
+            </span>
           </div>
         </div>
 
-        <div className="overflow-x-auto px-6 py-5">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-white border-b-2 border-slate-200">
-                    <th className="px-4 py-3.5 text-left">
-                      <button
-                        onClick={() => handleSort('company')}
-                        className="flex items-center gap-1 text-sm font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-800"
-                      >
-                        公司
-                        {renderSortIcon('company')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider">职位</span>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider">渠道</span>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <button
-                        onClick={() => handleSort('status')}
-                        className="flex items-center gap-1 text-sm font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-800"
-                      >
-                        状态
-                        {renderSortIcon('status')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <button
-                        onClick={() => handleSort('appliedAt')}
-                        className="flex items-center gap-1 text-sm font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-800"
-                      >
-                        投递时间
-                        {renderSortIcon('appliedAt')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider">薪资</span>
-                    </th>
-                    <th className="px-4 py-3.5 text-left">
-                      <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider">关联简历</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedTableApplications.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center">
-                        <div className="flex flex-col items-center">
-                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center mb-4 shadow-inner">
-                            <Inbox className="w-10 h-10 text-slate-300" />
-                          </div>
-                          <p className="text-slate-500 font-medium">暂无投递记录</p>
-                          <p className="text-sm text-slate-400 mt-1">尝试调整筛选条件</p>
-                        </div>
-                      </td>
+        {visibleError && (
+          <div
+            role="alert"
+            className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 lg:mx-6"
+          >
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {visibleError}，当前显示已缓存的数据。
+            </span>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100 motion-reduce:transition-none"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              重新加载
+            </button>
+          </div>
+        )}
+
+        <div className="relative">
+          {mountedViews.has('table') && (
+            <div
+              aria-hidden={activeView !== 'table'}
+              className={`transition duration-200 motion-reduce:transition-none ${
+                activeView === 'table'
+                  ? 'relative visible translate-y-0 opacity-100'
+                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
+              }`}
+            >
+              <div className="overflow-x-auto px-4 pb-2 pt-3 lg:px-6">
+                <table className="w-full min-w-[720px] table-fixed">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left">
+                      <SortableHeader
+                        label="公司"
+                        field="company"
+                        activeField={sortField}
+                        order={sortOrder}
+                        onSort={handleSort}
+                        className="w-[16%]"
+                      />
+                      <th scope="col" className="w-[16%] px-3 py-2.5 text-xs font-semibold text-slate-400">
+                        职位
+                      </th>
+                      <th scope="col" className="hidden w-[12%] px-3 py-2.5 text-xs font-semibold text-slate-400 xl:table-cell">
+                        渠道
+                      </th>
+                      <SortableHeader
+                        label="状态"
+                        field="status"
+                        activeField={sortField}
+                        order={sortOrder}
+                        onSort={handleSort}
+                        className="w-[14%]"
+                      />
+                      <SortableHeader
+                        label="投递时间"
+                        field="appliedAt"
+                        activeField={sortField}
+                        order={sortOrder}
+                        onSort={handleSort}
+                        className="w-[14%]"
+                      />
+                      <th scope="col" className="hidden w-[12%] px-3 py-2.5 text-xs font-semibold text-slate-400 xl:table-cell">
+                        薪资
+                      </th>
+                      <th scope="col" className="w-[16%] px-3 py-2.5 text-xs font-semibold text-slate-400">
+                        关联简历
+                      </th>
                     </tr>
-                  ) : (
-                    sortedTableApplications.map((app) => (
-                      <tr
-                        key={app.id}
-                        className="bg-white hover:bg-blue-50/50 transition-colors divide-y divide-slate-100"
-                      >
-                        <td className="px-4 py-3.5 max-w-[140px]">
-                          <span className="font-medium text-slate-800 hover:text-blue-600 transition-colors cursor-pointer truncate block">{app.company}</span>
-                        </td>
-                        <td className="px-4 py-3.5 max-w-[120px]">
-                          <span className="text-slate-600 truncate block">{app.position}</span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
-                            {APPLICATION_CHANNEL_LABELS[app.channel]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium shadow-sm"
-                            style={{
-                              backgroundColor: `${STATUS_COLORS[app.status]}15`,
-                              color: STATUS_COLORS[app.status],
-                            }}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full"
-                              style={{ backgroundColor: STATUS_COLORS[app.status] }}
-                            />
-                            {APPLICATION_STATUS_LABELS[app.status]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-slate-500 text-sm">
-                            {app.appliedAt
-                              ? new Date(app.appliedAt).toLocaleDateString('zh-CN', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                })
-                              : '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-slate-500 text-sm">{app.salaryRange || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {app.resume_id && resumeTitleMap.get(app.resume_id) ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 max-w-[120px] truncate">
-                              {resumeTitleMap.get(app.resume_id)}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-400">
-                              未关联
-                            </span>
-                          )}
+                  </thead>
+                  <tbody>
+                    {paginatedApplications.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-16 text-center">
+                          <EmptyTable />
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-        </div>
-      </div>
+                    ) : (
+                      paginatedApplications.map((application) => (
+                        <tr
+                          key={application.id}
+                          className="border-b border-slate-100/80 bg-white/75 transition-colors last:border-b-0 hover:bg-blue-50/35 motion-reduce:transition-none"
+                        >
+                          <td className="truncate px-3 py-2 text-sm font-semibold text-slate-800">
+                            {application.company}
+                          </td>
+                          <td className="truncate px-3 py-2 text-sm text-slate-600">
+                            {application.position}
+                          </td>
+                          <td className="hidden px-3 py-2 xl:table-cell">
+                            <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+                              {APPLICATION_CHANNEL_LABELS[application.channel]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={application.status} />
+                          </td>
+                          <td className="px-3 py-2 text-sm text-slate-500">
+                            {formatApplicationDate(application)}
+                          </td>
+                          <td className="hidden truncate px-3 py-2 text-sm text-slate-500 xl:table-cell">
+                            {application.salaryRange || '-'}
+                          </td>
+                          <td className="px-3 py-2">
+                            {application.resume_id && resumeTitleMap.get(application.resume_id) ? (
+                              <span
+                                title={resumeTitleMap.get(application.resume_id)}
+                                className="inline-flex max-w-full truncate rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600"
+                              >
+                                {resumeTitleMap.get(application.resume_id)}
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-400">
+                                未关联
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-      {/* 图表 + 关系图谱 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-          <div className="px-6 pt-5 pb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart2 className="w-4 h-4 text-blue-500" />
-              <h3 className="text-base font-semibold text-slate-700">各简历投递状态分布</h3>
+              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 pb-24 pt-3 lg:px-6 lg:pb-3">
+                <span className="text-xs text-slate-400">
+                  每页 {PAGE_SIZE} 条 · 共 {filteredApplications.length} 条
+                </span>
+                <Pagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  onChange={(page) => updateSearchParams({
+                    page: page === 1 ? null : String(page),
+                  })}
+                />
+              </div>
             </div>
-            <GroupedBar data={resumeStatusData} />
-          </div>
+          )}
+
+          {mountedViews.has('distribution') && (
+            <div
+              aria-hidden={activeView !== 'distribution'}
+              className={`px-4 pb-24 pt-4 transition duration-200 motion-reduce:transition-none lg:px-6 lg:pb-4 ${
+                activeView === 'distribution'
+                  ? 'relative visible translate-y-0 opacity-100'
+                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
+              }`}
+            >
+              <GroupedBar
+                data={resumeStatusData}
+                active={activeView === 'distribution'}
+                resetKey={filterResetKey}
+              />
+            </div>
+          )}
+
+          {mountedViews.has('graph') && (
+            <div
+              aria-hidden={activeView !== 'graph'}
+              className={`px-4 pb-24 pt-4 transition duration-200 motion-reduce:transition-none lg:px-6 lg:pb-4 ${
+                activeView === 'graph'
+                  ? 'relative visible translate-y-0 opacity-100'
+                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
+              }`}
+            >
+              <ResumeJobGraph
+                applications={filteredApplications}
+                resumes={resumes}
+                selectedResumeId={selectedResumeId}
+                resumeTitleMap={resumeTitleMap}
+                active={activeView === 'graph'}
+                resetKey={filterResetKey}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-          <div className="px-6 pt-5 pb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Network className="w-4 h-4 text-blue-500" />
-              <h3 className="text-base font-semibold text-slate-700">简历岗位关系图谱</h3>
-            </div>
-            <ResumeJobGraph
-              applications={applications}
-              resumes={resumes}
-              selectedResumeId={null}
-              resumeTitleMap={resumeTitleMap}
-            />
+        {isResumesLoading && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-[24px] bg-blue-50">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-400 motion-reduce:animate-none" />
           </div>
+        )}
         </div>
-      </div>
+      </section>
+
+      <nav
+        aria-label="面板视图"
+        className="fixed bottom-[18px] left-1/2 z-40 h-16 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-[24px] bg-gradient-to-r from-sky-200/50 via-violet-200/36 to-cyan-200/50 p-px shadow-[0_18px_48px_-20px_rgba(79,70,229,0.38)]"
+      >
+        <div className="flex h-full w-full items-center gap-0.5 rounded-[23px] bg-white/68 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-3xl backdrop-saturate-150">
+          {DASHBOARD_VIEWS.map((view) => {
+            const config = VIEW_CONFIG[view]
+            const Icon = config.icon
+            const isActive = activeView === view
+
+            return (
+              <button
+                key={view}
+                type="button"
+                onClick={() => updateSearchParams({ view })}
+                aria-current={isActive ? 'page' : undefined}
+                className={`mx-1.5 flex h-[42px] min-w-0 flex-1 items-center justify-center gap-2 rounded-[15px] px-2 text-[13px] font-semibold transition duration-200 motion-reduce:transition-none sm:mx-2 sm:px-3 ${
+                  isActive
+                    ? 'bg-white/82 text-blue-600 ring-1 ring-white/90 shadow-[0_8px_20px_-12px_rgba(37,99,235,0.58),inset_0_1px_0_rgba(255,255,255,0.98)]'
+                    : 'text-slate-500 hover:bg-white/38 hover:text-slate-800'
+                }`}
+              >
+                <Icon className="h-[18px] w-[18px] shrink-0" />
+                <span className="truncate">{config.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
     </div>
   )
 }
 
 function StatCard({
   icon,
+  iconClassName,
   label,
   value,
   subText,
 }: {
   icon: React.ReactNode
+  iconClassName: string
   label: string
   value: string | number
   subText: string
 }) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/60 hover:shadow-md hover:border-slate-300/80 hover:bg-gradient-to-br hover:from-white hover:to-blue-50/30 transition-all duration-300 group">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-gradient-to-br from-slate-50 to-slate-100/80 rounded-xl group-hover:from-blue-50 group-hover:to-blue-100/50 transition-all duration-300">
-            {icon}
+    <article className="group rounded-[22px] bg-gradient-to-br from-sky-300/75 via-violet-200/70 to-cyan-300/75 p-px shadow-[0_16px_38px_-24px_rgba(59,130,246,0.65)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_46px_-24px_rgba(79,70,229,0.55)] motion-reduce:transform-none motion-reduce:transition-none">
+      <div className="relative h-full overflow-hidden rounded-[21px] bg-white/92 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg ${iconClassName}`}>
+              {icon}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-400">{label}</p>
+              <p className="mt-0.5 truncate text-2xl font-bold tracking-tight text-slate-900">
+                {value}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-xs text-slate-400 font-medium">{label}</span>
-            <span className="text-2xl font-bold text-slate-800 mt-0.5">{value}</span>
-          </div>
+          {subText && (
+            <span className="shrink-0 rounded-lg border border-white/70 bg-white/40 px-2 py-1 text-[11px] font-medium text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-xl">
+              {subText}
+            </span>
+          )}
         </div>
-        {subText && (
-          <span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-1 rounded-lg">
-            {subText}
-          </span>
+      </div>
+    </article>
+  )
+}
+
+function SortableHeader({
+  label,
+  field,
+  activeField,
+  order,
+  onSort,
+  className,
+}: {
+  label: string
+  field: SortField
+  activeField: SortField
+  order: SortOrder
+  onSort: (field: SortField) => void
+  className?: string
+}) {
+  const isActive = field === activeField
+
+  return (
+    <th scope="col" className={`px-3 py-2.5 ${className || ''}`}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="flex items-center gap-1 text-xs font-semibold text-slate-400 transition-colors hover:text-slate-700 motion-reduce:transition-none"
+      >
+        {label}
+        {isActive && order === 'asc' ? (
+          <ChevronUp className="h-3.5 w-3.5 text-blue-500" />
+        ) : (
+          <ChevronDown className={`h-3.5 w-3.5 ${isActive ? 'text-blue-500' : 'text-slate-300'}`} />
         )}
+      </button>
+    </th>
+  )
+}
+
+function StatusBadge({ status }: { status: ApplicationStatus }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+      style={{
+        backgroundColor: `${STATUS_COLORS[status]}14`,
+        color: STATUS_COLORS[status],
+      }}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: STATUS_COLORS[status] }}
+      />
+      {APPLICATION_STATUS_LABELS[status]}
+    </span>
+  )
+}
+
+function Pagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number
+  totalPages: number
+  onChange: (page: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-2" aria-label="岗位明细分页">
+      <button
+        type="button"
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        aria-label="上一页"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="min-w-20 text-center text-xs font-medium text-slate-500">
+        第 <strong className="text-slate-800">{page}</strong> / {totalPages} 页
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(page + 1)}
+        disabled={page >= totalPages}
+        aria-label="下一页"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function EmptyTable() {
+  return (
+    <div className="flex flex-col items-center">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 shadow-inner">
+        <Inbox className="h-8 w-8 text-slate-300" />
+      </div>
+      <p className="font-medium text-slate-500">暂无投递记录</p>
+      <p className="mt-1 text-sm text-slate-400">尝试调整时间范围或简历筛选</p>
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="mx-auto min-h-full w-full max-w-[1600px] animate-pulse px-4 pb-32 pt-12 motion-reduce:animate-none sm:px-6 lg:px-8">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="h-24 rounded-[22px] bg-white/92 ring-1 ring-sky-200/70 backdrop-blur-2xl" />
+        ))}
+      </div>
+      <div className="mt-3 min-h-[480px] rounded-[28px] bg-white/95 p-6 ring-1 ring-violet-200/60 backdrop-blur-2xl">
+        <div className="h-10 w-full rounded-xl bg-slate-100/80" />
+        <div className="mt-6 space-y-3">
+          {Array.from({ length: 7 }, (_, index) => (
+            <div key={index} className="h-10 rounded-lg bg-slate-100/70" />
+          ))}
+        </div>
       </div>
     </div>
   )
+}
+
+function DashboardFailure({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col px-4 pb-32 pt-12 sm:px-6 lg:px-8">
+      <div className="grid grid-cols-1 gap-3 opacity-60 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="h-24 rounded-[22px] bg-white/92 ring-1 ring-sky-200/70 backdrop-blur-2xl" />
+        ))}
+      </div>
+      <div className="mt-3 flex min-h-[420px] flex-1 flex-col items-center justify-center rounded-[28px] bg-white/95 px-6 text-center shadow-[0_24px_70px_-36px_rgba(79,70,229,0.5)] ring-1 ring-violet-200/60 backdrop-blur-2xl">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h2 className="mt-5 text-lg font-semibold text-slate-800">面板数据加载失败</h2>
+        <p className="mt-2 max-w-md text-sm text-slate-500">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 motion-reduce:transition-none"
+        >
+          <RotateCcw className="h-4 w-4" />
+          重新加载
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function isDashboardView(value: string): value is DashboardView {
+  return DASHBOARD_VIEWS.includes(value as DashboardView)
+}
+
+function isTimeRange(value: string): value is TimeRange {
+  return TIME_RANGES.includes(value as TimeRange)
+}
+
+function isSortField(value: string): value is SortField {
+  return SORT_FIELDS.includes(value as SortField)
+}
+
+function isSortOrder(value: string): value is SortOrder {
+  return SORT_ORDERS.includes(value as SortOrder)
+}
+
+function parseView(value: string | null): DashboardView {
+  return value && isDashboardView(value) ? value : 'table'
+}
+
+function parseTimeRange(value: string | null): TimeRange {
+  return value && isTimeRange(value) ? value : 'all'
+}
+
+function parseSortField(value: string | null): SortField {
+  return value && isSortField(value) ? value : 'appliedAt'
+}
+
+function parseSortOrder(value: string | null): SortOrder {
+  return value && isSortOrder(value) ? value : 'desc'
+}
+
+function parsePage(value: string | null) {
+  if (!value || !/^\d+$/.test(value)) return 1
+  return Math.max(1, Number(value))
+}
+
+function getDateThreshold(range: TimeRange) {
+  if (range === 'all') return null
+  const threshold = new Date()
+  if (range === '1m') threshold.setMonth(threshold.getMonth() - 1)
+  if (range === '3m') threshold.setMonth(threshold.getMonth() - 3)
+  if (range === '6m') threshold.setMonth(threshold.getMonth() - 6)
+  return threshold
+}
+
+function formatApplicationDate(application: Application) {
+  const value = application.appliedAt || application.created_at
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+  })
 }

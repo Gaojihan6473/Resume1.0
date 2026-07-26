@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { RichTextEditor } from './RichTextEditor'
@@ -149,7 +149,17 @@ function InternshipCard({
   )
 }
 
-export function InternshipEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+export function InternshipEditor({
+  expanded,
+  onToggle,
+  focusItemId,
+  focusRequestKey,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  focusItemId?: string
+  focusRequestKey?: number
+}) {
   const {
     resumeData,
     addInternship,
@@ -158,6 +168,14 @@ export function InternshipEditor({ expanded, onToggle }: { expanded: boolean; on
     moveInternship,
   } = useResumeStore()
   const { internships } = resumeData
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  useEffect(() => {
+    if (!expanded || !focusItemId || !focusRequestKey) return
+    requestAnimationFrame(() => {
+      itemRefs.current[focusItemId]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }, [expanded, focusItemId, focusRequestKey])
 
   return (
     <SortableModuleWrapper
@@ -191,8 +209,14 @@ export function InternshipEditor({ expanded, onToggle }: { expanded: boolean; on
       ) : (
         <div className="space-y-3">
           {internships.map((item, index) => (
-            <InternshipCard
+            <div
               key={item.id}
+              ref={(element) => {
+                itemRefs.current[item.id] = element
+              }}
+              className={focusItemId === item.id ? 'editor-jd-target' : ''}
+            >
+            <InternshipCard
               item={item}
               index={index}
               total={internships.length}
@@ -201,6 +225,7 @@ export function InternshipEditor({ expanded, onToggle }: { expanded: boolean; on
               onMoveUp={() => moveInternship(item.id, 'up')}
               onMoveDown={() => moveInternship(item.id, 'down')}
             />
+            </div>
           ))}
         </div>
       )}

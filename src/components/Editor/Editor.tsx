@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import {
   DndContext,
@@ -28,6 +28,8 @@ export type EditorMainTab = 'edit' | 'jd'
 type AccordionEditorProps = {
   expanded: boolean
   onToggle: () => void
+  focusItemId?: string
+  focusRequestKey?: number
 }
 
 const MODULE_COMPONENTS: Record<SectionId, React.ComponentType<AccordionEditorProps>> = {
@@ -42,12 +44,18 @@ interface EditorProps {
   activeTab?: EditorMainTab
   onTabChange?: (tab: EditorMainTab) => void
   jdPanel?: ReactNode
+  focusTarget?: {
+    section: SectionId
+    itemId?: string
+    requestKey: number
+  } | null
 }
 
 export function Editor({
   activeTab = 'edit',
   onTabChange,
   jdPanel,
+  focusTarget,
 }: EditorProps = {}) {
   const { resumeData, reorderSections, setResumeTitle } = useResumeStore()
   const { sectionOrder, resumeTitle } = resumeData
@@ -63,6 +71,21 @@ export function Editor({
   const handleSetExpandedSection = (newSection: SectionId | 'basic' | null) => {
     setExpandedSection(newSection)
   }
+
+  useEffect(() => {
+    if (!focusTarget || activeTab !== 'edit') return
+
+    setExpandedSection(focusTarget.section)
+
+    const scrollToSection = () => {
+      const element = sectionRefs.current[focusTarget.section]
+      element?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToSection)
+    })
+  }, [activeTab, focusTarget])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -146,6 +169,8 @@ export function Editor({
                     <Component
                       expanded={expandedSection === sectionId}
                       onToggle={() => handleSetExpandedSection(expandedSection === sectionId ? null : sectionId)}
+                      focusItemId={focusTarget?.section === sectionId ? focusTarget.itemId : undefined}
+                      focusRequestKey={focusTarget?.section === sectionId ? focusTarget.requestKey : undefined}
                     />
                   </div>
                 ) : null

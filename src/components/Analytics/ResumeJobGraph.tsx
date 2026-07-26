@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { Maximize2, Network } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
@@ -11,6 +11,8 @@ interface ResumeJobGraphProps {
   resumes: Resume[]
   selectedResumeId: string | null
   resumeTitleMap: Map<string, string>
+  active: boolean
+  resetKey: string
 }
 
 type TooltipData =
@@ -99,6 +101,8 @@ export function ResumeJobGraph({
   resumes,
   selectedResumeId,
   resumeTitleMap,
+  active,
+  resetKey,
 }: ResumeJobGraphProps) {
   const [focusedCategory, setFocusedCategory] = useState<FocusedCategory>(null)
   const [isTooltipSuppressed, setIsTooltipSuppressed] = useState(false)
@@ -126,9 +130,11 @@ export function ResumeJobGraph({
       return '未知简历'
     }
 
-    if (selectedResumeId) {
+    const isUnboundOnly = selectedResumeId === UNBOUND_RESUME_ID
+
+    if (selectedResumeId && !isUnboundOnly) {
       resumeNodeMap.set(selectedResumeId, getResumeTitle(selectedResumeId))
-    } else {
+    } else if (!isUnboundOnly) {
       resumes.forEach((resume) => {
         resumeNodeMap.set(resume.id, resume.title)
       })
@@ -190,7 +196,7 @@ export function ResumeJobGraph({
       })
     })
 
-    if (!selectedResumeId && unboundApplications.length > 0) {
+    if ((!selectedResumeId || isUnboundOnly) && unboundApplications.length > 0) {
       nodes.push({
         id: UNBOUND_NODE_ID,
         name: '未关联简历',
@@ -220,8 +226,11 @@ export function ResumeJobGraph({
       })
     }
 
+    const shouldShowJobLabels = applications.length <= 30
+
     applications.forEach((app) => {
-      if (!app.resume_id && selectedResumeId) return
+      if (!app.resume_id && selectedResumeId && !isUnboundOnly) return
+      if (app.resume_id && isUnboundOnly) return
 
       const resumeId = app.resume_id || UNBOUND_RESUME_ID
       const resumeName = app.resume_id ? getResumeTitle(app.resume_id) : '未关联简历'
@@ -244,7 +253,7 @@ export function ResumeJobGraph({
           shadowColor: `${statusColor}33`,
         },
         label: {
-          show: true,
+          show: shouldShowJobLabels,
           position: 'right',
           color: '#475569',
           fontSize: 9,
@@ -332,8 +341,8 @@ export function ResumeJobGraph({
         formatter: renderTooltip,
       },
       legend: {
-        bottom: 0,
-        left: 'center',
+        top: 4,
+        right: 4,
         icon: 'circle',
         data: ['简历', '岗位'],
         itemWidth: 8,
@@ -347,7 +356,7 @@ export function ResumeJobGraph({
           type: 'graph' as const,
           layout: 'force' as const,
           legendHoverLink: true,
-          top: 12,
+          top: 38,
           left: 20,
           right: 20,
           bottom: 48,
@@ -366,13 +375,18 @@ export function ResumeJobGraph({
             max: 2.2,
           },
           force: {
-            repulsion: 330,
-            edgeLength: [72, 118],
-            gravity: 0.06,
+            repulsion: graphData.nodes.length > 40
+              ? 190
+              : graphData.nodes.length > 20
+                ? 260
+                : 360,
+            edgeLength: graphData.nodes.length > 40
+              ? [52, 82]
+              : graphData.nodes.length > 20
+                ? [68, 104]
+                : [86, 132],
+            gravity: graphData.nodes.length > 40 ? 0.12 : 0.08,
             friction: 0.76,
-          },
-          labelLayout: {
-            hideOverlap: true,
           },
           lineStyle: {
             color: '#cbd5e1',
@@ -404,7 +418,7 @@ export function ResumeJobGraph({
     },
   }), [])
 
-  const handleFitView = () => {
+  const handleFitView = useCallback(() => {
     const chart = chartRef.current?.getEchartsInstance()
     if (!chart) return
 
@@ -416,15 +430,28 @@ export function ResumeJobGraph({
           series: [
             {
               id: GRAPH_SERIES_ID,
-              center: null,
-              zoom: 0.84,
+              center: ['50%', '50%'],
+              zoom: 0.88,
             },
           ],
         },
         { lazyUpdate: false }
       )
     })
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!active) return
+    const frame = window.requestAnimationFrame(() => {
+      chartRef.current?.getEchartsInstance()?.resize()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [active, graphData.nodes.length])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(handleFitView)
+    return () => window.cancelAnimationFrame(frame)
+  }, [handleFitView, resetKey])
 
   const hideTooltip = () => {
     chartRef.current?.getEchartsInstance()?.dispatchAction({ type: 'hideTip' })
@@ -452,7 +479,7 @@ export function ResumeJobGraph({
 
   if (graphData.nodes.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center">
+      <div className="flex h-[clamp(400px,calc(100dvh-390px),680px)] items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
             <Network className="w-8 h-8 text-slate-300" />
@@ -465,7 +492,7 @@ export function ResumeJobGraph({
 
   return (
     <div
-      className="relative h-80"
+      className="relative h-[clamp(400px,calc(100dvh-390px),680px)] min-h-[400px]"
       onMouseDownCapture={suppressTooltip}
       onMouseMoveCapture={() => {
         if (isTooltipSuppressed) hideTooltip()
@@ -475,7 +502,6 @@ export function ResumeJobGraph({
     >
       <ReactECharts
         ref={chartRef}
-        key={`resume-job-graph-${graphData.nodes.length}-${graphData.links.length}-${selectedResumeId || 'all'}`}
         option={option}
         style={{ height: '100%', width: '100%' }}
         lazyUpdate={true}

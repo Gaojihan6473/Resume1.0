@@ -4,6 +4,8 @@ import type { InternshipItem, ProjectItem, ResumeData, Skills, Summary } from '.
 export interface ResumeAnchorCandidate {
   section: JDAnalysisSectionId
   key: string
+  stableKey: string
+  itemId?: string
   title: string
   text: string
 }
@@ -14,6 +16,16 @@ export function createSectionAnchorKey(section: JDAnalysisSectionId): string {
 
 export function createResumeAnchorKey(section: JDAnalysisSectionId, text: string): string {
   return `item:${section}:${hashText(normalizeAnchorText(text))}`
+}
+
+export function createStableResumeAnchorKey(section: JDAnalysisSectionId, itemId: string): string {
+  return `stable:${section}:${itemId}`
+}
+
+export interface ResolvedSuggestionAnchor {
+  key: string
+  stableKey: string
+  itemId?: string
 }
 
 export function normalizeAnchorText(value: string | undefined | null): string {
@@ -91,6 +103,8 @@ export function getResumeAnchorCandidates(data: ResumeData): ResumeAnchorCandida
     candidates.push({
       section: 'internships',
       key: createResumeAnchorKey('internships', text || title),
+      stableKey: createStableResumeAnchorKey('internships', intern.id),
+      itemId: intern.id,
       title,
       text,
     })
@@ -102,6 +116,8 @@ export function getResumeAnchorCandidates(data: ResumeData): ResumeAnchorCandida
     candidates.push({
       section: 'projects',
       key: createResumeAnchorKey('projects', text || title),
+      stableKey: createStableResumeAnchorKey('projects', project.id),
+      itemId: project.id,
       title,
       text,
     })
@@ -112,6 +128,8 @@ export function getResumeAnchorCandidates(data: ResumeData): ResumeAnchorCandida
     candidates.push({
       section: 'summary',
       key: createResumeAnchorKey('summary', summaryText),
+      stableKey: createStableResumeAnchorKey('summary', 'summary'),
+      itemId: 'summary',
       title: '个人总结',
       text: summaryText,
     })
@@ -122,6 +140,8 @@ export function getResumeAnchorCandidates(data: ResumeData): ResumeAnchorCandida
     candidates.push({
       section: 'skills',
       key: createResumeAnchorKey('skills', skillsText),
+      stableKey: createStableResumeAnchorKey('skills', 'skills'),
+      itemId: 'skills',
       title: '技能与其他',
       text: skillsText,
     })
@@ -135,8 +155,22 @@ export function resolveSuggestionAnchor(
   section: JDAnalysisSectionId,
   suggestion: SuggestionItem
 ): string {
+  return resolveSuggestionTarget(data, section, suggestion).key
+}
+
+export function resolveSuggestionTarget(
+  data: ResumeData,
+  section: JDAnalysisSectionId,
+  suggestion: SuggestionItem
+): ResolvedSuggestionAnchor {
   const candidates = getResumeAnchorCandidates(data).filter((candidate) => candidate.section === section)
-  if (candidates.length === 0) return createSectionAnchorKey(section)
+  const sectionKey = createSectionAnchorKey(section)
+  if (candidates.length === 0) {
+    return {
+      key: sectionKey,
+      stableKey: sectionKey,
+    }
+  }
 
   const rawFields = [
     suggestion.itemTitle,
@@ -152,7 +186,7 @@ export function resolveSuggestionAnchor(
     .filter(Boolean)
   const fragments = extractAnchorFragments(rawFields)
 
-  let best = { key: createSectionAnchorKey(section), score: 0 }
+  let best: { candidate: ResumeAnchorCandidate | null; score: number } = { candidate: null, score: 0 }
 
   candidates.forEach((candidate) => {
     const candidateText = normalizeAnchorText(candidate.text)
@@ -172,11 +206,22 @@ export function resolveSuggestionAnchor(
     })
 
     if (score > best.score) {
-      best = { key: candidate.key, score }
+      best = { candidate, score }
     }
   })
 
-  return best.score > 0 ? best.key : createSectionAnchorKey(section)
+  if (!best.candidate || best.score <= 0) {
+    return {
+      key: sectionKey,
+      stableKey: sectionKey,
+    }
+  }
+
+  return {
+    key: best.candidate.key,
+    stableKey: best.candidate.stableKey,
+    itemId: best.candidate.itemId,
+  }
 }
 
 function joinAnchorParts(values: Array<string | undefined | null>): string {

@@ -16,6 +16,7 @@ import {
   type JDAnalysisSectionId,
   type SuggestionItem,
 } from '../../types/analytics'
+import type { SectionId } from '../../types/resume'
 import type { JDAnalysisRecord } from '../../types/jdAnalysisHistory'
 import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
@@ -23,7 +24,9 @@ import { useJDAnalysisHistoryStore } from '../../store/jdAnalysisHistoryStore'
 import { useJDAnalysisSessionStore, type JDAnalysisNotice } from '../../store/jdAnalysisSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
 import { createAnalysisHash, normalizeAnalysisText } from '../../utils/analysisHash'
-import { createSectionAnchorKey, resolveSuggestionAnchor } from '../../utils/analysisAnchors'
+import { createSectionAnchorKey, resolveSuggestionTarget } from '../../utils/analysisAnchors'
+import { sanitizeRichHtml } from '../../utils/richText'
+import { toast } from '../Toast'
 import {
   AnalysisEmptyState,
   analyzeJDWithAI,
@@ -50,18 +53,39 @@ interface HistoryBadge {
 
 type HistoryBadges = HistoryBadge[]
 
+interface AppliedSuggestionSnapshot {
+  section: JDAnalysisSectionId
+  itemId: string
+  beforeHtml: string
+  afterHtml: string
+  revisedText: string
+}
+
+interface EditorFocusRequest {
+  section: SectionId
+  itemId?: string
+  requestKey: number
+}
+
 const SOURCE_PREFIX = {
   application: 'application:',
   manual: 'manual:',
 } as const
 
 const NOTICE_AUTO_COLLAPSE_MS = 5000
+const SUGGESTION_LOCK_CLEAR_MS = 3000
+const SUGGESTION_LOCK_FADE_MS = 420
 
 export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<EditorMainTab>('edit')
   const [hoverTarget, setHoverTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [lockedTarget, setLockedTarget] = useState<SuggestionInteractionTarget | null>(null)
+  const [flashTarget, setFlashTarget] = useState<SuggestionInteractionTarget | null>(null)
+  const [flashMode, setFlashMode] = useState<'once' | 'repeat' | 'fade'>('repeat')
+  const [flashKey, setFlashKey] = useState(0)
+  const [appliedSnapshots, setAppliedSnapshots] = useState<Record<string, AppliedSuggestionSnapshot>>({})
+  const [editorFocusRequest, setEditorFocusRequest] = useState<EditorFocusRequest | null>(null)
   const [analysisDisplayVersion, setAnalysisDisplayVersion] = useState(0)
   const [rightNoticeState, setRightNoticeState] = useState({
     key: '',
@@ -70,7 +94,14 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const [resumeHash, setResumeHash] = useState('')
   const [applicationJdHashes, setApplicationJdHashes] = useState<Map<string, string>>(new Map())
 
-  const { resumeData, currentResumeId, isDirty } = useResumeStore()
+  const {
+    resumeData,
+    currentResumeId,
+    isDirty,
+    updateInternship,
+    updateProject,
+    updateSummary,
+  } = useResumeStore()
   const { applications, isLoading, fetchApplications } = useApplicationStore()
   const { isAuthenticated } = useAuthStore()
   const {
@@ -103,6 +134,10 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const analysisPanelScrollRef = useRef<HTMLElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
+  const lockedTargetRef = useRef<SuggestionInteractionTarget | null>(null)
+  const lockedTargetClearTimeoutRef = useRef<number | null>(null)
+  const lockedTargetFadeTimeoutRef = useRef<number | null>(null)
+  const lockedTargetClearRunRef = useRef(0)
   const isSessionForCurrentResume = !sessionResumeId || sessionResumeId === currentResumeId
   const visibleSelectedSourceKey = isSessionForCurrentResume ? selectedSourceKey : ''
   const visibleJdText = isSessionForCurrentResume ? jdText : ''
@@ -130,6 +165,50 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
     return () => window.clearTimeout(timeout)
   }, [isRightNoticeCollapsed, visibleIsRightPanelCollapsed, visibleNoticeKey])
+
+  useEffect(() => {
+    lockedTargetRef.current = lockedTarget
+  }, [lockedTarget])
+
+  const cancelLockedTargetClear = useCallback(() => {
+    lockedTargetClearRunRef.current += 1
+    if (lockedTargetClearTimeoutRef.current !== null) {
+      window.clearTimeout(lockedTargetClearTimeoutRef.current)
+      lockedTargetClearTimeoutRef.current = null
+    }
+    if (lockedTargetFadeTimeoutRef.current !== null) {
+      window.clearTimeout(lockedTargetFadeTimeoutRef.current)
+      lockedTargetFadeTimeoutRef.current = null
+    }
+  }, [])
+
+  const clearLockedTargetAfterDelay = useCallback((targetKey: string) => {
+    cancelLockedTargetClear()
+    const runKey = lockedTargetClearRunRef.current
+
+    lockedTargetClearTimeoutRef.current = window.setTimeout(() => {
+      if (lockedTargetClearRunRef.current !== runKey) return
+      lockedTargetClearTimeoutRef.current = null
+
+      const target = lockedTargetRef.current
+      if (target?.key !== targetKey) return
+
+      setFlashTarget(target)
+      setFlashMode('fade')
+      setFlashKey((key) => key + 1)
+
+      lockedTargetFadeTimeoutRef.current = window.setTimeout(() => {
+        if (lockedTargetClearRunRef.current !== runKey) return
+        lockedTargetFadeTimeoutRef.current = null
+        setFlashTarget((current) => current?.key === targetKey ? null : current)
+        setLockedTarget((current) => current?.key === targetKey ? null : current)
+      }, SUGGESTION_LOCK_FADE_MS)
+    }, SUGGESTION_LOCK_CLEAR_MS)
+  }, [cancelLockedTargetClear])
+
+  useEffect(() => () => {
+    cancelLockedTargetClear()
+  }, [cancelLockedTargetClear])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -270,8 +349,8 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [isDirty, setSession, visibleNotice?.message])
 
   const activeTarget = useMemo(
-    () => isSessionForCurrentResume ? hoverTarget ?? lockedTarget : null,
-    [hoverTarget, isSessionForCurrentResume, lockedTarget]
+    () => isSessionForCurrentResume ? flashTarget ?? hoverTarget ?? lockedTarget : null,
+    [flashTarget, hoverTarget, isSessionForCurrentResume, lockedTarget]
   )
   const activeSuggestionKey = activeTarget?.key ?? null
   const analysisFocus: ResumeAnalysisFocus | null = useMemo(
@@ -280,10 +359,13 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           section: activeTarget.section,
           itemKey: activeTarget.itemKey,
           problemText: activeTarget.problemText,
-          locked: !hoverTarget && Boolean(lockedTarget),
+          locked: Boolean(flashTarget) || (!hoverTarget && Boolean(lockedTarget)),
+          flash: Boolean(flashTarget),
+          flashMode,
+          flashKey,
         }
       : null,
-    [activeTarget, hoverTarget, lockedTarget]
+    [activeTarget, flashKey, flashMode, flashTarget, hoverTarget, lockedTarget]
   )
 
   const suggestionCount = visibleAnalysisResult?.sectionAnalyses.reduce(
@@ -304,16 +386,22 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [abortAnalysis])
 
   const clearAnalysisDisplay = useCallback(() => {
+    cancelLockedTargetClear()
     clearSessionAnalysisDisplay()
     setHoverTarget(null)
     setLockedTarget(null)
-  }, [clearSessionAnalysisDisplay])
+    setFlashTarget(null)
+    setAppliedSnapshots({})
+  }, [cancelLockedTargetClear, clearSessionAnalysisDisplay])
 
   const resetAnalysisPresentation = useCallback(() => {
+    cancelLockedTargetClear()
     setHoverTarget(null)
     setLockedTarget(null)
+    setFlashTarget(null)
+    setAppliedSnapshots({})
     setAnalysisDisplayVersion((version) => version + 1)
-  }, [])
+  }, [cancelLockedTargetClear])
 
   useEffect(() => {
     if (analysisDisplayVersion === 0) return
@@ -520,6 +608,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const handleJdTextChange = (value: string) => {
     abortCurrentAnalysis()
+    cancelLockedTargetClear()
     setHoverTarget(null)
     setLockedTarget(null)
 
@@ -629,6 +718,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   )
 
   const handleAnalyze = async () => {
+    cancelLockedTargetClear()
     setHoverTarget(null)
     setLockedTarget(null)
     setSession({
@@ -731,6 +821,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       const sectionKey = createSectionAnchorKey(target.section)
       const element =
         anchorMapRef.current.get(anchorKey) ||
+        (target.contentItemKey ? anchorMapRef.current.get(target.contentItemKey) : null) ||
         anchorMapRef.current.get(sectionKey)
       const container = previewScrollRef.current
       if (!element?.isConnected || !container) return false
@@ -765,12 +856,14 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const getSuggestionTarget = useCallback(
     (section: JDAnalysisSectionId, suggestion: SuggestionItem): SuggestionInteractionTarget => {
-      const itemKey = resolveSuggestionAnchor(resumeData, section, suggestion)
+      const resolvedTarget = resolveSuggestionTarget(resumeData, section, suggestion)
 
       return {
-        key: createSuggestionKey(section, itemKey, suggestion),
+        key: createSuggestionKey(section, resolvedTarget.stableKey || resolvedTarget.key, suggestion),
         section,
-        itemKey,
+        itemKey: resolvedTarget.stableKey || resolvedTarget.key,
+        contentItemKey: resolvedTarget.key,
+        itemId: resolvedTarget.itemId,
         problemText: suggestion.problemText || suggestion.targetText || suggestion.current,
         suggestion,
       }
@@ -778,24 +871,158 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     [resumeData]
   )
 
-  const handleSuggestionHover = useCallback((target: SuggestionInteractionTarget) => {
-    setHoverTarget(target)
-  }, [])
-
-  const handleSuggestionLeave = useCallback(() => {
-    setHoverTarget(null)
-  }, [])
-
   const handleSuggestionClick = useCallback((target: SuggestionInteractionTarget) => {
     setHoverTarget(null)
     setLockedTarget(target)
+    setFlashTarget(target)
+    setFlashMode('once')
+    setFlashKey((key) => key + 1)
+    clearLockedTargetAfterDelay(target.key)
     requestAnimationFrame(() => scrollToAnchor(target))
-  }, [scrollToAnchor])
+
+    window.setTimeout(() => {
+      setFlashTarget((current) => current?.key === target.key ? null : current)
+    }, 760)
+  }, [clearLockedTargetAfterDelay, scrollToAnchor])
+
+  const getTargetContent = useCallback((target: SuggestionInteractionTarget): string | null => {
+    if (target.section === 'internships') {
+      return resumeData.internships.find((item) => item.id === target.itemId)?.content ?? null
+    }
+    if (target.section === 'projects') {
+      return resumeData.projects.find((item) => item.id === target.itemId)?.content ?? null
+    }
+    if (target.section === 'summary') {
+      return resumeData.summary.content
+    }
+    return null
+  }, [resumeData])
+
+  const getApplyDisabledReason = useCallback((target: SuggestionInteractionTarget): string | null => {
+    const draft = target.suggestion.rewriteDraft
+    if (!draft) return '该建议没有可自动应用的改写草稿'
+    if (!isAutoApplySection(target.section)) return '该模块暂不支持一键应用'
+    if (target.section !== 'summary' && !target.itemId) return '无法定位对应经历'
+
+    const content = getTargetContent(target)
+    if (content === null) return '无法定位对应正文'
+    if (!hasEligibleRichTextReplacement(content, draft.originalText, draft.revisedText)) return '原文已变化，无法自动应用'
+
+    return null
+  }, [getTargetContent])
+
+  const isSuggestionApplied = useCallback(
+    (target: SuggestionInteractionTarget) => Boolean(appliedSnapshots[target.key]),
+    [appliedSnapshots]
+  )
+
+  const focusEditorTarget = useCallback((target: SuggestionInteractionTarget) => {
+    if (!isAutoApplySection(target.section)) return
+    setActiveTab('edit')
+    setEditorFocusRequest({
+      section: target.section,
+      itemId: target.itemId,
+      requestKey: Date.now(),
+    })
+  }, [])
+
+  const flashAppliedTarget = useCallback((target: SuggestionInteractionTarget, marker: string) => {
+    const nextFlashTarget = { ...target, problemText: marker }
+    setHoverTarget(null)
+    setLockedTarget(nextFlashTarget)
+    setFlashTarget(nextFlashTarget)
+    setFlashMode('repeat')
+    setFlashKey((key) => key + 1)
+    clearLockedTargetAfterDelay(nextFlashTarget.key)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToAnchor(nextFlashTarget))
+    })
+
+    window.setTimeout(() => {
+      setFlashTarget((current) => current?.key === nextFlashTarget.key ? null : current)
+    }, 1900)
+  }, [clearLockedTargetAfterDelay, scrollToAnchor])
+
+  const handleApplySuggestion = useCallback((target: SuggestionInteractionTarget) => {
+    const draft = target.suggestion.rewriteDraft
+    if (!draft || !isAutoApplySection(target.section)) return
+
+    const disabledReason = getApplyDisabledReason(target)
+    if (disabledReason) {
+      toast(disabledReason, 'error')
+      return
+    }
+
+    const content = getTargetContent(target)
+    if (content === null) {
+      toast('无法定位对应正文', 'error')
+      return
+    }
+
+    const nextHtml = replaceExactTextInRichHtml(content, draft.originalText, draft.revisedText)
+    if (nextHtml === null) {
+      toast('原文已变化，无法自动应用', 'error')
+      return
+    }
+
+    if (target.section === 'internships' && target.itemId) {
+      updateInternship(target.itemId, { content: nextHtml })
+    } else if (target.section === 'projects' && target.itemId) {
+      updateProject(target.itemId, { content: nextHtml })
+    } else if (target.section === 'summary') {
+      updateSummary({ content: nextHtml })
+    }
+
+    setAppliedSnapshots((current) => ({
+      ...current,
+      [target.key]: {
+        section: target.section,
+        itemId: target.itemId || 'summary',
+        beforeHtml: sanitizeRichHtml(content),
+        afterHtml: sanitizeRichHtml(nextHtml),
+        revisedText: draft.revisedText,
+      },
+    }))
+    focusEditorTarget(target)
+    flashAppliedTarget(target, draft.revisedText)
+    toast('已应用修改', 'success')
+  }, [flashAppliedTarget, focusEditorTarget, getApplyDisabledReason, getTargetContent, updateInternship, updateProject, updateSummary])
+
+  const handleUndoSuggestion = useCallback((target: SuggestionInteractionTarget) => {
+    const snapshot = appliedSnapshots[target.key]
+    if (!snapshot) return
+
+    const content = getTargetContent(target)
+    if (content === null || sanitizeRichHtml(content) !== snapshot.afterHtml) {
+      toast('内容已被手动修改，无法自动撤销', 'error')
+      return
+    }
+
+    if (snapshot.section === 'internships') {
+      updateInternship(snapshot.itemId, { content: snapshot.beforeHtml })
+    } else if (snapshot.section === 'projects') {
+      updateProject(snapshot.itemId, { content: snapshot.beforeHtml })
+    } else if (snapshot.section === 'summary') {
+      updateSummary({ content: snapshot.beforeHtml })
+    }
+
+    setAppliedSnapshots((current) => {
+      const next = { ...current }
+      delete next[target.key]
+      return next
+    })
+    focusEditorTarget(target)
+    flashAppliedTarget(target, target.suggestion.rewriteDraft?.originalText || target.problemText || '')
+    toast('已撤销修改', 'info')
+  }, [appliedSnapshots, flashAppliedTarget, focusEditorTarget, getTargetContent, updateInternship, updateProject, updateSummary])
 
   const handleExpandedSectionChange = useCallback(() => {
+    cancelLockedTargetClear()
     setHoverTarget(null)
     setLockedTarget(null)
-  }, [])
+    setFlashTarget(null)
+  }, [cancelLockedTargetClear])
 
   return (
     <div className={`flex-1 grid h-full min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ${gridClass}`}>
@@ -803,6 +1030,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         <Editor
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          focusTarget={editorFocusRequest}
           jdPanel={(
             <JDInputPanel
               applications={applicationsWithJD}
@@ -854,7 +1082,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         visibleIsRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
       }`}>
         <div className="flex min-h-full flex-col">
-          <div className="flex-1 p-4">
+          <div className="flex min-h-full flex-1 flex-col p-4">
             <div className="mb-3 flex min-h-8 items-center gap-3">
               {visibleNotice && (
                 <div className={`analysis-notice-compact-shell ${isRightNoticeCollapsed ? 'is-visible' : ''}`}>
@@ -927,9 +1155,11 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
                 resetKey={analysisDisplayVersion}
                 activeSuggestionKey={activeSuggestionKey}
                 getSuggestionTarget={getSuggestionTarget}
-                onSuggestionHover={handleSuggestionHover}
-                onSuggestionLeave={handleSuggestionLeave}
                 onSuggestionClick={handleSuggestionClick}
+                onApplySuggestion={handleApplySuggestion}
+                onUndoSuggestion={handleUndoSuggestion}
+                isSuggestionApplied={isSuggestionApplied}
+                getApplyDisabledReason={getApplyDisabledReason}
                 onExpandedSectionChange={handleExpandedSectionChange}
               />
             ) : (
@@ -1356,6 +1586,193 @@ function AnalysisBookmark({
       <span>{label}</span>
     </button>
   )
+}
+
+function isAutoApplySection(section: JDAnalysisSectionId): section is Extract<JDAnalysisSectionId, 'internships' | 'projects' | 'summary'> {
+  return section === 'internships' || section === 'projects' || section === 'summary'
+}
+
+interface RichTextNodeRange {
+  node: Text
+  start: number
+  end: number
+  block: HTMLElement | null
+}
+
+interface RichTextReplacementPlan {
+  startMatch: RichTextNodeRange
+  endMatch: RichTextNodeRange
+  startOffset: number
+  endOffset: number
+}
+
+function hasEligibleRichTextReplacement(html: string, originalText: string, revisedText: string): boolean {
+  if (typeof document === 'undefined') return getRichTextPlainText(html).includes(originalText.trim())
+
+  const container = document.createElement('div')
+  container.innerHTML = sanitizeRichHtml(html || '')
+  return Boolean(createRichTextReplacementPlan(container, originalText, revisedText))
+}
+
+function replaceExactTextInRichHtml(html: string, originalText: string, revisedText: string): string | null {
+  const targetText = originalText.trim()
+  const replacementText = revisedText.trim()
+  if (!targetText || !replacementText || typeof document === 'undefined') return null
+
+  const container = document.createElement('div')
+  container.innerHTML = sanitizeRichHtml(html || '')
+  const plan = createRichTextReplacementPlan(container, targetText, replacementText)
+  if (!plan) return null
+
+  const range = document.createRange()
+  range.setStart(plan.startMatch.node, plan.startOffset)
+  range.setEnd(plan.endMatch.node, plan.endOffset)
+  range.deleteContents()
+  range.insertNode(document.createTextNode(replacementText))
+
+  return sanitizeRichHtml(container.innerHTML)
+}
+
+function createRichTextReplacementPlan(
+  container: HTMLElement,
+  originalText: string,
+  revisedText: string
+): RichTextReplacementPlan | null {
+  const targetText = originalText.trim()
+  if (!targetText) return null
+
+  const textNodes: RichTextNodeRange[] = []
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  let fullText = ''
+  let node = walker.nextNode()
+
+  while (node) {
+    const textNode = node as Text
+    const value = textNode.nodeValue || ''
+    textNodes.push({
+      node: textNode,
+      start: fullText.length,
+      end: fullText.length + value.length,
+      block: getClosestTextBlock(textNode),
+    })
+    fullText += value
+    node = walker.nextNode()
+  }
+
+  const matchStart = fullText.indexOf(targetText)
+  if (matchStart === -1) return null
+
+  const matchEnd = matchStart + targetText.length
+  const startMatch = findTextPosition(textNodes, matchStart)
+  if (!startMatch || !findTextPosition(textNodes, matchEnd)) return null
+
+  const expandedEnd = getReplacementEndWithDuplicateTail(
+    fullText,
+    textNodes,
+    startMatch,
+    matchEnd,
+    revisedText
+  )
+  const expandedEndMatch = findTextPosition(textNodes, expandedEnd)
+  if (!expandedEndMatch) return null
+
+  return {
+    startMatch,
+    endMatch: expandedEndMatch,
+    startOffset: matchStart - startMatch.start,
+    endOffset: expandedEnd - expandedEndMatch.start,
+  }
+}
+
+function findTextPosition(textNodes: RichTextNodeRange[], position: number): RichTextNodeRange | null {
+  return textNodes.find((item) => item.start <= position && item.end >= position) ?? null
+}
+
+function getReplacementEndWithDuplicateTail(
+  fullText: string,
+  textNodes: RichTextNodeRange[],
+  startMatch: RichTextNodeRange,
+  matchEnd: number,
+  revisedText: string
+): number {
+  const blockEnd = startMatch.block
+    ? textNodes
+      .filter((item) => item.block === startMatch.block)
+      .reduce((end, item) => Math.max(end, item.end), matchEnd)
+    : matchEnd
+  const followingText = fullText.slice(matchEnd, Math.min(blockEnd, matchEnd + 90))
+  const leadingNoise = followingText.match(/^[\s,，、;；.。:：-]*/)?.[0] ?? ''
+  const searchableTail = followingText.slice(leadingNoise.length)
+  let bestRawLength = 0
+
+  for (let rawLength = 4; rawLength <= searchableTail.length; rawLength += 1) {
+    const prefix = searchableTail.slice(0, rawLength)
+    const nextChar = searchableTail[rawLength] || ''
+    if (rawLength < searchableTail.length && !/[\s,，、;；.。:：]/.test(nextChar)) continue
+    if (isDuplicateLikeTail(prefix, revisedText)) {
+      bestRawLength = rawLength
+    }
+  }
+
+  return bestRawLength > 0
+    ? matchEnd + leadingNoise.length + bestRawLength
+    : matchEnd
+}
+
+function isDuplicateLikeTail(tailText: string, revisedText: string): boolean {
+  const tail = normalizeComparableText(tailText)
+  const revised = normalizeComparableText(revisedText)
+  const semanticTail = normalizeSemanticComparableText(tailText)
+  const semanticRevised = normalizeSemanticComparableText(revisedText)
+  if (tail.length < 4 || revised.length < 4) return false
+  if (revised.includes(tail) || semanticRevised.includes(semanticTail)) return true
+
+  const overlap = getLcsLength(Array.from(tail), Array.from(revised))
+  const semanticOverlap = getLcsLength(Array.from(semanticTail), Array.from(semanticRevised))
+  const coverage = overlap / tail.length
+  const semanticCoverage = semanticOverlap / semanticTail.length
+  return (overlap >= 4 && coverage >= 0.6) || (semanticOverlap >= 4 && semanticCoverage >= 0.58)
+}
+
+function normalizeComparableText(value: string): string {
+  return value.replace(/[\s,，、;；.。:：!?！？\-—()（）[\]【】{}《》<>]/g, '')
+}
+
+function normalizeSemanticComparableText(value: string): string {
+  return normalizeComparableText(value)
+    .replace(/获客|拉新/g, '用户增长')
+    .replace(/提高|优化|增强|改善|强化/g, '提升')
+    .replace(/转化率/g, '转化')
+    .replace(/留存率/g, '留存')
+}
+
+function getLcsLength(source: string[], target: string[]): number {
+  const previous = Array(target.length + 1).fill(0) as number[]
+  const current = Array(target.length + 1).fill(0) as number[]
+
+  for (let sourceIndex = 1; sourceIndex <= source.length; sourceIndex += 1) {
+    for (let targetIndex = 1; targetIndex <= target.length; targetIndex += 1) {
+      current[targetIndex] = source[sourceIndex - 1] === target[targetIndex - 1]
+        ? previous[targetIndex - 1] + 1
+        : Math.max(previous[targetIndex], current[targetIndex - 1])
+    }
+    previous.splice(0, previous.length, ...current)
+    current.fill(0)
+  }
+
+  return previous[target.length]
+}
+
+function getClosestTextBlock(node: Text): HTMLElement | null {
+  return node.parentElement?.closest('p,li,div,h1,h2,h3,h4,h5,h6') ?? null
+}
+
+function getRichTextPlainText(html: string): string {
+  if (typeof document === 'undefined') return html
+
+  const container = document.createElement('div')
+  container.innerHTML = sanitizeRichHtml(html || '')
+  return container.textContent || ''
 }
 
 function getSourceId(sourceKey: string, type: 'application' | 'manual'): string {

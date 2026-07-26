@@ -9,6 +9,7 @@ import {
   buildSummaryAnchorText,
   createResumeAnchorKey,
   createSectionAnchorKey,
+  createStableResumeAnchorKey,
   stripHtml,
 } from '../../utils/analysisAnchors'
 import { isRichHtmlEmpty, sanitizeRichHtml, textToSafeHtml } from '../../utils/richText'
@@ -29,6 +30,9 @@ export interface ResumeAnalysisFocus {
   itemKey?: string
   problemText?: string
   locked?: boolean
+  flash?: boolean
+  flashMode?: 'once' | 'repeat' | 'fade'
+  flashKey?: number
 }
 
 interface PreviewContentProps {
@@ -64,8 +68,8 @@ export function PreviewContent({
   const bodyLetterSpacingPx = style.letterSpacing ?? 0
   const horizontalPaddingPx = Math.max(0, Math.round(style.pageHorizontalPadding ?? style.pagePadding))
 
-  const getItemFocus = (section: JDAnalysisSectionId, itemKey: string) =>
-    analysisFocus?.section === section && analysisFocus.itemKey === itemKey
+  const getItemFocus = (section: JDAnalysisSectionId, ...itemKeys: string[]) =>
+    analysisFocus?.section === section && Boolean(analysisFocus.itemKey && itemKeys.includes(analysisFocus.itemKey))
   const getSectionFocus = (section: JDAnalysisSectionId) =>
     analysisFocus?.section === section && (!analysisFocus.itemKey || analysisFocus.itemKey === createSectionAnchorKey(section))
   const getMarker = (isFocused: boolean) => (isFocused ? analysisFocus?.problemText : undefined)
@@ -80,9 +84,11 @@ export function PreviewContent({
   }
 
   const summaryKey = createResumeAnchorKey('summary', buildSummaryAnchorText(summary))
-  const summaryFocused = getSectionFocus('summary') || getItemFocus('summary', summaryKey)
+  const summaryStableKey = createStableResumeAnchorKey('summary', 'summary')
+  const summaryFocused = getSectionFocus('summary') || getItemFocus('summary', summaryKey, summaryStableKey)
   const skillsKey = createResumeAnchorKey('skills', buildSkillsAnchorText(skills))
-  const skillsFocused = getSectionFocus('skills') || getItemFocus('skills', skillsKey)
+  const skillsStableKey = createStableResumeAnchorKey('skills', 'skills')
+  const skillsFocused = getSectionFocus('skills') || getItemFocus('skills', skillsKey, skillsStableKey)
 
   const sectionComponents: Record<SectionId, ReactNode> = {
     education: education.length > 0 ? (
@@ -136,14 +142,18 @@ export function PreviewContent({
       >
         {internships.map((intern) => {
           const itemKey = createResumeAnchorKey('internships', buildInternshipAnchorText(intern))
-          const isFocused = getItemFocus('internships', itemKey)
+          const stableItemKey = createStableResumeAnchorKey('internships', intern.id)
+          const isFocused = getItemFocus('internships', itemKey, stableItemKey)
           const marker = getMarker(isFocused)
 
           return (
             <div
               key={intern.id}
-              ref={(element) => registerAnchor?.(itemKey, element)}
-              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked)}
+              ref={(element) => {
+                registerAnchor?.(itemKey, element)
+                registerAnchor?.(stableItemKey, element)
+              }}
+              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked, analysisFocus?.flash, analysisFocus?.flashMode)}
               style={{ marginBottom: `${itemSpacingPx}px` }}
             >
               <div className="flex justify-between items-baseline gap-3">
@@ -159,16 +169,16 @@ export function PreviewContent({
                 <div
                   className="rich-content"
                   style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${intern.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((intern.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-                  dangerouslySetInnerHTML={{ __html: highlightHtml(intern.content, marker) }}
+                  dangerouslySetInnerHTML={{ __html: highlightHtml(intern.content, marker, analysisFocus?.flashKey, analysisFocus?.flashMode) }}
                 />
               ) : (
                 intern.projects.map((proj) => (
                   <div key={proj.id} style={{ marginTop: `${tightSpacingPx}px` }}>
-                    {proj.title && <div className="font-medium"><HighlightedText text={proj.title} marker={marker} /></div>}
-                    {proj.description && <div><HighlightedText text={proj.description} marker={marker} /></div>}
+                    {proj.title && <div className="font-medium"><HighlightedText text={proj.title} marker={marker} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>}
+                    {proj.description && <div><HighlightedText text={proj.description} marker={marker} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>}
                     {proj.bullets.length > 0 && (
                       <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                        {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} /></li>)}
+                        {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></li>)}
                       </ul>
                     )}
                     {proj.achievements.length > 0 && (
@@ -193,14 +203,18 @@ export function PreviewContent({
       >
         {projects.map((proj) => {
           const itemKey = createResumeAnchorKey('projects', buildProjectAnchorText(proj))
-          const isFocused = getItemFocus('projects', itemKey)
+          const stableItemKey = createStableResumeAnchorKey('projects', proj.id)
+          const isFocused = getItemFocus('projects', itemKey, stableItemKey)
           const marker = getMarker(isFocused)
 
           return (
             <div
               key={proj.id}
-              ref={(element) => registerAnchor?.(itemKey, element)}
-              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked)}
+              ref={(element) => {
+                registerAnchor?.(itemKey, element)
+                registerAnchor?.(stableItemKey, element)
+              }}
+              className={getAnalysisFocusClass(isFocused, analysisFocus?.locked, analysisFocus?.flash, analysisFocus?.flashMode)}
               style={{ marginBottom: `${itemSpacingPx}px` }}
             >
               <div className="flex justify-between items-baseline gap-3">
@@ -212,14 +226,14 @@ export function PreviewContent({
                 <div
                   className="rich-content"
                   style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${proj.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((proj.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-                  dangerouslySetInnerHTML={{ __html: highlightHtml(proj.content, marker) }}
+                  dangerouslySetInnerHTML={{ __html: highlightHtml(proj.content, marker, analysisFocus?.flashKey, analysisFocus?.flashMode) }}
                 />
               ) : (
                 <>
-                  {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}><HighlightedText text={proj.description} marker={marker} /></div>}
+                  {proj.description && <div style={{ marginTop: `${tightSpacingPx}px` }}><HighlightedText text={proj.description} marker={marker} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>}
                   {proj.bullets.length > 0 && (
                     <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                      {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} /></li>)}
+                      {proj.bullets.map((bullet, index) => <li key={index}><HighlightedText text={bullet} marker={marker} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></li>)}
                     </ul>
                   )}
                   {proj.achievements.length > 0 && (
@@ -239,6 +253,7 @@ export function PreviewContent({
         title="个人总结"
         section="summary"
         itemAnchorKey={summaryKey}
+        itemStableAnchorKey={summaryStableKey}
         isFocused={summaryFocused}
         {...sectionProps}
       >
@@ -246,14 +261,14 @@ export function PreviewContent({
           <div
             className="rich-content"
             style={{ marginTop: `${dividerToBodySpacingPx}px`, fontSize: `${summary.contentFontSize || bodyFontSize}px`, lineHeight: `${Math.max(1, Math.round((summary.contentFontSize || bodyFontSize) * style.lineHeight))}px` }}
-            dangerouslySetInnerHTML={{ __html: highlightHtml(summary.content, getMarker(summaryFocused)) }}
+            dangerouslySetInnerHTML={{ __html: highlightHtml(summary.content, getMarker(summaryFocused), analysisFocus?.flashKey, analysisFocus?.flashMode) }}
           />
         ) : summary.mode === 'highlights' ? (
           <ul className="list-disc list-inside space-y-0.5">
-            {summary.highlights.map((item, index) => <li key={index}><HighlightedText text={item} marker={getMarker(summaryFocused)} /></li>)}
+            {summary.highlights.map((item, index) => <li key={index}><HighlightedText text={item} marker={getMarker(summaryFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></li>)}
           </ul>
         ) : (
-          <p className="whitespace-pre-wrap"><HighlightedText text={summary.text} marker={getMarker(summaryFocused)} /></p>
+          <p className="whitespace-pre-wrap"><HighlightedText text={summary.text} marker={getMarker(summaryFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></p>
         )}
       </Section>
     ) : null,
@@ -264,21 +279,22 @@ export function PreviewContent({
         title="技能证书"
         section="skills"
         itemAnchorKey={skillsKey}
+        itemStableAnchorKey={skillsStableKey}
         isFocused={skillsFocused}
         {...sectionProps}
       >
         <div className="space-y-0.5">
           {skills.technical.length > 0 && (
-            <div><span className="font-medium">技术技能：</span><HighlightedText text={skills.technical.join('、')} marker={getMarker(skillsFocused)} /></div>
+            <div><span className="font-medium">技术技能：</span><HighlightedText text={skills.technical.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
           {skills.languages.length > 0 && (
-            <div><span className="font-medium">语言能力：</span><HighlightedText text={skills.languages.join('、')} marker={getMarker(skillsFocused)} /></div>
+            <div><span className="font-medium">语言能力：</span><HighlightedText text={skills.languages.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
           {skills.certificates.length > 0 && (
-            <div><span className="font-medium">证书资格：</span><HighlightedText text={skills.certificates.join('、')} marker={getMarker(skillsFocused)} /></div>
+            <div><span className="font-medium">证书资格：</span><HighlightedText text={skills.certificates.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
           {skills.interests.length > 0 && (
-            <div><span className="font-medium">兴趣爱好：</span><HighlightedText text={skills.interests.join('、')} marker={getMarker(skillsFocused)} /></div>
+            <div><span className="font-medium">兴趣爱好：</span><HighlightedText text={skills.interests.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
         </div>
       </Section>
@@ -341,6 +357,7 @@ function Section({
   title,
   section,
   itemAnchorKey,
+  itemStableAnchorKey,
   isFocused = false,
   titleFontSize,
   titleLineHeightPx,
@@ -353,6 +370,7 @@ function Section({
   title: string
   section?: JDAnalysisSectionId
   itemAnchorKey?: string
+  itemStableAnchorKey?: string
   isFocused?: boolean
   titleFontSize: number
   titleLineHeightPx: number
@@ -365,10 +383,11 @@ function Section({
   const anchorRef = (element: HTMLDivElement | null) => {
     if (section) registerAnchor?.(createSectionAnchorKey(section), element)
     if (itemAnchorKey) registerAnchor?.(itemAnchorKey, element)
+    if (itemStableAnchorKey) registerAnchor?.(itemStableAnchorKey, element)
   }
 
   return (
-    <div ref={anchorRef} className={getAnalysisFocusClass(isFocused)} style={{ marginBottom: `${sectionSpacingPx}px` }}>
+    <div ref={anchorRef} className={getAnalysisFocusClass(isFocused, false, false)} style={{ marginBottom: `${sectionSpacingPx}px` }}>
       <h2 className="font-bold" style={{ marginBottom: `${tightSpacingPx}px`, fontSize: `${titleFontSize}px`, letterSpacing: '0', lineHeight: `${titleLineHeightPx}px`, color: SECTION_TITLE_COLOR }}>
         {title}
       </h2>
@@ -381,9 +400,13 @@ function Section({
 function HighlightedText({
   text,
   marker,
+  flashKey,
+  flashMode,
 }: {
   text: string
   marker?: string
+  flashKey?: number
+  flashMode?: 'once' | 'repeat' | 'fade'
 }) {
   const cleanedMarker = stripHtml(marker || '').trim()
   if (!cleanedMarker) return <>{text}</>
@@ -395,13 +418,19 @@ function HighlightedText({
   return (
     <>
       {text.slice(0, start)}
-      <mark className="rounded bg-amber-200 px-0.5 text-amber-950">{text.slice(start, end)}</mark>
+      <mark
+        key={flashKey || 'static'}
+        className={`resume-analysis-marker ${getMarkerFlashClass(flashKey, flashMode)}`}
+        data-flash-key={flashKey}
+      >
+        {text.slice(start, end)}
+      </mark>
       {text.slice(end)}
     </>
   )
 }
 
-function highlightHtml(html: string, marker?: string): string {
+function highlightHtml(html: string, marker?: string, flashKey?: number, flashMode?: 'once' | 'repeat' | 'fade'): string {
   const safeHtml = sanitizeRichHtml(html)
   const cleanedMarker = stripHtml(marker || '').trim()
   if (!cleanedMarker || typeof document === 'undefined') return safeHtml
@@ -421,7 +450,8 @@ function highlightHtml(html: string, marker?: string): string {
       const start = text.indexOf(markerToUse)
       const end = start + markerToUse.length
       const mark = document.createElement('mark')
-      mark.setAttribute('style', 'background:#fde68a;color:#78350f;border-radius:2px;padding:0 1px;')
+      mark.className = `resume-analysis-marker ${getMarkerFlashClass(flashKey, flashMode)}`.trim()
+      if (flashKey) mark.setAttribute('data-flash-key', String(flashKey))
       mark.textContent = text.slice(start, end)
 
       const parent = textNode.parentNode
@@ -440,10 +470,28 @@ function highlightHtml(html: string, marker?: string): string {
   return safeHtml
 }
 
-function getAnalysisFocusClass(isFocused: boolean, locked = false): string {
+function getMarkerFlashClass(flashKey?: number, flashMode: 'once' | 'repeat' | 'fade' = 'repeat'): string {
+  if (!flashKey) return ''
+  if (flashMode === 'fade') return 'resume-analysis-marker-fade'
+  return flashMode === 'once' ? 'resume-analysis-marker-flash-once' : 'resume-analysis-marker-flash'
+}
+
+function getAnalysisFocusClass(
+  isFocused: boolean,
+  locked = false,
+  flashing = false,
+  flashMode: 'once' | 'repeat' | 'fade' = 'repeat'
+): string {
   if (!isFocused) return 'transition-all duration-150'
   return [
     'relative rounded-md px-1 -mx-1 transition-all duration-150',
+    flashing
+      ? flashMode === 'fade'
+        ? 'resume-analysis-focus-fade'
+        : flashMode === 'once'
+          ? 'resume-analysis-focus-flash-once'
+          : 'resume-analysis-focus-flash'
+      : '',
     locked ? 'bg-blue-50 ring-1 ring-blue-300' : 'bg-amber-50 ring-1 ring-amber-300',
   ].join(' ')
 }

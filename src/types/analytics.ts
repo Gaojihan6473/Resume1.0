@@ -79,8 +79,16 @@ export interface SuggestionItem {
   targetText?: string
   problemText?: string
   problem?: string
+  problemDetails?: {
+    jdGap: string
+    resumeStatus: string
+  }
   problemReason?: string
   suggestion: string
+  rewriteDraft?: {
+    originalText: string
+    revisedText: string
+  }
   rewriteExample?: string
   reason: string
 }

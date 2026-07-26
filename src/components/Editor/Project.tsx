@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { RichTextEditor } from './RichTextEditor'
@@ -125,7 +125,17 @@ function ProjectCard({
   )
 }
 
-export function ProjectEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+export function ProjectEditor({
+  expanded,
+  onToggle,
+  focusItemId,
+  focusRequestKey,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  focusItemId?: string
+  focusRequestKey?: number
+}) {
   const {
     resumeData,
     addProject,
@@ -134,6 +144,14 @@ export function ProjectEditor({ expanded, onToggle }: { expanded: boolean; onTog
     moveProject,
   } = useResumeStore()
   const { projects } = resumeData
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  useEffect(() => {
+    if (!expanded || !focusItemId || !focusRequestKey) return
+    requestAnimationFrame(() => {
+      itemRefs.current[focusItemId]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }, [expanded, focusItemId, focusRequestKey])
 
   return (
     <SortableModuleWrapper
@@ -167,8 +185,14 @@ export function ProjectEditor({ expanded, onToggle }: { expanded: boolean; onTog
       ) : (
         <div className="space-y-3">
           {projects.map((item, index) => (
-            <ProjectCard
+            <div
               key={item.id}
+              ref={(element) => {
+                itemRefs.current[item.id] = element
+              }}
+              className={focusItemId === item.id ? 'editor-jd-target' : ''}
+            >
+            <ProjectCard
               item={item}
               index={index}
               total={projects.length}
@@ -177,6 +201,7 @@ export function ProjectEditor({ expanded, onToggle }: { expanded: boolean; onTog
               onMoveUp={() => moveProject(item.id, 'up')}
               onMoveDown={() => moveProject(item.id, 'down')}
             />
+            </div>
           ))}
         </div>
       )}

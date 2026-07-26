@@ -11,7 +11,7 @@ import { Dashboard } from '../components/Analytics/Dashboard'
 export function AnalyticsPage() {
   const navigate = useNavigate()
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
-  const { applications, fetchApplications } = useApplicationStore()
+  const { applications, fetchApplications, isLoading, error } = useApplicationStore()
 
   useEffect(() => {
     fetchApplications()
@@ -62,7 +62,12 @@ export function AnalyticsPage() {
 
         {/* 内容区 */}
         <main className="relative flex-1 isolate overflow-y-auto home-login-bg">
-          <Dashboard applications={applications} />
+          <Dashboard
+            applications={applications}
+            isLoading={isLoading}
+            error={error}
+            onRetry={fetchApplications}
+          />
         </main>
       </div>
     </div>

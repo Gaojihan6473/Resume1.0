@@ -12,6 +12,9 @@ interface ResumeDocumentOptions {
     itemKey?: string
     problemText?: string
     locked?: boolean
+    flash?: boolean
+    flashMode?: 'once' | 'repeat' | 'fade'
+    flashKey?: number
   } | null
 }
 

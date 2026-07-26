@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { Check, ChevronDown, Crosshair, RotateCcw } from 'lucide-react'
 import {
   JD_ANALYSIS_SECTIONS,
   type JDAnalysisSectionId,
@@ -12,6 +12,8 @@ export interface SuggestionInteractionTarget {
   key: string
   section: JDAnalysisSectionId
   itemKey?: string
+  contentItemKey?: string
+  itemId?: string
   problemText?: string
   suggestion: SuggestionItem
 }
@@ -25,6 +27,10 @@ interface SuggestionsProps {
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+  onApplySuggestion?: (target: SuggestionInteractionTarget) => void
+  onUndoSuggestion?: (target: SuggestionInteractionTarget) => void
+  isSuggestionApplied?: (target: SuggestionInteractionTarget) => boolean
+  getApplyDisabledReason?: (target: SuggestionInteractionTarget) => string | null
   onExpandedSectionChange?: (section: JDAnalysisSectionId | null) => void
 }
 
@@ -53,6 +59,10 @@ export function Suggestions({
   onSuggestionHover,
   onSuggestionLeave,
   onSuggestionClick,
+  onApplySuggestion,
+  onUndoSuggestion,
+  isSuggestionApplied,
+  getApplyDisabledReason,
   onExpandedSectionChange,
 }: SuggestionsProps) {
   const sections = useMemo(
@@ -86,6 +96,10 @@ export function Suggestions({
           onSuggestionHover={onSuggestionHover}
           onSuggestionLeave={onSuggestionLeave}
           onSuggestionClick={onSuggestionClick}
+          onApplySuggestion={onApplySuggestion}
+          onUndoSuggestion={onUndoSuggestion}
+          isSuggestionApplied={isSuggestionApplied}
+          getApplyDisabledReason={getApplyDisabledReason}
         />
       ))}
     </div>
@@ -101,6 +115,10 @@ function SectionCard({
   onSuggestionHover,
   onSuggestionLeave,
   onSuggestionClick,
+  onApplySuggestion,
+  onUndoSuggestion,
+  isSuggestionApplied,
+  getApplyDisabledReason,
 }: {
   section: JDSectionAnalysis
   expanded: boolean
@@ -110,6 +128,10 @@ function SectionCard({
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+  onApplySuggestion?: (target: SuggestionInteractionTarget) => void
+  onUndoSuggestion?: (target: SuggestionInteractionTarget) => void
+  isSuggestionApplied?: (target: SuggestionInteractionTarget) => boolean
+  getApplyDisabledReason?: (target: SuggestionInteractionTarget) => string | null
 }) {
   const bodyId = useId()
   const statusConfig = STATUS_CONFIG[section.status]
@@ -130,7 +152,7 @@ function SectionCard({
             <span className="jd-suggestion-section-chevron" aria-hidden="true">
               <ChevronDown className="h-3 w-3" />
             </span>
-            <h4 className="min-w-0 truncate text-sm font-semibold text-slate-800">
+            <h4 className="min-w-0 truncate text-base font-semibold text-slate-800">
               {section.sectionLabel}
             </h4>
           </div>
@@ -172,6 +194,10 @@ function SectionCard({
                       onSuggestionHover={onSuggestionHover}
                       onSuggestionLeave={onSuggestionLeave}
                       onSuggestionClick={onSuggestionClick}
+                      onApplySuggestion={onApplySuggestion}
+                      onUndoSuggestion={onUndoSuggestion}
+                      isSuggestionApplied={isSuggestionApplied}
+                      getApplyDisabledReason={getApplyDisabledReason}
                     />
                   )
                 })}
@@ -186,7 +212,7 @@ function SectionCard({
 
 function EmptySectionState() {
   return (
-    <div className="rounded-xl border border-dashed border-slate-200/80 bg-white/65 px-3 py-3 text-sm text-slate-500">
+    <div className="rounded-xl bg-white/65 px-3 py-3 text-sm text-slate-500">
       暂无明显优化建议
     </div>
   )
@@ -207,6 +233,10 @@ function ItemAnalysis({
   onSuggestionHover,
   onSuggestionLeave,
   onSuggestionClick,
+  onApplySuggestion,
+  onUndoSuggestion,
+  isSuggestionApplied,
+  getApplyDisabledReason,
 }: {
   sectionId: JDAnalysisSectionId
   group: SuggestionGroup
@@ -216,6 +246,10 @@ function ItemAnalysis({
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+  onApplySuggestion?: (target: SuggestionInteractionTarget) => void
+  onUndoSuggestion?: (target: SuggestionInteractionTarget) => void
+  isSuggestionApplied?: (target: SuggestionInteractionTarget) => boolean
+  getApplyDisabledReason?: (target: SuggestionInteractionTarget) => string | null
 }) {
   return (
     <article className="jd-suggestion-item">
@@ -227,12 +261,15 @@ function ItemAnalysis({
             index={startIndex + index}
             itemTitle={group.itemTitle}
             suggestion={suggestion}
-            fallbackContent={group.originalContent}
             activeSuggestionKey={activeSuggestionKey}
             getSuggestionTarget={getSuggestionTarget}
             onSuggestionHover={onSuggestionHover}
             onSuggestionLeave={onSuggestionLeave}
             onSuggestionClick={onSuggestionClick}
+            onApplySuggestion={onApplySuggestion}
+            onUndoSuggestion={onUndoSuggestion}
+            isSuggestionApplied={isSuggestionApplied}
+            getApplyDisabledReason={getApplyDisabledReason}
           />
         ))}
       </div>
@@ -244,144 +281,300 @@ function Annotation({
   sectionId,
   itemTitle,
   suggestion,
-  fallbackContent,
   index,
   activeSuggestionKey,
   getSuggestionTarget,
   onSuggestionHover,
   onSuggestionLeave,
   onSuggestionClick,
+  onApplySuggestion,
+  onUndoSuggestion,
+  isSuggestionApplied,
+  getApplyDisabledReason,
 }: {
   sectionId: JDAnalysisSectionId
   itemTitle: string
   suggestion: SuggestionItem
-  fallbackContent: string
   index: number
   activeSuggestionKey?: string | null
   getSuggestionTarget?: (section: JDAnalysisSectionId, suggestion: SuggestionItem) => SuggestionInteractionTarget
   onSuggestionHover?: (target: SuggestionInteractionTarget) => void
   onSuggestionLeave?: () => void
   onSuggestionClick?: (target: SuggestionInteractionTarget) => void
+  onApplySuggestion?: (target: SuggestionInteractionTarget) => void
+  onUndoSuggestion?: (target: SuggestionInteractionTarget) => void
+  isSuggestionApplied?: (target: SuggestionInteractionTarget) => boolean
+  getApplyDisabledReason?: (target: SuggestionInteractionTarget) => string | null
 }) {
   const target = getSuggestionTarget?.(sectionId, suggestion)
   const isActive = Boolean(target && target.key === activeSuggestionKey)
-  const isInteractive = Boolean(target && (onSuggestionHover || onSuggestionClick))
-  const excerptText = getSuggestionExcerpt(suggestion, fallbackContent)
+  const isHoverInteractive = Boolean(target && onSuggestionHover)
+  const problemDetails = getProblemDetails(suggestion)
   const problemReasonText = getProblemReasonText(suggestion)
   const suggestionText = stripSuggestionPriority(suggestion.suggestion)
+  const rewriteDraft = suggestion.rewriteDraft
+  const applied = Boolean(target && isSuggestionApplied?.(target))
+  const applyDisabledReason = target ? getApplyDisabledReason?.(target) ?? null : '无法定位对应原文'
+  const canShowApply = Boolean(rewriteDraft && target && sectionId !== 'skills' && onApplySuggestion)
+  const showItemHeading = sectionId !== 'summary' && sectionId !== 'skills'
 
   const handleHover = () => {
     if (target) onSuggestionHover?.(target)
   }
 
-  const handleClick = () => {
-    if (target) onSuggestionClick?.(target)
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isInteractive) return
-    if (event.key !== 'Enter' && event.key !== ' ') return
-    event.preventDefault()
-    handleClick()
-  }
-
   return (
     <div
-      role={isInteractive ? 'button' : undefined}
-      tabIndex={isInteractive ? 0 : undefined}
       onMouseEnter={handleHover}
-      onMouseLeave={isInteractive ? onSuggestionLeave : undefined}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
+      onMouseLeave={isHoverInteractive ? onSuggestionLeave : undefined}
       className={[
-        'jd-suggestion-card',
-        isInteractive ? 'cursor-pointer' : 'cursor-default',
+        'jd-suggestion-unit',
         isActive ? 'jd-suggestion-card-active' : '',
       ].join(' ')}
     >
-      <div className="flex items-start gap-3">
-        <span className={[
-          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all',
-          isActive
-            ? 'bg-blue-600 text-white shadow-sm shadow-blue-200'
-            : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
-        ].join(' ')}>
-          {index + 1}
-        </span>
+      {showItemHeading && (
+        <div className="jd-suggestion-unit-heading">
+          <span className={[
+            'jd-suggestion-index',
+            isActive ? 'is-active' : '',
+          ].join(' ')}>
+            {index + 1}
+          </span>
 
-        <div className="min-w-0 flex-1">
-          <h6 className="mb-2 text-sm font-semibold leading-6 text-slate-800">
+          <h6 className="min-w-0 flex-1 truncate text-sm font-semibold leading-6 text-slate-800">
             {itemTitle || '待优化条目'}
           </h6>
+        </div>
+      )}
 
-          <AnnotationBlock
-            label="命中片段"
-            text={excerptText}
-            tone="excerpt"
-            allowList={false}
+      <div className="jd-suggestion-unit-body">
+        <section className="jd-suggestion-block jd-suggestion-block-blue">
+          <BlockTitle title="问题与原因" />
+          <DefinitionRows
+            rows={[
+              ['JD差异点', problemDetails.jdGap],
+              ['简历现状', problemDetails.resumeStatus || problemReasonText],
+            ]}
           />
+        </section>
 
-          <AnnotationBlock
-            label="问题与原因"
-            text={problemReasonText}
-            tone="diagnosis"
-          />
+        <section className="jd-suggestion-block jd-suggestion-block-green">
+          <BlockTitle title="优化建议" />
+          <AnnotationText text={suggestionText} />
+        </section>
 
-          <AnnotationBlock
-            label="优化建议"
-            text={suggestionText}
-            tone="suggestion"
-          />
+        {rewriteDraft ? (
+          <section className="jd-suggestion-block jd-suggestion-block-blue">
+            <BlockTitle title="改写草稿" />
+            <RewriteDraftView
+              originalText={rewriteDraft.originalText}
+              revisedText={rewriteDraft.revisedText}
+            />
+          </section>
+        ) : (
+          <section className="jd-suggestion-block jd-suggestion-block-muted">
+            <BlockTitle title="改写草稿" />
+            <p className="jd-suggestion-muted-text">该建议需要人工判断，暂不提供一键改写。</p>
+          </section>
+        )}
+      </div>
+
+      <div className="jd-suggestion-actions">
+        <button
+          type="button"
+          onClick={() => target && onSuggestionClick?.(target)}
+          disabled={!target}
+          className="jd-suggestion-locate-action"
+        >
+          <Crosshair className="h-4 w-4" />
+          定位原文
+        </button>
+
+        {canShowApply && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!target) return
+              if (applied) {
+                onUndoSuggestion?.(target)
+                return
+              }
+              onApplySuggestion?.(target)
+            }}
+            disabled={!applied && Boolean(applyDisabledReason)}
+            title={applied ? '撤销刚刚应用的修改' : applyDisabledReason || '应用改写草稿'}
+            className={applied ? 'jd-suggestion-undo-action' : 'jd-suggestion-apply-action'}
+          >
+            {applied ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+            {applied ? '撤销修改' : '应用此修改'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BlockTitle({ title }: { title: string }) {
+  return (
+    <h6 className="jd-suggestion-block-title">
+      <span aria-hidden="true" />
+      {title}
+    </h6>
+  )
+}
+
+function DefinitionRows({ rows }: { rows: Array<[string, string]> }) {
+  return (
+    <dl className="jd-suggestion-definition">
+      {rows
+        .filter(([, value]) => cleanInlineText(value))
+        .map(([label, value]) => (
+          <div key={label} className="jd-suggestion-definition-row">
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+    </dl>
+  )
+}
+
+function AnnotationText({ text }: { text?: string }) {
+  const points = splitDisplayText(text)
+  if (points.length === 0) return <p className="jd-suggestion-muted-text">暂无具体建议</p>
+
+  if (points.length === 1) {
+    return <p className="jd-suggestion-copy">{points[0]}</p>
+  }
+
+  return (
+    <ul className="jd-suggestion-copy-list">
+      {points.map((point, pointIndex) => (
+        <li key={`${point}-${pointIndex}`}>{point}</li>
+      ))}
+    </ul>
+  )
+}
+
+function RewriteDraftView({
+  originalText,
+  revisedText,
+}: {
+  originalText: string
+  revisedText: string
+}) {
+  return (
+    <div className="jd-rewrite-draft">
+      <div className="jd-rewrite-line">
+        <span className="jd-rewrite-dot is-remove" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="jd-rewrite-label">原文</div>
+          <p>{renderInlineDiff(originalText, revisedText, 'remove')}</p>
+        </div>
+      </div>
+      <div className="jd-rewrite-line">
+        <span className="jd-rewrite-dot is-add" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="jd-rewrite-label">改后</div>
+          <p>{renderInlineDiff(originalText, revisedText, 'add')}</p>
         </div>
       </div>
     </div>
   )
 }
 
-type AnnotationTone = 'excerpt' | 'diagnosis' | 'suggestion'
+function renderInlineDiff(originalText: string, revisedText: string, mode: 'remove' | 'add') {
+  const source = mode === 'remove' ? originalText : revisedText
+  const tokens = diffTokens(originalText, revisedText)
+    .filter((token) => mode === 'remove' ? token.type !== 'add' : token.type !== 'remove')
 
-function AnnotationBlock({
-  label,
-  text,
-  tone,
-  allowList = true,
-}: {
-  label: string
-  text?: string
-  tone: AnnotationTone
-  allowList?: boolean
-}) {
-  const points = allowList
-    ? splitDisplayText(text)
-    : cleanInlineText(text || '')
-      ? [cleanInlineText(text || '')]
-      : []
-  if (points.length === 0) return null
+  if (tokens.every((token) => token.type === 'equal')) return source
 
-  const toneClass: Record<AnnotationTone, string> = {
-    excerpt: 'jd-annotation-excerpt',
-    diagnosis: 'jd-annotation-diagnosis',
-    suggestion: 'jd-annotation-suggestion',
+  return tokens.map((token, index) => {
+    if (token.type === 'equal') return <span key={index}>{token.text}</span>
+
+    return (
+      <mark key={index} className={mode === 'remove' ? 'jd-rewrite-remove-mark' : 'jd-rewrite-add-mark'}>
+        {token.text}
+      </mark>
+    )
+  })
+}
+
+type DiffToken = {
+  text: string
+  type: 'equal' | 'remove' | 'add'
+}
+
+function diffTokens(originalText: string, revisedText: string): DiffToken[] {
+  const originalTokens = tokenizeForDiff(originalText)
+  const revisedTokens = tokenizeForDiff(revisedText)
+  const table = buildLcsTable(originalTokens, revisedTokens)
+  const tokens: DiffToken[] = []
+  let originalIndex = 0
+  let revisedIndex = 0
+
+  while (originalIndex < originalTokens.length && revisedIndex < revisedTokens.length) {
+    if (originalTokens[originalIndex] === revisedTokens[revisedIndex]) {
+      tokens.push({ type: 'equal', text: originalTokens[originalIndex] })
+      originalIndex += 1
+      revisedIndex += 1
+      continue
+    }
+
+    if (table[originalIndex + 1][revisedIndex] >= table[originalIndex][revisedIndex + 1]) {
+      tokens.push({ type: 'remove', text: originalTokens[originalIndex] })
+      originalIndex += 1
+    } else {
+      tokens.push({ type: 'add', text: revisedTokens[revisedIndex] })
+      revisedIndex += 1
+    }
   }
 
-  return (
-    <div className={`jd-annotation-row ${toneClass[tone]}`}>
-      <span className="jd-annotation-label">
-        <span>{label}</span>
-      </span>
-      {points.length > 1 ? (
-        <ul className="jd-annotation-list">
-          {points.map((point, pointIndex) => (
-            <li key={`${point}-${pointIndex}`}>{point}</li>
-          ))}
-        </ul>
-      ) : points.length === 1 ? (
-        <p className={`jd-annotation-text ${allowList ? '' : 'line-clamp-3'}`}>
-          {points[0]}
-        </p>
-      ) : null}
-    </div>
+  while (originalIndex < originalTokens.length) {
+    tokens.push({ type: 'remove', text: originalTokens[originalIndex] })
+    originalIndex += 1
+  }
+
+  while (revisedIndex < revisedTokens.length) {
+    tokens.push({ type: 'add', text: revisedTokens[revisedIndex] })
+    revisedIndex += 1
+  }
+
+  return mergeAdjacentDiffTokens(tokens)
+}
+
+function tokenizeForDiff(value: string): string[] {
+  return value.match(/[A-Za-z]+(?:[-_][A-Za-z0-9]+)*|\d+(?:\.\d+)?%?|\s+|./g) || []
+}
+
+function buildLcsTable(originalTokens: string[], revisedTokens: string[]): number[][] {
+  const table = Array.from({ length: originalTokens.length + 1 }, () =>
+    Array(revisedTokens.length + 1).fill(0) as number[]
   )
+
+  for (let originalIndex = originalTokens.length - 1; originalIndex >= 0; originalIndex -= 1) {
+    for (let revisedIndex = revisedTokens.length - 1; revisedIndex >= 0; revisedIndex -= 1) {
+      table[originalIndex][revisedIndex] = originalTokens[originalIndex] === revisedTokens[revisedIndex]
+        ? table[originalIndex + 1][revisedIndex + 1] + 1
+        : Math.max(table[originalIndex + 1][revisedIndex], table[originalIndex][revisedIndex + 1])
+    }
+  }
+
+  return table
+}
+
+function mergeAdjacentDiffTokens(tokens: DiffToken[]): DiffToken[] {
+  const merged: DiffToken[] = []
+
+  tokens.forEach((token) => {
+    const previous = merged.at(-1)
+    if (previous?.type === token.type) {
+      previous.text += token.text
+      return
+    }
+    merged.push({ ...token })
+  })
+
+  return merged
 }
 
 function stripSuggestionPriority(value?: string): string {
@@ -408,16 +601,25 @@ function getProblemReasonText(suggestion: SuggestionItem): string {
   return merged || '未提供具体问题与原因，可结合命中片段查看'
 }
 
-function getSuggestionExcerpt(suggestion: SuggestionItem, fallback: string): string {
-  const source =
-    suggestion.problemText ||
-    suggestion.targetText ||
-    suggestion.current ||
-    suggestion.problem ||
-    suggestion.originalContent ||
-    fallback
+function getProblemDetails(suggestion: SuggestionItem): { jdGap: string; resumeStatus: string } {
+  const explicit = suggestion.problemDetails
+  if (explicit?.jdGap || explicit?.resumeStatus) {
+    return {
+      jdGap: explicit.jdGap || '未提供具体 JD 差异点',
+      resumeStatus: explicit.resumeStatus || '未提供具体简历现状',
+    }
+  }
 
-  return truncateInlineText(source, 110) || '未提供具体片段，点击建议查看预览定位'
+  const reason = getProblemReasonText(suggestion)
+  const jdGap = extractLabeledText(reason, 'JD差异点') || suggestion.problem || '未提供具体 JD 差异点'
+  const resumeStatus = extractLabeledText(reason, '简历现状') || suggestion.reason || '未提供具体简历现状'
+
+  return { jdGap, resumeStatus }
+}
+
+function extractLabeledText(value: string, label: string): string {
+  const pattern = new RegExp(`${label}\\s*[:：]\\s*([^；;\\n]+)`)
+  return value.match(pattern)?.[1]?.trim() || ''
 }
 
 function splitDisplayText(value?: string): string[] {
@@ -449,12 +651,6 @@ function cleanBulletPrefix(value: string): string {
     .replace(/^[-•*]\s*/, '')
     .replace(/^(?:\d+[.、)]|[一二三四五六七八九十]+[、.])\s*/, '')
     .trim()
-}
-
-function truncateInlineText(value: string, maxLength: number): string {
-  const normalized = cleanInlineText(value)
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength).trim()}...`
 }
 
 function groupSuggestionsByItem(suggestions: SuggestionItem[]): SuggestionGroup[] {

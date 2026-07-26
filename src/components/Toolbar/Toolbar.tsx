@@ -11,8 +11,6 @@ import {
   Type,
   AlignVerticalJustifyCenter,
   Scissors,
-  Maximize2,
-  Minimize2,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -55,6 +53,7 @@ const SPACING_OPTIONS = [
 ]
 
 const PADDING_OPTIONS = [
+  { label: '16', value: 16 },
   { label: '24', value: 24 },
   { label: '32', value: 32 },
   { label: '40', value: 40 },
@@ -63,6 +62,7 @@ const PADDING_OPTIONS = [
 ]
 
 const HORIZONTAL_PADDING_OPTIONS = [
+  { label: '16', value: 16 },
   { label: '24', value: 24 },
   { label: '32', value: 32 },
   { label: '40', value: 40 },
@@ -197,11 +197,9 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   const {
     resumeData,
     zoom,
-    showMultiPage,
     currentResumeId,
     isDirty,
     setZoom,
-    setShowMultiPage,
     updateStyle,
     resetStyle,
     parseStatus,
@@ -357,14 +355,6 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
-
-        <CardButton
-          onClick={() => setShowMultiPage(!showMultiPage)}
-          active={showMultiPage}
-          icon={showMultiPage ? <Minimize2 className={iconSize} /> : <Maximize2 className={iconSize} />}
-          label={showMultiPage ? '多页' : '单页'}
-          title={showMultiPage ? '切换到单页预览' : '切换到多页预览'}
-        />
 
         <div className="flex items-center gap-0.5 px-1.5 rounded-xl border border-slate-200 bg-white shrink-0 h-8">
           <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(MIN_ZOOM, zoom - 0.1))} title="缩小" variant="ghost" />
