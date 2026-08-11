@@ -78,6 +78,12 @@ function normalizePayload(raw: unknown): Record<string, unknown> {
     temperature: clampNumber(raw.temperature, 0, 0, 1),
   }
 
+  if (
+    isRecord(raw.thinking)
+    && (raw.thinking.type === 'enabled' || raw.thinking.type === 'disabled')
+  ) {
+    payload.thinking = { type: raw.thinking.type }
+  }
   if (isRecord(raw.response_format)) payload.response_format = raw.response_format
 
   return payload
@@ -143,6 +149,13 @@ serve(async (req) => {
 
     const payload = normalizePayload(await req.json())
     const deepseekUrl = Deno.env.get('DEEPSEEK_API_URL') || DEFAULT_DEEPSEEK_URL
+    const upstreamStartedAt = Date.now()
+    console.info('[deepseek-chat] upstream request', {
+      model: payload.model,
+      maxTokens: payload.max_tokens,
+      thinking: isRecord(payload.thinking) ? payload.thinking.type : null,
+      responseFormat: isRecord(payload.response_format) ? payload.response_format.type : null,
+    })
     const upstream = await fetch(deepseekUrl, {
       method: 'POST',
       headers: {
@@ -154,6 +167,27 @@ serve(async (req) => {
 
     const contentType = upstream.headers.get('Content-Type') || 'application/json'
     const body = await upstream.text()
+
+    try {
+      const completion = JSON.parse(body)
+      const choice = Array.isArray(completion?.choices) ? completion.choices[0] : null
+      const content = typeof choice?.message?.content === 'string' ? choice.message.content : ''
+      console.info('[deepseek-chat] upstream completion', {
+        status: upstream.status,
+        durationMs: Date.now() - upstreamStartedAt,
+        finishReason: choice?.finish_reason || null,
+        contentLength: content.length,
+        completionTokens: completion?.usage?.completion_tokens ?? null,
+        reasoningTokens: completion?.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+      })
+    } catch {
+      console.warn('[deepseek-chat] upstream returned a non-JSON response', {
+        status: upstream.status,
+        durationMs: Date.now() - upstreamStartedAt,
+        contentType,
+        bodyLength: body.length,
+      })
+    }
 
     return new Response(body, {
       status: upstream.status,

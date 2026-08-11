@@ -132,7 +132,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   } = useJDAnalysisSessionStore()
   const historyLoadRunRef = useRef(0)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
-  const analysisPanelScrollRef = useRef<HTMLElement | null>(null)
+  const analysisPanelScrollRef = useRef<HTMLDivElement | null>(null)
   const anchorMapRef = useRef<Map<string, HTMLElement>>(new Map())
   const lockedTargetRef = useRef<SuggestionInteractionTarget | null>(null)
   const lockedTargetClearTimeoutRef = useRef<number | null>(null)
@@ -1025,7 +1025,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [cancelLockedTargetClear])
 
   return (
-    <div className={`flex-1 grid h-full min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ${gridClass}`}>
+    <div className={`flex-1 grid h-full min-h-0 overflow-hidden transition-[grid-template-columns] duration-300 ease-in-out ${gridClass}`}>
       <div className="min-h-0 min-w-0 border-r border-gray-200 overflow-hidden flex flex-col bg-white">
         <Editor
           activeTab={activeTab}
@@ -1078,12 +1078,23 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         )}
       </section>
 
-      <aside ref={analysisPanelScrollRef} className={`min-w-0 min-h-0 border-l border-slate-200 bg-slate-50 transition-opacity duration-200 ${
-        visibleIsRightPanelCollapsed ? 'pointer-events-none invisible overflow-hidden opacity-0' : 'overflow-y-auto opacity-100'
-      }`}>
-        <div className="flex min-h-full flex-col">
-          <div className="flex min-h-full flex-1 flex-col p-4">
-            <div className="mb-3 flex min-h-8 items-center gap-3">
+      <aside
+        className={`min-h-0 min-w-0 overflow-hidden border-l border-slate-200 bg-slate-50 ${
+          visibleIsRightPanelCollapsed ? 'pointer-events-none invisible opacity-0' : 'visible opacity-100'
+        }`}
+        style={{
+          transition: visibleIsRightPanelCollapsed
+            ? 'opacity 160ms ease, visibility 0s linear 300ms'
+            : 'opacity 180ms ease 90ms, visibility 0s linear',
+        }}
+      >
+        <div
+          ref={analysisPanelScrollRef}
+          className="h-full min-w-80 overflow-y-auto overflow-x-hidden"
+        >
+          <div className="flex min-h-full flex-col">
+            <div className="flex min-h-full flex-1 flex-col p-4">
+              <div className="mb-3 flex min-h-8 items-center gap-3">
               {visibleNotice && (
                 <div className={`analysis-notice-compact-shell ${isRightNoticeCollapsed ? 'is-visible' : ''}`}>
                   <button
@@ -1120,7 +1131,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
                 <PanelRightClose className="h-3.5 w-3.5" />
                 收起
               </button>
-            </div>
+              </div>
 
             {visibleNotice && (
               <div
@@ -1165,6 +1176,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             ) : (
               <AnalysisEmptyState isAnalyzing={visibleIsAnalyzing} />
             )}
+            </div>
           </div>
         </div>
       </aside>

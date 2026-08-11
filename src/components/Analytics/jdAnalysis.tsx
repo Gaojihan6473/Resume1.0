@@ -9,7 +9,7 @@ import {
   type SuggestionItem,
 } from '../../types/analytics'
 import type { ResumeData } from '../../types/resume'
-import { getDeepSeekContent, requestDeepSeekChat } from '../../lib/deepseek'
+import { getDeepSeekCompletion, requestDeepSeekChat } from '../../lib/deepseek'
 import { isRichHtmlEmpty } from '../../utils/richText'
 
 export const JD_ANALYSIS_MODEL = 'deepseek-v4-flash'
@@ -234,25 +234,39 @@ export function getJDAnalysisErrorMessage(error: unknown): string {
     ].join('\n')
   }
 
-  if (/API 错误 401|API 错误 403/.test(normalized)) {
+  if (/Invalid or expired session|Session is no longer active|Please sign in/i.test(normalized)) {
     return [
-      '分析服务鉴权失败。',
-      '请检查 DeepSeek API Key 是否配置正确、是否仍然有效，并确认当前环境变量已重新加载。',
+      '登录会话已失效。',
+      '请重新登录后再分析；系统会在首次 401 时自动刷新会话并重试一次。',
     ].join('\n')
   }
 
-  if (/API 错误 429/.test(normalized)) {
+  if (/DeepSeek proxy error (401|403)|API 错误 (401|403)/.test(normalized)) {
+    return [
+      '分析服务鉴权失败。',
+      '自动刷新登录会话后仍被拒绝，请重新登录；如果问题持续，再检查服务端 DeepSeek API Key。',
+    ].join('\n')
+  }
+
+  if (/DeepSeek proxy error 429|API 错误 429/.test(normalized)) {
     return [
       '分析服务请求过于频繁或额度不足。',
       '请稍后重试，或检查 DeepSeek 账号额度与限流状态。',
     ].join('\n')
   }
 
-  if (/API 错误 5\d\d/.test(normalized)) {
+  if (/DeepSeek proxy error 5\d\d|API 错误 5\d\d/.test(normalized)) {
     return [
       '分析服务暂时不可用。',
       '这是上游服务返回的异常，请稍后重试。',
       `错误详情：${limitText(normalized, 180)}`,
+    ].join('\n')
+  }
+
+  if (/过长被截断|未生成完整 JSON|返回内容为空/.test(normalized)) {
+    return [
+      'AI 输出达到上限，未能生成完整的结构化建议。',
+      '本次不会自动重复同样的长请求。请稍后重试；如果连续出现，可精简 JD 中的福利、流程和公司介绍。',
     ].join('\n')
   }
 
@@ -276,7 +290,7 @@ export async function analyzeJDWithAI(
   signal?: AbortSignal
 ): Promise<JDAnalysisResult> {
   try {
-    const content = await requestAnalysisContent({
+    const firstCompletion = await requestAnalysisContent({
       signal,
       messages: [
         { role: 'system', content: analyzeJDSystemPrompt },
@@ -293,11 +307,13 @@ ${resumeText}`,
       ],
     })
 
+    assertCompletionFinished(firstCompletion)
+
     try {
-      return parseAnalysisResult(content, false)
+      return parseAnalysisResult(firstCompletion.content, false)
     } catch (parseError) {
       console.warn('[JDAnalysis] 首次返回不是合法 JSON，准备自动重试:', parseError)
-      const retryContent = await requestAnalysisContent({
+      const retryCompletion = await requestAnalysisContent({
         signal,
         messages: [
           { role: 'system', content: strictJsonRetrySystemPrompt },
@@ -315,7 +331,17 @@ ${resumeText}`,
           },
         ],
       })
-      return parseAnalysisResult(retryContent)
+
+      assertCompletionFinished(retryCompletion)
+
+      try {
+        return parseAnalysisResult(retryCompletion.content, false)
+      } catch (retryParseError) {
+        if (!retryCompletion.content.trim()) {
+          throw new Error('AI 返回内容为空，未生成分析结果')
+        }
+        throw retryParseError
+      }
     }
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -323,6 +349,15 @@ ${resumeText}`,
       throw new Error('请求超时，请稍后重试')
     }
     throw err
+  }
+}
+
+function assertCompletionFinished(completion: ReturnType<typeof getDeepSeekCompletion>): void {
+  if (completion.finishReason === 'length') {
+    throw new Error('AI 返回内容过长被截断，未生成完整 JSON')
+  }
+  if (completion.finishReason && completion.finishReason !== 'stop') {
+    throw new Error(`AI 生成异常终止：${completion.finishReason}`)
   }
 }
 
@@ -337,7 +372,8 @@ async function requestAnalysisContent({
 }: {
   signal?: AbortSignal
   messages: ChatMessage[]
-}): Promise<string> {
+}) {
+  const startedAt = performance.now()
   const controller = new AbortController()
   let didTimeout = false
   const timeout = setTimeout(() => {
@@ -358,13 +394,22 @@ async function requestAnalysisContent({
         model: JD_ANALYSIS_MODEL,
         max_tokens: JD_ANALYSIS_MAX_TOKENS,
         temperature: 0,
+        thinking: { type: 'disabled' },
         response_format: { type: 'json_object' },
         messages,
       },
       controller.signal
     )
 
-    return getDeepSeekContent(result)
+    const completion = getDeepSeekCompletion(result)
+    console.info(`[JDAnalysis] DeepSeek completion ${JSON.stringify({
+      durationMs: Math.round(performance.now() - startedAt),
+      finishReason: completion.finishReason,
+      contentLength: completion.content.length,
+      completionTokens: completion.completionTokens,
+      reasoningTokens: completion.reasoningTokens,
+    })}`)
+    return completion
   } catch (error) {
     if (didTimeout) {
       throw new Error('请求超时')

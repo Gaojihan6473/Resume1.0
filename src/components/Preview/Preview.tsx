@@ -23,6 +23,7 @@ const A4_HEIGHT = 1123
 const FIT_SIDE_GAP = 28
 const PAGE_GAP = 16
 const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
+const PREVIEW_LAYOUT_TRANSITION_MS = 300
 const PREVIEW_DOCUMENT_CACHE_LIMIT = 10
 const PREVIEW_PDF_FIT_GUARD_PX = 2
 const PREVIEW_DOCUMENT_CACHE_VERSION = 'screen-a4-v9-cross-frame-pagination'
@@ -113,6 +114,13 @@ interface PreviewProps {
   fitToWidth?: boolean
 }
 
+interface PreviewFitState {
+  fitToWidth: boolean
+  containerWidth: number
+  zoomBeforeFit: number | null
+  lastAutoZoom: number | null
+}
+
 interface PreviewDocumentCacheEntry {
   html: string
   height: number
@@ -178,7 +186,13 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const { resumeData, zoom, setZoom } = useResumeStore()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const fitStateRef = useRef({ fitToWidth: false, containerWidth: 0 })
+  const fitRestoreTimeoutRef = useRef<number | null>(null)
+  const fitStateRef = useRef<PreviewFitState>({
+    fitToWidth: false,
+    containerWidth: 0,
+    zoomBeforeFit: null,
+    lastAutoZoom: null,
+  })
   const registeredAnchorKeysRef = useRef<Set<string>>(new Set())
   const renderGenerationRef = useRef(0)
   const scheduledFrameIdsRef = useRef<Set<number>>(new Set())
@@ -197,6 +211,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const [containerWidth, setContainerWidth] = useState(0)
   const [documentHeight, setDocumentHeight] = useState(initialCachedPreviewRef.current?.height || A4_HEIGHT)
   const [previewReady, setPreviewReady] = useState(Boolean(initialCachedPreviewRef.current))
+  const [isRestoringFitZoom, setIsRestoringFitZoom] = useState(false)
 
   useImperativeHandle(ref, () => scrollContainerRef.current as HTMLDivElement)
 
@@ -211,6 +226,19 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     resizeObserver.observe(element)
     return () => resizeObserver.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    const element = scrollContainerRef.current
+    if (!element) return
+
+    const centerHorizontally = () => {
+      element.scrollLeft = Math.max(0, (element.scrollWidth - element.clientWidth) / 2)
+    }
+
+    centerHorizontally()
+    const frameId = window.requestAnimationFrame(centerHorizontally)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [containerWidth, documentHeight, zoom])
 
   const isVisibleInPageFrame = useCallback((element: HTMLElement) => {
     const frame = element.closest('.resume-page-frame')
@@ -863,6 +891,9 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   useLayoutEffect(() => {
     return () => {
       cancelScheduledFrames()
+      if (fitRestoreTimeoutRef.current !== null) {
+        window.clearTimeout(fitRestoreTimeoutRef.current)
+      }
       if (!registerAnchor) return
       registeredAnchorKeysRef.current.forEach((key) => registerAnchor(key, null))
       registeredAnchorKeysRef.current.clear()
@@ -875,24 +906,75 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
   useLayoutEffect(() => {
     const previous = fitStateRef.current
+    const currentZoom = useResumeStore.getState().zoom
+
+    if (!fitToWidth) {
+      const zoomToRestore =
+        previous.fitToWidth &&
+        previous.zoomBeforeFit !== null &&
+        previous.lastAutoZoom !== null &&
+        Math.abs(currentZoom - previous.lastAutoZoom) < 0.001
+          ? previous.zoomBeforeFit
+          : null
+
+      fitStateRef.current = {
+        fitToWidth: false,
+        containerWidth,
+        zoomBeforeFit: null,
+        lastAutoZoom: null,
+      }
+
+      if (zoomToRestore !== null) {
+        if (fitRestoreTimeoutRef.current !== null) {
+          window.clearTimeout(fitRestoreTimeoutRef.current)
+        }
+        setIsRestoringFitZoom(true)
+        setZoom(zoomToRestore)
+        fitRestoreTimeoutRef.current = window.setTimeout(() => {
+          fitRestoreTimeoutRef.current = null
+          setIsRestoringFitZoom(false)
+        }, PREVIEW_LAYOUT_TRANSITION_MS)
+      }
+      return
+    }
+
+    if (fitRestoreTimeoutRef.current !== null) {
+      window.clearTimeout(fitRestoreTimeoutRef.current)
+      fitRestoreTimeoutRef.current = null
+    }
+    if (isRestoringFitZoom) setIsRestoringFitZoom(false)
+
     const becameFitToWidth = fitToWidth && !previous.fitToWidth
     const widthShrankWhileFitting =
       fitToWidth &&
       previous.fitToWidth &&
       containerWidth > 0 &&
       containerWidth < previous.containerWidth - 1
+    const zoomBeforeFit = becameFitToWidth ? currentZoom : previous.zoomBeforeFit
+    const userChangedAutoZoom =
+      previous.lastAutoZoom !== null &&
+      Math.abs(currentZoom - previous.lastAutoZoom) >= 0.001
 
-    fitStateRef.current = { fitToWidth, containerWidth }
+    fitStateRef.current = {
+      fitToWidth: true,
+      containerWidth,
+      zoomBeforeFit,
+      lastAutoZoom: previous.lastAutoZoom,
+    }
 
-    if (!fitToWidth || containerWidth <= 0 || (!becameFitToWidth && !widthShrankWhileFitting)) {
+    if (
+      containerWidth <= 0 ||
+      userChangedAutoZoom ||
+      (!becameFitToWidth && !widthShrankWhileFitting)
+    ) {
       return
     }
 
-    const currentZoom = useResumeStore.getState().zoom
     if (fitZoom < currentZoom - 0.001) {
+      fitStateRef.current.lastAutoZoom = fitZoom
       setZoom(fitZoom)
     }
-  }, [containerWidth, fitToWidth, fitZoom, setZoom])
+  }, [containerWidth, fitToWidth, fitZoom, isRestoringFitZoom, setZoom])
 
   if (!hasPreviewableContent(resumeData)) {
     return (
@@ -907,6 +989,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
   const scaledPageWidth = A4_WIDTH * zoom
   const scaledDocumentHeight = documentHeight * zoom
+  const previewScaleTransition = '300ms cubic-bezier(0.4, 0, 0.2, 1)'
+  const shouldAnimatePreviewScale = !fitToWidth && isRestoringFitZoom
 
   return (
     <div
@@ -922,6 +1006,9 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
             position: 'relative',
             width: scaledPageWidth,
             height: scaledDocumentHeight,
+            transition: shouldAnimatePreviewScale
+              ? `width ${previewScaleTransition}, height ${previewScaleTransition}`
+              : 'none',
           }}
         >
           {!previewReady && (
@@ -933,6 +1020,9 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
                 height: A4_HEIGHT,
                 transform: `scale(${zoom})`,
                 transformOrigin: 'top left',
+                transition: shouldAnimatePreviewScale
+                  ? `transform ${previewScaleTransition}`
+                  : 'none',
               }}
             >
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm text-slate-500 shadow-sm">
@@ -955,7 +1045,11 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
               height: documentHeight,
               backgroundColor: 'transparent',
               opacity: previewReady ? 1 : 0,
-              transition: previewReady ? 'opacity 120ms ease' : 'none',
+              transition: shouldAnimatePreviewScale
+                ? (previewReady
+                    ? `opacity 120ms ease, transform ${previewScaleTransition}`
+                    : `transform ${previewScaleTransition}`)
+                : (previewReady ? 'opacity 120ms ease' : 'none'),
               transform: `scale(${zoom})`,
               transformOrigin: 'top left',
             }}
