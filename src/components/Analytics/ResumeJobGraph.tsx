@@ -87,11 +87,6 @@ interface GraphData {
 
 type FocusedCategory = 'resume' | 'job' | null
 
-interface LegendEventParam {
-  componentType?: string
-  name?: string
-}
-
 const UNBOUND_RESUME_ID = 'unbound'
 const UNBOUND_NODE_ID = `resume-${UNBOUND_RESUME_ID}`
 const GRAPH_SERIES_ID = 'resume-job-graph'
@@ -340,26 +335,19 @@ export function ResumeJobGraph({
         textStyle: { color: '#334155', fontSize: 13 },
         formatter: renderTooltip,
       },
-      legend: {
-        top: 4,
-        right: 4,
-        icon: 'circle',
-        data: ['简历', '岗位'],
-        itemWidth: 8,
-        itemHeight: 8,
-        textStyle: { fontSize: 12, color: '#64748b' },
-      },
       series: [
         {
           name: '简历岗位关系',
           id: GRAPH_SERIES_ID,
           type: 'graph' as const,
           layout: 'force' as const,
-          legendHoverLink: true,
+          preserveAspect: 'contain' as const,
+          legendHoverLink: false,
+          roamTrigger: 'global' as const,
           top: 38,
-          left: 20,
-          right: 20,
-          bottom: 48,
+          left: 24,
+          right: 24,
+          bottom: 42,
           roam: true,
           draggable: true,
           edgeSymbol: ['none', 'arrow'],
@@ -378,15 +366,20 @@ export function ResumeJobGraph({
             repulsion: graphData.nodes.length > 40
               ? 190
               : graphData.nodes.length > 20
-                ? 260
-                : 360,
+                ? 280
+                : 400,
             edgeLength: graphData.nodes.length > 40
               ? [52, 82]
               : graphData.nodes.length > 20
-                ? [68, 104]
-                : [86, 132],
-            gravity: graphData.nodes.length > 40 ? 0.12 : 0.08,
-            friction: 0.76,
+                ? [72, 108]
+                : [92, 138],
+            gravity: graphData.nodes.length > 40
+              ? 0.1
+              : graphData.nodes.length > 20
+                ? 0.065
+                : 0.045,
+            friction: 0.74,
+            layoutAnimation: true,
           },
           lineStyle: {
             color: '#cbd5e1',
@@ -407,17 +400,6 @@ export function ResumeJobGraph({
     }
   }, [focusedCategory, graphData, isTooltipSuppressed])
 
-  const graphEvents = useMemo(() => ({
-    mouseover: (params: LegendEventParam) => {
-      if (params.componentType !== 'legend') return
-      const nextFocus = getLegendFocus(params.name)
-      if (nextFocus) setFocusedCategory(nextFocus)
-    },
-    mouseout: (params: LegendEventParam) => {
-      if (params.componentType === 'legend') setFocusedCategory(null)
-    },
-  }), [])
-
   const handleFitView = useCallback(() => {
     const chart = chartRef.current?.getEchartsInstance()
     if (!chart) return
@@ -431,7 +413,7 @@ export function ResumeJobGraph({
             {
               id: GRAPH_SERIES_ID,
               center: ['50%', '50%'],
-              zoom: 0.88,
+              zoom: 0.92,
             },
           ],
         },
@@ -501,12 +483,47 @@ export function ResumeJobGraph({
       onMouseLeave={restoreTooltipSoon}
     >
       <ReactECharts
+        key={`resume-job-graph-${resetKey}`}
         ref={chartRef}
         option={option}
         style={{ height: '100%', width: '100%' }}
         lazyUpdate={true}
-        onEvents={graphEvents}
       />
+      <div
+        role="list"
+        aria-label="关系图谱图例"
+        onMouseLeave={() => setFocusedCategory(null)}
+        className="absolute right-2 top-1 z-10 flex items-center gap-3 rounded-lg bg-white/72 px-2.5 py-1.5 text-xs text-slate-500 backdrop-blur-md"
+      >
+        <span
+          role="listitem"
+          tabIndex={0}
+          aria-label="简历：悬停或聚焦以突出简历节点"
+          onMouseEnter={() => setFocusedCategory('resume')}
+          onFocus={() => setFocusedCategory('resume')}
+          onBlur={() => setFocusedCategory(null)}
+          className={`inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-blue-300 ${
+            focusedCategory && focusedCategory !== 'resume' ? 'opacity-35' : 'opacity-100'
+          }`}
+        >
+          <span className="h-2.5 w-3.5 rounded-[3px] border border-blue-400 bg-blue-50" />
+          简历
+        </span>
+        <span
+          role="listitem"
+          tabIndex={0}
+          aria-label="岗位：悬停或聚焦以突出岗位节点"
+          onMouseEnter={() => setFocusedCategory('job')}
+          onFocus={() => setFocusedCategory('job')}
+          onBlur={() => setFocusedCategory(null)}
+          className={`inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-slate-300 ${
+            focusedCategory && focusedCategory !== 'job' ? 'opacity-35' : 'opacity-100'
+          }`}
+        >
+          <span className="h-2.5 w-2.5 rounded-full bg-slate-500 ring-2 ring-white" />
+          岗位
+        </span>
+      </div>
       <button
         type="button"
         title="适应视图"
@@ -568,12 +585,6 @@ function renderTooltip(params: TooltipParam) {
 
 function hasTooltipData(data: unknown): data is { tooltipData: TooltipData } {
   return typeof data === 'object' && data !== null && 'tooltipData' in data
-}
-
-function getLegendFocus(name: string | undefined): FocusedCategory {
-  if (name === '简历') return 'resume'
-  if (name === '岗位') return 'job'
-  return null
 }
 
 function formatDate(value: string | null) {

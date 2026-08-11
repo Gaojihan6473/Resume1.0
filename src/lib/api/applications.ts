@@ -63,7 +63,7 @@ function normalizeApplication(row: ApplicationRow): Application {
     salaryRange: row.salaryRange ?? row.salary_range ?? '',
     jobDescription: row.jobDescription ?? row.job_description ?? '',
     channel: row.channel as ApplicationChannel,
-    status: row.status as ApplicationStatus,
+    status: (row.status === 'ghosted' ? 'applied' : row.status) as ApplicationStatus,
     appliedAt: row.appliedAt ?? row.applied_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,

@@ -1,10 +1,10 @@
 export type ApplicationStatus =
   | 'interested'
   | 'applied'
+  | 'assessing'
   | 'interviewing'
   | 'offered'
   | 'rejected'
-  | 'ghosted'
 
 export type ApplicationChannel =
   | 'boss'
@@ -51,10 +51,10 @@ export interface JDParsedResult {
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   interested: '感兴趣',
   applied: '已投递',
+  assessing: '测评中',
   interviewing: '面试中',
   offered: 'Offer',
   rejected: '已拒绝',
-  ghosted: '无回音',
 }
 
 export const APPLICATION_CHANNEL_LABELS: Record<ApplicationChannel, string> = {

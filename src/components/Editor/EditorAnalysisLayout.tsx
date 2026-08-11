@@ -1230,9 +1230,9 @@ function JDInputPanel({
         : Sparkles
 
   return (
-    <div className="flex min-h-[calc(100vh-156px)] flex-col pt-1">
-      <div className="space-y-4">
-        <section className="jd-analysis-field">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <section className="jd-analysis-field shrink-0">
           <label className="jd-analysis-label">选择已有岗位</label>
           <JDHistorySelect
             applications={applications}
@@ -1246,7 +1246,7 @@ function JDInputPanel({
           />
         </section>
 
-        <section className="jd-analysis-field flex min-h-[360px] flex-1 flex-col">
+        <section className="jd-analysis-field flex min-h-0 flex-1 flex-col">
           <label className="jd-analysis-label">
             职位描述 {selectedSourceKey && <span className="text-blue-500">(已从记录填充)</span>}
           </label>
@@ -1254,12 +1254,12 @@ function JDInputPanel({
             value={jdText}
             onChange={(event) => onJdTextChange(event.target.value)}
             placeholder="粘贴 JD 内容，获取简历匹配度分析和优化建议..."
-            className="jd-analysis-textarea min-h-[360px] flex-1"
+            className="jd-analysis-textarea min-h-0 flex-1 overflow-y-auto"
           />
         </section>
       </div>
 
-      <div className="jd-analysis-actions mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+      <div className="jd-analysis-actions mt-3 flex shrink-0 flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"

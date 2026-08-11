@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
   Fish,
@@ -51,8 +51,15 @@ interface HomePageProps {
   onAuthRequired?: (action: 'new' | 'upload' | 'me') => void
 }
 
-const HOME_RESUME_PAGE_SIZE = 5
-const HOME_APPLICATION_PAGE_SIZE = 8
+const HOME_RESUME_CARD_MIN_WIDTH = 190
+const HOME_RESUME_GRID_GAP = 20
+const HOME_APPLICATION_CARD_MIN_WIDTH = 230
+const HOME_APPLICATION_GRID_GAP = 16
+const HOME_APPLICATION_ROW_COUNT = 2
+
+function getGridColumnCount(containerWidth: number, cardMinWidth: number, gap: number) {
+  return Math.max(1, Math.floor((containerWidth + gap) / (cardMinWidth + gap)))
+}
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
   const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, clearCurrentFile, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
@@ -76,9 +83,45 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [resumePageDirection, setResumePageDirection] = useState<'next' | 'previous'>('next')
   const [applicationPageDirection, setApplicationPageDirection] = useState<'next' | 'previous'>('next')
   const [showCreateApplicationDropdown, setShowCreateApplicationDropdown] = useState(false)
+  const [resumePageSize, setResumePageSize] = useState(1)
+  const [applicationPageSize, setApplicationPageSize] = useState(HOME_APPLICATION_ROW_COUNT)
+  const homeContentRef = useRef<HTMLDivElement | null>(null)
   const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const consumedPostLoginActionRef = useRef<string | null>(null)
+
+  useLayoutEffect(() => {
+    const element = homeContentRef.current
+    if (!element) return
+
+    const updatePageSizes = () => {
+      const containerWidth = element.clientWidth
+      if (containerWidth <= 0) return
+
+      const resumeColumns = getGridColumnCount(
+        containerWidth,
+        HOME_RESUME_CARD_MIN_WIDTH,
+        HOME_RESUME_GRID_GAP
+      )
+      const applicationColumns = getGridColumnCount(
+        containerWidth,
+        HOME_APPLICATION_CARD_MIN_WIDTH,
+        HOME_APPLICATION_GRID_GAP
+      )
+
+      setResumePageSize((current) => current === resumeColumns ? current : resumeColumns)
+      setApplicationPageSize((current) => {
+        const nextPageSize = applicationColumns * HOME_APPLICATION_ROW_COUNT
+        return current === nextPageSize ? current : nextPageSize
+      })
+    }
+
+    updatePageSizes()
+
+    const resizeObserver = new ResizeObserver(updatePageSizes)
+    resizeObserver.observe(element)
+    return () => resizeObserver.disconnect()
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -138,25 +181,33 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     [applications]
   )
 
-  const resumePageCount = Math.max(1, Math.ceil(recentResumes.length / HOME_RESUME_PAGE_SIZE))
-  const applicationPageCount = Math.max(1, Math.ceil(sortedApplications.length / HOME_APPLICATION_PAGE_SIZE))
+  const resumePageCount = Math.max(1, Math.ceil(recentResumes.length / resumePageSize))
+  const applicationPageCount = Math.max(1, Math.ceil(sortedApplications.length / applicationPageSize))
   const safeResumePage = Math.min(resumePage, resumePageCount - 1)
   const safeApplicationPage = Math.min(applicationPage, applicationPageCount - 1)
 
+  useEffect(() => {
+    setResumePage((current) => Math.min(current, resumePageCount - 1))
+  }, [resumePageCount])
+
+  useEffect(() => {
+    setApplicationPage((current) => Math.min(current, applicationPageCount - 1))
+  }, [applicationPageCount])
+
   const pagedResumes = useMemo(
     () => recentResumes.slice(
-      safeResumePage * HOME_RESUME_PAGE_SIZE,
-      (safeResumePage + 1) * HOME_RESUME_PAGE_SIZE
+      safeResumePage * resumePageSize,
+      (safeResumePage + 1) * resumePageSize
     ),
-    [recentResumes, safeResumePage]
+    [recentResumes, resumePageSize, safeResumePage]
   )
 
   const pagedApplications = useMemo(
     () => sortedApplications.slice(
-      safeApplicationPage * HOME_APPLICATION_PAGE_SIZE,
-      (safeApplicationPage + 1) * HOME_APPLICATION_PAGE_SIZE
+      safeApplicationPage * applicationPageSize,
+      (safeApplicationPage + 1) * applicationPageSize
     ),
-    [safeApplicationPage, sortedApplications]
+    [applicationPageSize, safeApplicationPage, sortedApplications]
   )
 
   const handleNextResumePage = useCallback(() => {
@@ -408,7 +459,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.72)_0%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.62)_72%,rgba(255,255,255,0)_100%)]" />
             </>
           )}
-          <div className="relative mx-auto w-full max-w-[1180px]">
+          <div ref={homeContentRef} className="relative mx-auto w-full max-w-[1180px]">
             {isAuthenticated ? (
               <>
                 <LoggedInActionStrip
@@ -1316,10 +1367,10 @@ function StatusPill({ status }: { status: ApplicationStatus }) {
   const statusStyles: Record<ApplicationStatus, string> = {
     interested: 'bg-purple-50 text-purple-600',
     applied: 'bg-blue-50 text-blue-600',
+    assessing: 'bg-cyan-50 text-cyan-600',
     interviewing: 'bg-amber-50 text-amber-600',
     offered: 'bg-emerald-50 text-emerald-600',
     rejected: 'bg-red-50 text-red-600',
-    ghosted: 'bg-slate-100 text-slate-500',
   }
 
   return (

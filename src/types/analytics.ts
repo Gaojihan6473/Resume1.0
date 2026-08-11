@@ -15,10 +15,10 @@ export interface ChannelCount {
 export interface WeeklyTrendItem {
   week: string
   applied: number
+  assessing: number
   interviewing: number
   offered: number
   rejected: number
-  ghosted: number
   interested: number
 }
 

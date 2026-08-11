@@ -19,6 +19,15 @@ interface GroupedBarProps {
 }
 
 const DEFAULT_VISIBLE_RESUMES = 6
+const EMPTY_BAR_VALUE = 0.035
+
+interface BarDatum {
+  value: number
+  rawValue: number
+  resumeId: string
+  resumeName: string
+  companies: string[]
+}
 
 export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
   const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
@@ -36,19 +45,35 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
         const entry = data.find(
           (item) => item.resumeId === resumeId && item.status === status,
         )
+        const resumeName = entry?.resumeName
+          || data.find((item) => item.resumeId === resumeId)?.resumeName
+          || ''
+        const rawValue = entry?.count || 0
+        const isPlaceholder = rawValue === 0
+
         if (!entry) {
           return {
-            value: 0,
+            value: EMPTY_BAR_VALUE,
+            rawValue: 0,
             resumeId,
-            resumeName: '',
+            resumeName,
             companies: [],
+            itemStyle: {
+              color: `${STATUS_COLORS[status]}16`,
+              borderRadius: [3, 3, 0, 0],
+            },
           }
         }
         return {
-          value: entry.count,
+          value: isPlaceholder ? EMPTY_BAR_VALUE : rawValue,
+          rawValue,
           resumeId,
-          resumeName: entry.resumeName,
+          resumeName,
           companies: entry.companies,
+          itemStyle: {
+            color: isPlaceholder ? `${STATUS_COLORS[status]}16` : STATUS_COLORS[status],
+            borderRadius: isPlaceholder ? [3, 3, 0, 0] : [5, 5, 0, 0],
+          },
         }
       })
 
@@ -57,6 +82,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
         type: 'bar' as const,
         barGap: '8%',
         barCategoryGap: '24%',
+        barMinHeight: 4,
         itemStyle: {
           color: STATUS_COLORS[status],
           borderRadius: [5, 5, 0, 0],
@@ -66,7 +92,9 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
           position: 'top' as const,
           fontSize: 10,
           color: '#94a3b8',
-          formatter: (params: { value: number }) => (params.value > 0 ? params.value : ''),
+          formatter: (params: { data: BarDatum }) => (
+            params.data.rawValue > 0 ? params.data.rawValue : ''
+          ),
         },
         emphasis: {
           itemStyle: {
@@ -93,10 +121,10 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
         formatter: (params: {
           seriesName: string
           value: number
-          data: { resumeName: string; companies: string[] }
+          data: BarDatum
         }) => {
-          if (params.value === 0) return ''
-          const { resumeName, companies } = params.data
+          const { rawValue, resumeName, companies } = params.data
+          if (rawValue === 0) return ''
           const status = STATUS_ORDER.find(
             (item) => APPLICATION_STATUS_LABELS[item] === params.seriesName,
           )
@@ -104,7 +132,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
           let html = `<div style="font-weight:600;margin-bottom:8px;color:#0f172a">${escapeHtml(resumeName)}</div>`
           html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
           html += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor}"></span>`
-          html += `<span>${escapeHtml(params.seriesName)}: <strong>${params.value}</strong></span></div>`
+          html += `<span>${escapeHtml(params.seriesName)}: <strong>${rawValue}</strong></span></div>`
           if (companies.length > 0) {
             html += '<div style="border-top:1px solid #f1f5f9;padding-top:8px;margin-top:4px">'
             html += '<div style="color:#94a3b8;font-size:11px;margin-bottom:4px">涉及岗位:</div>'

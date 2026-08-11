@@ -102,9 +102,16 @@ export function Editor({
   }
 
   return (
-    <div ref={containerRef} className="h-full overflow-y-auto bg-gray-50 p-4">
+    <div
+      ref={containerRef}
+      className={`h-full bg-gray-50 p-4 ${
+        activeTab === 'jd'
+          ? 'flex min-h-0 flex-col overflow-hidden'
+          : 'overflow-y-auto'
+      }`}
+    >
       <div
-        className="sticky top-1 z-50 mb-5 flex min-w-0 justify-start"
+        className="sticky top-1 z-50 mb-5 flex min-w-0 shrink-0 justify-start"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >

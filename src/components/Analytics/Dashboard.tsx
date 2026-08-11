@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Clock,
   Inbox,
+  Loader2,
   Network,
   RotateCcw,
   Table2,
@@ -112,6 +113,35 @@ export function Dashboard({
   const [mountedViews, setMountedViews] = useState<Set<DashboardView>>(
     () => new Set([activeView]),
   )
+  const dashboardRef = useRef<HTMLDivElement>(null)
+  const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isDashboardScrolling, setIsDashboardScrolling] = useState(false)
+
+  useEffect(() => {
+    const scrollContainer = dashboardRef.current?.parentElement
+    if (!scrollContainer) return
+
+    const handleScroll = () => {
+      setIsDashboardScrolling(true)
+
+      if (scrollEndTimerRef.current) {
+        clearTimeout(scrollEndTimerRef.current)
+      }
+
+      scrollEndTimerRef.current = setTimeout(() => {
+        setIsDashboardScrolling(false)
+        scrollEndTimerRef.current = null
+      }, 180)
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll)
+      if (scrollEndTimerRef.current) {
+        clearTimeout(scrollEndTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -304,8 +334,7 @@ export function Dashboard({
     }))
     const offerCount = statusCounts.find((item) => item.status === 'offered')?.count || 0
     const rejectCount = statusCounts.find((item) => item.status === 'rejected')?.count || 0
-    const ghostCount = statusCounts.find((item) => item.status === 'ghosted')?.count || 0
-    const resolvedCount = offerCount + rejectCount + ghostCount
+    const resolvedCount = offerCount + rejectCount
     const passRate = resolvedCount > 0 ? Math.round((offerCount / resolvedCount) * 100) : 0
 
     const channelCounts = new Map<Application['channel'], number>()
@@ -445,7 +474,7 @@ export function Dashboard({
   }
 
   if (isLoading && applications.length === 0) {
-    return <DashboardSkeleton />
+    return <DashboardLoadingState />
   }
 
   if (error && applications.length === 0) {
@@ -453,13 +482,16 @@ export function Dashboard({
   }
 
   return (
-    <div className="relative mx-auto min-h-full w-full max-w-[1600px] px-4 pb-32 pt-4 sm:px-6 lg:px-8">
+    <div
+      ref={dashboardRef}
+      className="relative mx-auto min-h-full w-full max-w-[1600px] px-4 pb-32 pt-6 sm:px-6 lg:px-8"
+    >
       <div
         aria-hidden="true"
         className="pointer-events-none fixed right-[8%] top-24 -z-10 h-48 w-48 rounded-full bg-violet-300/15 blur-3xl"
       />
 
-      <section aria-label="全量概览" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="全量概览" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<TrendingUp className="h-5 w-5" />}
           iconClassName="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-200/80"
@@ -477,8 +509,8 @@ export function Dashboard({
         <StatCard
           icon={<Clock className="h-5 w-5" />}
           iconClassName="bg-gradient-to-br from-teal-400 to-emerald-500 text-white shadow-emerald-200/80"
-          label="无回音"
-          value={stats.statusCounts.find((item) => item.status === 'ghosted')?.count || 0}
+          label="测评中"
+          value={stats.statusCounts.find((item) => item.status === 'assessing')?.count || 0}
           subText={`${stats.statusCounts.find((item) => item.status === 'rejected')?.count || 0} 已拒绝`}
         />
         <StatCard
@@ -490,7 +522,7 @@ export function Dashboard({
         />
       </section>
 
-      <section className="relative mt-4 overflow-visible rounded-[28px] bg-gradient-to-br from-sky-300/70 via-violet-200/65 to-cyan-300/70 p-px shadow-[0_24px_70px_-36px_rgba(79,70,229,0.58)]">
+      <section className="relative mt-6 overflow-visible rounded-[28px] bg-gradient-to-br from-sky-300/70 via-violet-200/65 to-cyan-300/70 p-px shadow-[0_24px_70px_-36px_rgba(79,70,229,0.58)] lg:mt-5">
         <div className="relative min-h-[360px] overflow-visible rounded-[27px] bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
         <div className="relative z-20 flex flex-col gap-3 rounded-t-[27px] border-b border-slate-100/80 bg-white/90 px-4 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -726,9 +758,15 @@ export function Dashboard({
 
       <nav
         aria-label="面板视图"
-        className="fixed bottom-[18px] left-1/2 z-40 h-16 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-[24px] bg-gradient-to-r from-sky-200/50 via-violet-200/36 to-cyan-200/50 p-px shadow-[0_18px_48px_-20px_rgba(79,70,229,0.38)]"
+        className={`fixed bottom-[18px] left-1/2 z-40 h-16 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-[24px] bg-gradient-to-r p-px transition-[background-color,box-shadow,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isDashboardScrolling
+            ? 'from-sky-200/28 via-violet-200/20 to-cyan-200/28 opacity-40 shadow-[0_14px_38px_-22px_rgba(79,70,229,0.28)]'
+            : 'from-sky-200/50 via-violet-200/36 to-cyan-200/50 opacity-100 shadow-[0_18px_48px_-20px_rgba(79,70,229,0.38)]'
+        }`}
       >
-        <div className="flex h-full w-full items-center gap-0.5 rounded-[23px] bg-white/68 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-3xl backdrop-saturate-150">
+        <div className={`flex h-full w-full items-center gap-0.5 rounded-[23px] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-3xl backdrop-saturate-150 transition-colors duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+          isDashboardScrolling ? 'bg-white/52' : 'bg-white/82'
+        }`}>
           {DASHBOARD_VIEWS.map((view) => {
             const config = VIEW_CONFIG[view]
             const Icon = config.icon
@@ -897,21 +935,12 @@ function EmptyTable() {
   )
 }
 
-function DashboardSkeleton() {
+function DashboardLoadingState() {
   return (
-    <div className="mx-auto min-h-full w-full max-w-[1600px] animate-pulse px-4 pb-32 pt-12 motion-reduce:animate-none sm:px-6 lg:px-8">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="h-24 rounded-[22px] bg-white/92 ring-1 ring-sky-200/70 backdrop-blur-2xl" />
-        ))}
-      </div>
-      <div className="mt-3 min-h-[480px] rounded-[28px] bg-white/95 p-6 ring-1 ring-violet-200/60 backdrop-blur-2xl">
-        <div className="h-10 w-full rounded-xl bg-slate-100/80" />
-        <div className="mt-6 space-y-3">
-          {Array.from({ length: 7 }, (_, index) => (
-            <div key={index} className="h-10 rounded-lg bg-slate-100/70" />
-          ))}
-        </div>
+    <div className="flex min-h-full items-center justify-center px-6 py-12">
+      <div className="text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-500" />
+        <p className="mt-3 text-sm text-slate-500">加载中...</p>
       </div>
     </div>
   )

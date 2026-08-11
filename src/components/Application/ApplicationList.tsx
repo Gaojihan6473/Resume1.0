@@ -24,10 +24,10 @@ const statusFilters: { value: FilterStatus; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'interested', label: '感兴趣' },
   { value: 'applied', label: '已投递' },
+  { value: 'assessing', label: '测评中' },
   { value: 'interviewing', label: '面试中' },
   { value: 'offered', label: 'Offer' },
   { value: 'rejected', label: '已拒绝' },
-  { value: 'ghosted', label: '无回音' },
 ]
 
 function toApplicationDraft(application: Application): Application {

@@ -15,7 +15,7 @@ interface TrendAreaProps {
   colors: Record<string, string>
 }
 
-const STATUS_ORDER = ['interested', 'applied', 'interviewing', 'offered', 'rejected', 'ghosted'] as const
+const STATUS_ORDER = ['interested', 'applied', 'assessing', 'interviewing', 'offered', 'rejected'] as const
 
 export function TrendArea({ data, colors }: TrendAreaProps) {
   if (data.length === 0) {
