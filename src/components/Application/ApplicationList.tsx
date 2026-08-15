@@ -3,7 +3,13 @@ import { Briefcase, Loader2 } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
 import type { Resume } from '../../lib/api'
+import { toast } from '../Toast'
 import { ApplicationCard } from './ApplicationCard'
+import {
+  ApplicationModal,
+  type ApplicationModalSaveContext,
+  type SaveData,
+} from './ApplicationModal'
 
 interface Props {
   applications: Application[]
@@ -30,24 +36,6 @@ const statusFilters: { value: FilterStatus; label: string }[] = [
   { value: 'rejected', label: '已拒绝' },
 ]
 
-function toApplicationDraft(application: Application): Application {
-  return { ...application, appliedAt: application.appliedAt ?? null }
-}
-
-function getEditableSignature(application: Application): string {
-  return JSON.stringify({
-    resume_id: application.resume_id || null,
-    company: application.company || '',
-    position: application.position || '',
-    location: application.location || '',
-    salaryRange: application.salaryRange || '',
-    channel: application.channel || '',
-    status: application.status || '',
-    appliedAt: application.appliedAt || null,
-    jobDescription: application.jobDescription || '',
-  })
-}
-
 export function ApplicationList({
   applications,
   resumes,
@@ -60,96 +48,36 @@ export function ApplicationList({
   onDelete,
 }: Props) {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [autosavingCount, setAutosavingCount] = useState(0)
-  const expandedCardRef = useRef<HTMLDivElement | null>(null)
-  const applicationsRef = useRef(applications)
-  const expandedIdRef = useRef<string | null>(null)
-  const expandedDraftRef = useRef<Application | null>(null)
-  const pendingDeleteIdRef = useRef<string | null>(pendingDeleteId)
-  const autosaveKeysRef = useRef<Set<string>>(new Set())
-  const savedSignaturesRef = useRef<Map<string, string>>(new Map())
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const handledInitialIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    applicationsRef.current = applications
-  }, [applications])
-
-  useEffect(() => {
-    expandedIdRef.current = expandedId
-  }, [expandedId])
-
-  useEffect(() => {
-    pendingDeleteIdRef.current = pendingDeleteId
-  }, [pendingDeleteId])
-
-  const saveApplication = useCallback(
-    async (application: Application, options?: SaveOptions) => {
-      await onSave(application, options)
-      savedSignaturesRef.current.set(application.id, getEditableSignature(application))
-    },
-    [onSave]
-  )
-
-  const saveDraftIfDirty = useCallback(
-    async (id = expandedIdRef.current) => {
-      if (!id || pendingDeleteIdRef.current === id) return
-
-      const draft = expandedDraftRef.current
-      if (!draft || draft.id !== id) return
-
-      const original = applicationsRef.current.find((app) => app.id === id)
-      if (!original) return
-
-      const draftSignature = getEditableSignature(draft)
-      if (
-        draftSignature === getEditableSignature(original) ||
-        draftSignature === savedSignaturesRef.current.get(id)
-      ) {
-        return
-      }
-
-      const autosaveKey = `${id}:${draftSignature}`
-      if (autosaveKeysRef.current.has(autosaveKey)) return
-
-      autosaveKeysRef.current.add(autosaveKey)
-      setAutosavingCount((count) => count + 1)
-      try {
-        await saveApplication(draft)
-      } catch (error) {
-        console.error('[ApplicationList.saveDraftIfDirty] autosave failed:', error)
-      } finally {
-        autosaveKeysRef.current.delete(autosaveKey)
-        setAutosavingCount((count) => Math.max(0, count - 1))
-      }
-    },
-    [saveApplication]
-  )
-
-  useEffect(() => {
-    if (!initialExpandedId) return
-    const application = applications.find((app) => app.id === initialExpandedId)
-    if (application) {
-      expandedDraftRef.current = toApplicationDraft(application)
-      setExpandedId(initialExpandedId)
+    if (!initialExpandedId) {
+      handledInitialIdRef.current = null
+      return
     }
-  }, [applications, initialExpandedId])
+    if (handledInitialIdRef.current === initialExpandedId) return
+
+    const application = applications.find((item) => item.id === initialExpandedId)
+    if (application) {
+      handledInitialIdRef.current = initialExpandedId
+      setEditingId(initialExpandedId)
+      return
+    }
+
+    if (!isLoading) handledInitialIdRef.current = initialExpandedId
+  }, [applications, initialExpandedId, isLoading])
 
   useEffect(() => {
-    if (!initialExpandedId || expandedId !== initialExpandedId) return
+    if (!editingId || isLoading) return
+    if (!applications.some((application) => application.id === editingId)) {
+      setEditingId(null)
+    }
+  }, [applications, editingId, isLoading])
 
-    const timer = window.setTimeout(() => {
-      expandedCardRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      })
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [expandedId, initialExpandedId])
-
-  const filteredApplications = applications.filter((app) => {
+  const filteredApplications = applications.filter((application) => {
     if (filterStatus === 'all') return true
-    return app.status === filterStatus
+    return application.status === filterStatus
   })
 
   const sortedApplications = [...filteredApplications].sort((a, b) => {
@@ -161,159 +89,109 @@ export function ApplicationList({
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
-  useEffect(() => {
-    if (!expandedId) return
+  const editingApplication = editingId
+    ? applications.find((application) => application.id === editingId) || null
+    : null
 
-    const expandedApplication = applications.find((app) => app.id === expandedId)
-    const isVisible =
-      expandedApplication && (filterStatus === 'all' || expandedApplication.status === filterStatus)
+  const handleEditSave = useCallback(
+    async (data: SaveData, context: ApplicationModalSaveContext) => {
+      if (!editingApplication) return
 
-    if (isVisible) return
-
-    if (pendingDeleteId !== expandedId) {
-      void saveDraftIfDirty(expandedId)
-    }
-
-    expandedDraftRef.current = null
-    expandedIdRef.current = null
-    setExpandedId(null)
-  }, [applications, expandedId, filterStatus, pendingDeleteId, saveDraftIfDirty])
-
-  const handleDraftChange = useCallback((draft: Application) => {
-    if (expandedIdRef.current === draft.id) {
-      expandedDraftRef.current = draft
-    }
-  }, [])
-
-  const handleToggle = useCallback(
-    (id: string) => {
-      const currentExpandedId = expandedIdRef.current
-
-      if (currentExpandedId === id) {
-        void saveDraftIfDirty(id)
-        expandedDraftRef.current = null
-        expandedIdRef.current = null
-        setExpandedId(null)
-        return
-      }
-
-      if (currentExpandedId) {
-        void saveDraftIfDirty(currentExpandedId)
-      }
-
-      const nextApplication = applicationsRef.current.find((app) => app.id === id)
-      expandedDraftRef.current = nextApplication ? toApplicationDraft(nextApplication) : null
-      expandedIdRef.current = id
-      setExpandedId(id)
+      await onSave(
+        {
+          ...editingApplication,
+          ...data,
+        },
+        { silent: true },
+      )
+      toast(context.trigger === 'dismiss' ? '已自动保存' : '保存成功', 'success')
     },
-    [saveDraftIfDirty]
+    [editingApplication, onSave],
   )
 
-  const handleFilterStatusChange = useCallback(
-    (value: FilterStatus) => {
-      const currentExpandedId = expandedIdRef.current
-      const draft = expandedDraftRef.current
-
-      if (currentExpandedId && value !== 'all') {
-        const currentStatus =
-          draft?.id === currentExpandedId
-            ? draft.status
-            : applicationsRef.current.find((app) => app.id === currentExpandedId)?.status
-
-        if (currentStatus !== value) {
-          void saveDraftIfDirty(currentExpandedId)
-        }
-      }
-
-      setFilterStatus(value)
-    },
-    [saveDraftIfDirty]
-  )
-
-  const isAutosaving = autosavingCount > 0
   const isInitialLoading = isLoading && applications.length === 0
-  const showFloatingLoading = isAutosaving || (isLoading && applications.length > 0)
+  const showFloatingLoading = isLoading && applications.length > 0
 
   return (
     <div className="relative flex h-full flex-col overflow-y-auto pr-1">
-      {showFloatingLoading && (
-        <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
-          <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl shadow-lg border border-slate-100/80 backdrop-blur animate-slide-in pointer-events-auto max-w-sm">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            <span className="text-sm font-medium text-slate-700 flex-1">
-              加载中...
-            </span>
+      {showFloatingLoading ? (
+        <div className="pointer-events-none fixed right-4 top-4 z-[9999] flex flex-col gap-2">
+          <div className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-slate-100/80 bg-white px-4 py-3 shadow-lg backdrop-blur animate-slide-in">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+            <span className="flex-1 text-sm font-medium text-slate-700">同步中...</span>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div className="flex-shrink-0 mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {statusFilters.map(({ value, label }) => (
             <button
               key={value}
-              onClick={() => handleFilterStatusChange(value)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              type="button"
+              onClick={() => setFilterStatus(value)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                 filterStatus === value
                   ? 'bg-blue-500 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {label}
-              {value !== 'all' && (
+              {value !== 'all' ? (
                 <span className="ml-1.5 opacity-70">
-                  ({applications.filter((a) => a.status === value).length})
+                  ({applications.filter((application) => application.status === value).length})
                 </span>
-              )}
+              ) : null}
             </button>
           ))}
         </div>
-        {headerAction && <div className="shrink-0">{headerAction}</div>}
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
 
       <div className="min-h-0 flex-1">
         {isInitialLoading ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-500" />
             <p className="mt-3 text-sm text-slate-500">加载中...</p>
           </div>
         ) : sortedApplications.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto">
-              <Briefcase className="w-8 h-8 text-slate-400" />
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+              <Briefcase className="h-8 w-8 text-slate-400" />
             </div>
             <p className="mt-4 text-sm text-slate-500">
               {filterStatus === 'all'
                 ? '暂无投递记录'
-                : `暂无"${APPLICATION_STATUS_LABELS[filterStatus as ApplicationStatus]}"的记录`}
+                : `暂无“${APPLICATION_STATUS_LABELS[filterStatus as ApplicationStatus]}”的记录`}
             </p>
-            {filterStatus === 'all' && (
+            {filterStatus === 'all' ? (
               <p className="mt-1 text-xs text-slate-400">点击上方按钮记录第一个投递</p>
-            )}
+            ) : null}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 items-start">
-            {sortedApplications.map((app) => (
-              <div
-                key={app.id}
-                ref={expandedId === app.id ? expandedCardRef : undefined}
-                className={expandedId === app.id ? 'col-span-2' : ''}
-              >
-                <ApplicationCard
-                  application={app}
-                  resumes={resumes}
-                  isExpanded={expandedId === app.id}
-                  isHighlighted={selectedResumeId !== null && app.resume_id === selectedResumeId}
-                  onToggle={() => handleToggle(app.id)}
-                  onSave={saveApplication}
-                  onDraftChange={handleDraftChange}
-                  onDelete={onDelete}
-                />
-              </div>
+          <div className="grid grid-cols-2 items-start gap-3">
+            {sortedApplications.map((application) => (
+              <ApplicationCard
+                key={application.id}
+                application={application}
+                resumes={resumes}
+                isHighlighted={selectedResumeId !== null && application.resume_id === selectedResumeId}
+                onOpen={() => setEditingId(application.id)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      <ApplicationModal
+        isOpen={Boolean(editingApplication)}
+        application={editingApplication}
+        resumes={resumes}
+        onClose={() => setEditingId(null)}
+        onSave={handleEditSave}
+        onDelete={onDelete}
+        isDeletePending={Boolean(editingId && pendingDeleteId === editingId)}
+      />
     </div>
   )
 }

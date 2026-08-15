@@ -50,7 +50,7 @@ interface ResumeStatusDatum {
 }
 
 const UNBOUND_RESUME_ID = 'unbound'
-const PAGE_SIZE = 10
+const PAGE_SIZE = 20
 const DASHBOARD_VIEWS: DashboardView[] = ['table', 'distribution', 'graph']
 const SORT_FIELDS: SortField[] = ['company', 'appliedAt', 'status']
 const SORT_ORDERS: SortOrder[] = ['asc', 'desc']
@@ -435,6 +435,7 @@ export function Dashboard({
 
   const filterResetKey = `${timeRange}:${selectedResumeId || 'all'}`
   const activeViewConfig = VIEW_CONFIG[activeView]
+  const activeViewIndex = DASHBOARD_VIEWS.indexOf(activeView)
   const ActiveViewIcon = activeViewConfig.icon
   const workspaceCount = activeView === 'table'
     ? `共 ${filteredApplications.length} 条`
@@ -523,7 +524,7 @@ export function Dashboard({
       </section>
 
       <section className="relative mt-6 overflow-visible rounded-[28px] bg-gradient-to-br from-sky-300/70 via-violet-200/65 to-cyan-300/70 p-px shadow-[0_24px_70px_-36px_rgba(79,70,229,0.58)] lg:mt-5">
-        <div className="relative min-h-[360px] overflow-visible rounded-[27px] bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
+        <div className="relative overflow-visible rounded-[27px] bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
         <div className="relative z-20 flex flex-col gap-3 rounded-t-[27px] border-b border-slate-100/80 bg-white/90 px-4 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -695,7 +696,7 @@ export function Dashboard({
                 </table>
               </div>
 
-              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 pb-24 pt-3 lg:px-6 lg:pb-3">
+              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 pb-3 pt-3 lg:px-6">
                 <span className="text-xs text-slate-400">
                   每页 {PAGE_SIZE} 条 · 共 {filteredApplications.length} 条
                 </span>
@@ -758,18 +759,22 @@ export function Dashboard({
 
       <nav
         aria-label="面板视图"
-        className={`fixed bottom-[18px] left-1/2 z-40 h-16 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-[24px] bg-gradient-to-r p-px transition-[background-color,box-shadow,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+        className={`fixed bottom-3.5 left-1/2 z-40 h-[52px] w-[min(390px,calc(100%-32px))] -translate-x-1/2 overflow-hidden rounded-full border border-white/70 transition-[background-color,border-color,box-shadow,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
           isDashboardScrolling
-            ? 'from-sky-200/28 via-violet-200/20 to-cyan-200/28 opacity-40 shadow-[0_14px_38px_-22px_rgba(79,70,229,0.28)]'
-            : 'from-sky-200/50 via-violet-200/36 to-cyan-200/50 opacity-100 shadow-[0_18px_48px_-20px_rgba(79,70,229,0.38)]'
+            ? 'bg-white/48 opacity-45 shadow-[0_8px_24px_-18px_rgba(30,64,175,0.22)]'
+            : 'bg-white/76 opacity-100 shadow-[0_12px_32px_-18px_rgba(30,64,175,0.28)]'
         }`}
       >
-        <div className={`flex h-full w-full items-center gap-0.5 rounded-[23px] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.96)] backdrop-blur-3xl backdrop-saturate-150 transition-colors duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
-          isDashboardScrolling ? 'bg-white/52' : 'bg-white/82'
-        }`}>
+        <div className="relative grid h-full w-full grid-cols-3 px-1.5 backdrop-blur-3xl backdrop-saturate-150">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-2 left-1.5 flex h-0.5 w-[calc((100%_-_0.75rem)/3)] justify-center transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+            style={{ transform: `translateX(${activeViewIndex * 100}%)` }}
+          >
+            <span className="h-full w-8 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 shadow-[0_1px_4px_rgba(79,70,229,0.32)]" />
+          </span>
           {DASHBOARD_VIEWS.map((view) => {
             const config = VIEW_CONFIG[view]
-            const Icon = config.icon
             const isActive = activeView === view
 
             return (
@@ -778,13 +783,12 @@ export function Dashboard({
                 type="button"
                 onClick={() => updateSearchParams({ view })}
                 aria-current={isActive ? 'page' : undefined}
-                className={`mx-1.5 flex h-[42px] min-w-0 flex-1 items-center justify-center gap-2 rounded-[15px] px-2 text-[13px] font-semibold transition duration-200 motion-reduce:transition-none sm:mx-2 sm:px-3 ${
+                className={`relative z-10 flex min-w-0 items-center justify-center px-1.5 pb-1 text-[13px] transition-colors duration-300 ease-out motion-reduce:transition-none sm:px-2 ${
                   isActive
-                    ? 'bg-white/82 text-blue-600 ring-1 ring-white/90 shadow-[0_8px_20px_-12px_rgba(37,99,235,0.58),inset_0_1px_0_rgba(255,255,255,0.98)]'
-                    : 'text-slate-500 hover:bg-white/38 hover:text-slate-800'
+                    ? 'font-semibold text-blue-600'
+                    : 'font-medium text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
                 <span className="truncate">{config.label}</span>
               </button>
             )

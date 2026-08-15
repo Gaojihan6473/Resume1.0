@@ -54,6 +54,20 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
     return () => document.removeEventListener('mousedown', handleClick)
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setIsOpen(false)
+      triggerRef.current?.focus()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen])
+
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -148,7 +162,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
         type="button"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className="flex w-full items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-left cursor-pointer select-none hover:border-blue-400 transition-colors"
+        className="flex w-full cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-sm outline-none transition hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70"
         onClick={() => {
           if (!isOpen) updatePanelPosition()
           setIsOpen(v => !v)
@@ -166,6 +180,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
           ref={panelRef}
           role="dialog"
           aria-label="选择投递日期"
+          data-application-floating-panel="true"
           className="z-[1000] select-none rounded-xl border border-slate-100 bg-white p-3 shadow-xl shadow-slate-900/15"
           style={panelStyle}
         >

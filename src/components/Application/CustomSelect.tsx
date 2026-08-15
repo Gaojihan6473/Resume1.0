@@ -17,15 +17,31 @@ interface Props {
   options: Option[]
   placeholder?: string
   className?: string
+  invalid?: boolean
 }
 
-export function CustomSelect({ value, onChange, options, placeholder = '请选择', className = '' }: Props) {
+export function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = '请选择',
+  className = '',
+  invalid = false,
+}: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const selectedOption = options.find((o) => o.value === value)
+  const estimatedOptionWidth = Math.max(
+    ...options.map((option) =>
+      Array.from(option.label).reduce(
+        (width, character) => width + ((character.codePointAt(0) ?? 0) > 0xff ? 14 : 8),
+        44,
+      ),
+    ),
+  )
 
   const updatePanelPosition = useCallback(() => {
     if (!triggerRef.current) return
@@ -41,9 +57,13 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
       Math.min(MAX_PANEL_HEIGHT, (openAbove ? spaceAbove : spaceBelow) - PANEL_GAP),
     )
     const renderedHeight = Math.min(panelHeight, availableHeight)
+    const panelWidth = Math.min(
+      window.innerWidth - VIEWPORT_PADDING * 2,
+      Math.max(triggerRect.width, estimatedOptionWidth),
+    )
     const maxLeft = Math.max(
       VIEWPORT_PADDING,
-      window.innerWidth - triggerRect.width - VIEWPORT_PADDING,
+      window.innerWidth - panelWidth - VIEWPORT_PADDING,
     )
 
     setPanelStyle({
@@ -52,10 +72,10 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
         ? Math.max(VIEWPORT_PADDING, triggerRect.top - renderedHeight - PANEL_GAP)
         : triggerRect.bottom + PANEL_GAP,
       left: Math.min(maxLeft, Math.max(VIEWPORT_PADDING, triggerRect.left)),
-      width: triggerRect.width,
+      width: panelWidth,
       maxHeight: availableHeight,
     })
-  }, [options.length])
+  }, [estimatedOptionWidth, options.length])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -72,6 +92,20 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setIsOpen(false)
+      triggerRef.current?.focus()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen])
 
   useLayoutEffect(() => {
     if (!isOpen) return
@@ -97,10 +131,15 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
         type="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-invalid={invalid}
         onClick={togglePanel}
-        className="w-full px-3 py-2 pr-8 border border-slate-200 rounded-lg text-sm text-left bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+        className={`w-full overflow-hidden rounded-xl border bg-white px-3.5 py-2.5 pr-8 text-left text-sm outline-none transition ${
+          invalid
+            ? 'border-rose-300 ring-4 ring-rose-50 focus:border-rose-400'
+            : 'border-slate-200 hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70'
+        }`}
       >
-        <span className={selectedOption ? 'text-slate-800' : 'text-slate-400'}>
+        <span className={`block truncate ${selectedOption ? 'text-slate-800' : 'text-slate-400'}`}>
           {selectedOption?.label || placeholder}
         </span>
       </button>
@@ -110,7 +149,8 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
         <div
           ref={panelRef}
           role="listbox"
-          className="z-[1000] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15"
+          data-application-floating-panel="true"
+          className="z-[1000] overflow-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15"
           style={panelStyle}
         >
           {options.map((option) => (
@@ -125,7 +165,7 @@ export function CustomSelect({ value, onChange, options, placeholder = '请选�
               }}
               className="w-full px-3 py-2 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
             >
-              <span className={option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}>
+              <span className={`whitespace-nowrap ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
                 {option.label}
               </span>
               {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}

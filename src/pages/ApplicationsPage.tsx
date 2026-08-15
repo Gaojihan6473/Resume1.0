@@ -141,13 +141,17 @@ export function ApplicationsPage() {
   }, [applications, hasAppliedQuerySelection, isLoading, resumes, searchParams])
 
   const handleCreateApplication = async (data: SaveData) => {
-    await createApplication(data as import('../types/application').CreateApplicationInput)
-    toast('创建成功', 'success')
-    setShowModal(false)
-    const result = await fetchResumes()
-    if (result.success && result.resumes) {
-      setResumes(result.resumes)
-      setCachedResumes(result.resumes, Date.now())
+    try {
+      await createApplication(data as import('../types/application').CreateApplicationInput)
+      toast('创建成功', 'success')
+      const result = await fetchResumes()
+      if (result.success && result.resumes) {
+        setResumes(result.resumes)
+        setCachedResumes(result.resumes, Date.now())
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '创建失败，请重试', 'error')
+      throw error
     }
   }
 
@@ -171,9 +175,13 @@ export function ApplicationsPage() {
   }
 
   const handleDeleteApplication = async (id: string) => {
-    await deleteApplication(id)
-    toast('删除成功', 'success')
-    setShowDeleteConfirm(null)
+    try {
+      await deleteApplication(id)
+      toast('删除成功', 'success')
+      setShowDeleteConfirm(null)
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '删除失败，请重试', 'error')
+    }
   }
 
   const handleManualCreate = () => {
