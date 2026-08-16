@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Briefcase, Loader2 } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
 import type { Resume } from '../../lib/api'
 import { toast } from '../Toast'
 import { ApplicationCard } from './ApplicationCard'
+import {
+  ApplicationFilterToolbar,
+  type ApplicationSortDirection,
+  type ApplicationSortField,
+  type ApplicationTimeFilter,
+} from './ApplicationFilterToolbar'
 import {
   ApplicationModal,
   type ApplicationModalSaveContext,
@@ -23,18 +29,16 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-type FilterStatus = 'all' | ApplicationStatus
 type SaveOptions = { silent?: boolean }
 
-const statusFilters: { value: FilterStatus; label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'interested', label: '感兴趣' },
-  { value: 'applied', label: '已投递' },
-  { value: 'assessing', label: '测评中' },
-  { value: 'interviewing', label: '面试中' },
-  { value: 'offered', label: 'Offer' },
-  { value: 'rejected', label: '已拒绝' },
-]
+const STATUS_SORT_ORDER: Record<ApplicationStatus, number> = {
+  interested: 0,
+  applied: 1,
+  assessing: 2,
+  interviewing: 3,
+  offered: 4,
+  rejected: 5,
+}
 
 export function ApplicationList({
   applications,
@@ -47,7 +51,11 @@ export function ApplicationList({
   onSave,
   onDelete,
 }: Props) {
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
+  const [selectedStatuses, setSelectedStatuses] = useState<ApplicationStatus[]>([])
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
+  const [timeFilter, setTimeFilter] = useState<ApplicationTimeFilter>({ kind: 'all' })
+  const [sortField, setSortField] = useState<ApplicationSortField>('time')
+  const [sortDirection, setSortDirection] = useState<ApplicationSortDirection>('desc')
   const [editingId, setEditingId] = useState<string | null>(null)
   const handledInitialIdRef = useRef<string | null>(null)
 
@@ -75,19 +83,21 @@ export function ApplicationList({
     }
   }, [applications, editingId, isLoading])
 
-  const filteredApplications = applications.filter((application) => {
-    if (filterStatus === 'all') return true
-    return application.status === filterStatus
-  })
+  const sortedApplications = useMemo(() => {
+    const statusSet = new Set(selectedStatuses)
+    const companySet = new Set(selectedCompanies)
 
-  const sortedApplications = [...filteredApplications].sort((a, b) => {
-    if (selectedResumeId) {
-      const aMatch = a.resume_id === selectedResumeId ? 1 : 0
-      const bMatch = b.resume_id === selectedResumeId ? 1 : 0
-      if (aMatch !== bMatch) return bMatch - aMatch
-    }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+    return applications
+      .filter((application) => {
+        if (statusSet.size > 0 && !statusSet.has(application.status)) return false
+        if (!matchesTimeFilter(application.appliedAt, timeFilter)) return false
+        if (companySet.size > 0 && !companySet.has(application.company)) return false
+        return true
+      })
+      .sort((left, right) =>
+        compareApplications(left, right, sortField, sortDirection),
+      )
+  }, [applications, selectedCompanies, selectedStatuses, sortDirection, sortField, timeFilter])
 
   const editingApplication = editingId
     ? applications.find((application) => application.id === editingId) || null
@@ -111,6 +121,28 @@ export function ApplicationList({
 
   const isInitialLoading = isLoading && applications.length === 0
   const showFloatingLoading = isLoading && applications.length > 0
+  const hasActiveFilter =
+    selectedStatuses.length > 0 ||
+    selectedCompanies.length > 0 ||
+    timeFilter.kind !== 'all'
+  const hasFilterOrSortChanges =
+    hasActiveFilter || sortField !== 'time' || sortDirection !== 'desc'
+
+  const handleSortChange = (
+    field: ApplicationSortField,
+    direction: ApplicationSortDirection,
+  ) => {
+    setSortField(field)
+    setSortDirection(direction)
+  }
+
+  const handleResetFilters = () => {
+    setSelectedStatuses([])
+    setSelectedCompanies([])
+    setTimeFilter({ kind: 'all' })
+    setSortField('time')
+    setSortDirection('desc')
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-y-auto pr-1">
@@ -124,27 +156,20 @@ export function ApplicationList({
       ) : null}
 
       <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {statusFilters.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setFilterStatus(value)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                filterStatus === value
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {label}
-              {value !== 'all' ? (
-                <span className="ml-1.5 opacity-70">
-                  ({applications.filter((application) => application.status === value).length})
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <ApplicationFilterToolbar
+          applications={applications}
+          selectedStatuses={selectedStatuses}
+          selectedCompanies={selectedCompanies}
+          timeFilter={timeFilter}
+          sortField={sortField}
+          sortDirection={sortDirection}
+          hasChanges={hasFilterOrSortChanges}
+          onStatusesChange={setSelectedStatuses}
+          onCompaniesChange={setSelectedCompanies}
+          onTimeFilterChange={setTimeFilter}
+          onSortChange={handleSortChange}
+          onReset={handleResetFilters}
+        />
         {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
 
@@ -160,11 +185,13 @@ export function ApplicationList({
               <Briefcase className="h-8 w-8 text-slate-400" />
             </div>
             <p className="mt-4 text-sm text-slate-500">
-              {filterStatus === 'all'
-                ? '暂无投递记录'
-                : `暂无“${APPLICATION_STATUS_LABELS[filterStatus as ApplicationStatus]}”的记录`}
+              {selectedStatuses.length === 1 &&
+              selectedCompanies.length === 0 &&
+              timeFilter.kind === 'all'
+                ? `暂无“${APPLICATION_STATUS_LABELS[selectedStatuses[0]]}”的记录`
+                : '暂无投递记录'}
             </p>
-            {filterStatus === 'all' ? (
+            {!hasActiveFilter ? (
               <p className="mt-1 text-xs text-slate-400">点击上方按钮记录第一个投递</p>
             ) : null}
           </div>
@@ -194,4 +221,99 @@ export function ApplicationList({
       />
     </div>
   )
+}
+
+function matchesTimeFilter(
+  appliedAt: string | null,
+  filter: ApplicationTimeFilter,
+) {
+  if (filter.kind === 'all') return true
+  if (
+    filter.kind === 'custom' &&
+    (!filter.start || !filter.end || filter.start > filter.end)
+  ) {
+    return true
+  }
+
+  const dateKey = getApplicationDateKey(appliedAt)
+  if (filter.kind === 'missing') return dateKey === null
+  if (!dateKey) return false
+
+  if (filter.kind === 'custom') {
+    return dateKey >= filter.start && dateKey <= filter.end
+  }
+
+  const today = new Date()
+  const end = toLocalDateKey(today)
+  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  startDate.setDate(startDate.getDate() - (filter.days - 1))
+  const start = toLocalDateKey(startDate)
+  return dateKey >= start && dateKey <= end
+}
+
+function compareApplications(
+  left: Application,
+  right: Application,
+  field: ApplicationSortField,
+  direction: ApplicationSortDirection,
+) {
+  let primaryComparison = 0
+
+  if (field === 'time') {
+    primaryComparison = compareApplicationDates(left.appliedAt, right.appliedAt, direction)
+  } else if (field === 'status') {
+    primaryComparison =
+      (STATUS_SORT_ORDER[left.status] - STATUS_SORT_ORDER[right.status]) *
+      (direction === 'asc' ? 1 : -1)
+  } else {
+    primaryComparison =
+      left.company.localeCompare(right.company, 'zh-CN', {
+        numeric: true,
+        sensitivity: 'base',
+      }) * (direction === 'asc' ? 1 : -1)
+  }
+
+  if (primaryComparison !== 0) return primaryComparison
+
+  if (field !== 'time') {
+    const timeComparison = compareApplicationDates(left.appliedAt, right.appliedAt, 'desc')
+    if (timeComparison !== 0) return timeComparison
+  }
+
+  const createdComparison =
+    new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  if (createdComparison !== 0) return createdComparison
+  return left.id.localeCompare(right.id)
+}
+
+function compareApplicationDates(
+  left: string | null,
+  right: string | null,
+  direction: ApplicationSortDirection,
+) {
+  const leftKey = getApplicationDateKey(left)
+  const rightKey = getApplicationDateKey(right)
+
+  if (!leftKey && !rightKey) return 0
+  if (!leftKey) return 1
+  if (!rightKey) return -1
+
+  return leftKey.localeCompare(rightKey) * (direction === 'asc' ? 1 : -1)
+}
+
+function getApplicationDateKey(value: string | null) {
+  if (!value) return null
+  const datePrefix = value.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (datePrefix) return datePrefix[1]
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return toLocalDateKey(date)
+}
+
+function toLocalDateKey(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
