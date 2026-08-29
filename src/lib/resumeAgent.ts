@@ -3,7 +3,9 @@ import type { ResumeAgentRequest, ResumeAgentStreamEvent } from '../types/resume
 
 const EDGE_FUNCTIONS_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL as string
 
-export const RESUME_AGENT_ENABLED = import.meta.env.VITE_RESUME_AGENT_ENABLED === 'true'
+// The production feature is enabled by default. Keep an explicit `false` value as
+// an emergency rollback switch for individual environments.
+export const RESUME_AGENT_ENABLED = import.meta.env.VITE_RESUME_AGENT_ENABLED !== 'false'
 
 function getErrorMessage(value: unknown): string {
   if (value && typeof value === 'object' && 'error' in value && typeof value.error === 'string') {
