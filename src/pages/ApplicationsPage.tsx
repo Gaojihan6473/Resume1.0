@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Loader2, Fish, ChevronsRight, FilePlus } from 'lucide-react'
+import { Plus, Loader2, ChevronsRight, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
@@ -8,6 +8,7 @@ import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
+import { FishLogo } from '../components/Brand/FishLogo'
 import { toast } from '../components/Toast'
 import { ResumeSelector } from '../components/Application/ResumeSelector'
 import { ApplicationList } from '../components/Application/ApplicationList'
@@ -276,8 +277,8 @@ const handleGoHome = () => {
           onMouseLeave={scheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />

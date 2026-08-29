@@ -1,4 +1,5 @@
 import type { JDAnalysisResult } from './analytics'
+import type { ResumeAgentHistoryResult } from './resumeAgent'
 
 export type JDAnalysisRecordStatus = 'success' | 'failed' | 'running'
 
@@ -15,7 +16,7 @@ export interface JDAnalysisRecord {
   resume_title_snapshot: string
   company_snapshot: string
   position_snapshot: string
-  analysis_result: JDAnalysisResult | null
+  analysis_result: JDAnalysisResult | ResumeAgentHistoryResult | null
   status: JDAnalysisRecordStatus
   error_message: string | null
   model: string
@@ -36,10 +37,20 @@ export interface CreateJDAnalysisRecordInput {
   resume_title_snapshot: string
   company_snapshot?: string
   position_snapshot?: string
-  analysis_result?: JDAnalysisResult | null
+  analysis_result?: JDAnalysisResult | ResumeAgentHistoryResult | null
   status: JDAnalysisRecordStatus
   error_message?: string | null
   model: string
   prompt_version: string
   analyzed_at?: string | null
+}
+
+export function isLegacyJDAnalysisResult(value: unknown): value is JDAnalysisResult {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'sectionAnalyses' in value &&
+    Array.isArray(value.sectionAnalyses) &&
+    !('kind' in value)
+  )
 }

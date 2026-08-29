@@ -15,6 +15,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
+import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLauncher'
 
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
@@ -247,6 +248,8 @@ function AppContent() {
         {/* Redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      <ResumeAgentGlobalLauncher />
 
       {/* Auth Required Modal */}
       <AuthRequiredModal

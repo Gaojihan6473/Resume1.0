@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
+import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { toast } from '../../components/Toast'
 import { SidebarTriggerHint } from '../Sidebar/SidebarTriggerHint'
 import type { StyleSettings } from '../../types/resume'
@@ -18,10 +19,10 @@ import {
   FileDown,
   ChevronDown,
   Check,
-  Fish,
   ChevronsRight,
   Send,
 } from 'lucide-react'
+import { FishLogo } from '../Brand/FishLogo'
 
 interface ToolbarProps {
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
@@ -205,6 +206,9 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
     parseStatus,
   } = useResumeStore()
   useAuthStore()
+  const agentPreviewMode = useResumeAgentSessionStore((state) => state.previewMode)
+  const hasAgentDraft = useResumeAgentSessionStore((state) => Boolean(state.agentDraftResumeData))
+  const isAgentDraftVisible = agentPreviewMode === 'draft' && hasAgentDraft
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -301,8 +305,8 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         <div
           className="flex items-center gap-2 px-1.5 py-1"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-sm">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-7 w-7 items-center justify-center text-black">
+            <FishLogo className="h-5 w-6" />
           </div>
           <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
@@ -392,7 +396,13 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
       {/* 右侧操作区 - 固定不滚动 */}
       <div className="flex items-center gap-1 px-3 border-l border-slate-200 shrink-0">
         <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
-        <CardButton onClick={handleSaveDraft} disabled={isSaving} icon={<Save className={iconSize} />} label={isSaving ? '保存中' : '保存'} title="保存到云端" />
+        <CardButton
+          onClick={handleSaveDraft}
+          disabled={isSaving || isAgentDraftVisible}
+          icon={<Save className={iconSize} />}
+          label={isSaving ? '保存中' : '保存'}
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '保存到云端'}
+        />
         <CardButton
           onClick={handleGoToApplications}
           disabled={!canNavigateToApplications}
@@ -404,19 +414,19 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
         <CardButton
           onClick={handleExportPdf}
-          disabled={parseStatus !== 'success' || isExportingPdf}
+          disabled={parseStatus !== 'success' || isExportingPdf || isAgentDraftVisible}
           icon={<FileDown className={iconSize} />}
           label={isExportingPdf ? '生成中' : 'PDF'}
-          title="Export PDF"
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '导出 PDF'}
           variant="primary"
           className="bg-slate-800 border-slate-800 text-white hover:bg-slate-700"
         />
         <CardButton
           onClick={handleExportWord}
-          disabled={parseStatus !== 'success' || isExportingWord}
+          disabled={parseStatus !== 'success' || isExportingWord || isAgentDraftVisible}
           icon={<FileDown className={iconSize} />}
           label={isExportingWord ? '生成中' : 'Word'}
-          title="Export Word"
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '导出 Word'}
         />
 
         <div

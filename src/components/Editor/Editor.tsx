@@ -23,7 +23,7 @@ import { SkillsEditor } from './Skills'
 import type { SectionId } from '../../types/resume'
 import { FileText, Pencil } from 'lucide-react'
 
-export type EditorMainTab = 'edit' | 'jd'
+export type EditorMainTab = 'edit' | 'jd' | 'agent'
 
 type AccordionEditorProps = {
   expanded: boolean
@@ -43,6 +43,7 @@ const MODULE_COMPONENTS: Record<SectionId, React.ComponentType<AccordionEditorPr
 interface EditorProps {
   activeTab?: EditorMainTab
   onTabChange?: (tab: EditorMainTab) => void
+  showAgentTab?: boolean
   jdPanel?: ReactNode
   focusTarget?: {
     section: SectionId
@@ -54,6 +55,7 @@ interface EditorProps {
 export function Editor({
   activeTab = 'edit',
   onTabChange,
+  showAgentTab = false,
   jdPanel,
   focusTarget,
 }: EditorProps = {}) {
@@ -65,7 +67,7 @@ export function Editor({
   const basicInfoRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({} as Record<SectionId, HTMLDivElement | null>)
   const tabHighlightStyle = {
-    '--active-tab-index': activeTab === 'edit' ? 0 : 1,
+    '--active-tab-index': activeTab === 'edit' ? 0 : activeTab === 'jd' ? 1 : 2,
   } as CSSProperties
 
   const handleSetExpandedSection = (newSection: SectionId | 'basic' | null) => {
@@ -105,7 +107,7 @@ export function Editor({
     <div
       ref={containerRef}
       className={`h-full bg-gray-50 p-4 ${
-        activeTab === 'jd'
+        activeTab !== 'edit'
           ? 'flex min-h-0 flex-col overflow-hidden'
           : 'overflow-y-auto'
       }`}
@@ -131,7 +133,10 @@ export function Editor({
           {onTabChange && (
             <>
               <span className="relative z-[1] h-7 w-px shrink-0 rounded-full bg-gradient-to-b from-transparent via-slate-300/70 to-transparent" />
-              <div className="editor-liquid-tabs" style={tabHighlightStyle}>
+              <div
+                className={`editor-liquid-tabs ${showAgentTab ? 'editor-liquid-tabs-three' : ''}`}
+                style={tabHighlightStyle}
+              >
               <EditorTabButton
                 active={activeTab === 'edit'}
                 onClick={() => onTabChange('edit')}
@@ -144,13 +149,21 @@ export function Editor({
               >
                 JD分析
               </EditorTabButton>
+              {showAgentTab && (
+                <EditorTabButton
+                  active={activeTab === 'agent'}
+                  onClick={() => onTabChange('agent')}
+                >
+                  Agent 定岗
+                </EditorTabButton>
+              )}
               </div>
             </>
           )}
         </div>
       </div>
 
-      {activeTab === 'jd' ? (
+      {activeTab !== 'edit' ? (
         jdPanel
       ) : (
         <>

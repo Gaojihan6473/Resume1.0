@@ -24,12 +24,12 @@ import {
   Loader2,
   CheckCircle,
   Clock,
-  Fish,
   User,
   LogOut,
   Copy,
   ChevronsRight,
 } from 'lucide-react'
+import { FishLogo } from '../components/Brand/FishLogo'
 
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
 
@@ -294,8 +294,8 @@ export function MePage() {
           onMouseLeave={scheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />

@@ -9,6 +9,10 @@ const MAX_PANEL_HEIGHT = 240
 interface Option {
   value: string
   label: string
+  badge?: string
+  badgeTone?: 'blue' | 'violet' | 'amber' | 'green'
+  separatorBefore?: boolean
+  actionPosition?: 'left' | 'right'
 }
 
 interface Props {
@@ -18,6 +22,8 @@ interface Props {
   placeholder?: string
   className?: string
   invalid?: boolean
+  ariaLabel?: string
+  variant?: 'default' | 'pill'
 }
 
 export function CustomSelect({
@@ -27,6 +33,8 @@ export function CustomSelect({
   placeholder = '请选择',
   className = '',
   invalid = false,
+  ariaLabel,
+  variant = 'default',
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
@@ -35,6 +43,7 @@ export function CustomSelect({
 
   const selectedOption = options.find((o) => o.value === value)
   const estimatedOptionWidth = Math.max(
+    120,
     ...options.map((option) =>
       Array.from(option.label).reduce(
         (width, character) => width + ((character.codePointAt(0) ?? 0) > 0xff ? 14 : 8),
@@ -129,28 +138,37 @@ export function CustomSelect({
       <button
         ref={triggerRef}
         type="button"
+        role="combobox"
+        aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-invalid={invalid}
         onClick={togglePanel}
-        className={`w-full overflow-hidden rounded-xl border bg-white px-3.5 py-2.5 pr-8 text-left text-sm outline-none transition ${
-          invalid
-            ? 'border-rose-300 ring-4 ring-rose-50 focus:border-rose-400'
-            : 'border-slate-200 hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70'
+        className={`w-full overflow-hidden pr-8 text-left text-sm outline-none transition ${
+          variant === 'pill'
+            ? `h-11 rounded-full border border-transparent bg-slate-100/80 px-4 hover:bg-slate-100 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100/60 ${invalid ? 'border-rose-200 bg-rose-50' : ''}`
+            : `rounded-xl border bg-white px-3.5 py-2.5 ${
+                invalid
+                  ? 'border-rose-300 ring-4 ring-rose-50 focus:border-rose-400'
+                  : 'border-slate-200 hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70'
+              }`
         }`}
       >
-        <span className={`block truncate ${selectedOption ? 'text-slate-800' : 'text-slate-400'}`}>
-          {selectedOption?.label || placeholder}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={`min-w-0 flex-1 truncate ${selectedOption ? 'text-slate-800' : 'text-slate-400'}`}>
+            {selectedOption?.label || placeholder}
+          </span>
+          {selectedOption?.badge ? <OptionBadge label={selectedOption.badge} tone={selectedOption.badgeTone} /> : null}
         </span>
       </button>
-      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
 
       {isOpen && typeof document !== 'undefined' && createPortal(
         <div
           ref={panelRef}
           role="listbox"
           data-application-floating-panel="true"
-          className="z-[1000] overflow-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15"
+          className="z-[1000] overflow-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15 animate-in fade-in zoom-in-95 duration-150"
           style={panelStyle}
         >
           {options.map((option) => (
@@ -163,17 +181,40 @@ export function CustomSelect({
                 onChange(option.value)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 text-sm text-left hover:bg-slate-50 flex items-center justify-between transition-colors"
+              className={`${option.actionPosition ? 'inline-flex w-1/2 justify-center' : 'flex w-full justify-between'} px-3 py-2 text-sm text-left hover:bg-slate-50 items-center gap-3 transition-colors ${
+                option.separatorBefore ? 'mt-1 border-t border-slate-100 pt-2.5' : ''
+              } ${
+                option.actionPosition === 'right' ? 'border-l border-l-slate-100' : ''
+              }`}
             >
-              <span className={`whitespace-nowrap ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
+              <span className={`min-w-0 truncate ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
                 {option.label}
               </span>
-              {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}
+              <span className={`shrink-0 items-center gap-2 ${option.actionPosition ? 'hidden' : 'flex'}`}>
+                {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}
+                {option.badge ? <OptionBadge label={option.badge} tone={option.badgeTone} /> : null}
+              </span>
             </button>
           ))}
         </div>,
         document.body,
       )}
     </div>
+  )
+}
+
+function OptionBadge({ label, tone = 'blue' }: { label: string; tone?: Option['badgeTone'] }) {
+  const toneClass = tone === 'violet'
+    ? 'border-violet-200 bg-violet-50 text-violet-600'
+    : tone === 'amber'
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : tone === 'green'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+        : 'border-blue-200 bg-blue-50 text-blue-600'
+
+  return (
+    <span className={`inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-medium leading-none ${toneClass}`}>
+      {label}
+    </span>
   )
 }

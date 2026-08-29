@@ -17,14 +17,18 @@ import {
   type SuggestionItem,
 } from '../../types/analytics'
 import type { SectionId } from '../../types/resume'
-import type { JDAnalysisRecord } from '../../types/jdAnalysisHistory'
+import { isLegacyJDAnalysisResult, type JDAnalysisRecord } from '../../types/jdAnalysisHistory'
+import type { ResumeAgentPatch } from '../../types/resumeAgent'
 import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useJDAnalysisHistoryStore } from '../../store/jdAnalysisHistoryStore'
 import { useJDAnalysisSessionStore, type JDAnalysisNotice } from '../../store/jdAnalysisSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
+import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
+import { RESUME_AGENT_ENABLED } from '../../lib/resumeAgent'
 import { createAnalysisHash, normalizeAnalysisText } from '../../utils/analysisHash'
-import { createSectionAnchorKey, resolveSuggestionTarget } from '../../utils/analysisAnchors'
+import { createResumeAgentHash } from '../../utils/resumeAgentHash'
+import { createSectionAnchorKey, createStableResumeAnchorKey, resolveSuggestionTarget } from '../../utils/analysisAnchors'
 import { sanitizeRichHtml } from '../../utils/richText'
 import { toast } from '../Toast'
 import {
@@ -39,6 +43,8 @@ import {
 import { Suggestions, type SuggestionInteractionTarget } from '../Analytics/Suggestions'
 import { Preview } from '../Preview/Preview'
 import type { ResumeAnalysisFocus } from '../Preview/PreviewContent'
+import { ResumeAgentConfigPanel } from '../Agent/ResumeAgentConfigPanel'
+import { ResumeAgentTaskPanel } from '../Agent/ResumeAgentTaskPanel'
 import { Editor, type EditorMainTab } from './Editor'
 
 interface EditorAnalysisLayoutProps {
@@ -79,6 +85,9 @@ const SUGGESTION_LOCK_FADE_MS = 420
 export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<EditorMainTab>('edit')
+  const [jdMode, setJdMode] = useState<'quick' | 'agent'>('quick')
+  const [basePageCount, setBasePageCount] = useState<number | null>(null)
+  const [draftPageCount, setDraftPageCount] = useState<number | null>(null)
   const [hoverTarget, setHoverTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [lockedTarget, setLockedTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [flashTarget, setFlashTarget] = useState<SuggestionInteractionTarget | null>(null)
@@ -92,6 +101,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     collapsed: true,
   })
   const [resumeHash, setResumeHash] = useState('')
+  const [agentResumeHash, setAgentResumeHash] = useState('')
   const [applicationJdHashes, setApplicationJdHashes] = useState<Map<string, string>>(new Map())
 
   const {
@@ -104,6 +114,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   } = useResumeStore()
   const { applications, isLoading, fetchApplications } = useApplicationStore()
   const { isAuthenticated } = useAuthStore()
+  const agent = useResumeAgentSessionStore()
   const {
     records: historyRecords,
     isLoading: isLoadingHistory,
@@ -122,6 +133,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     isRightPanelCollapsed,
     error,
     notice,
+    pendingAutoAnalyze,
     setSession,
     beginAnalysis,
     isCurrentRun,
@@ -129,6 +141,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     abortAnalysis,
     clearAnalysisDisplay: clearSessionAnalysisDisplay,
     resetSession,
+    consumeAutoAnalysis,
   } = useJDAnalysisSessionStore()
   const historyLoadRunRef = useRef(0)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
@@ -227,9 +240,12 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   useEffect(() => {
     if (searchParams.get('tab') !== 'jd') return
 
-    setActiveTab('jd')
+    const opensAgent = searchParams.has('agent') && RESUME_AGENT_ENABLED
+    setActiveTab(opensAgent ? 'agent' : 'jd')
+    setJdMode(opensAgent ? 'agent' : 'quick')
     const nextSearchParams = new URLSearchParams(searchParams)
     nextSearchParams.delete('tab')
+    nextSearchParams.delete('agent')
     setSearchParams(nextSearchParams, { replace: true })
   }, [searchParams, setSearchParams])
 
@@ -260,6 +276,14 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       isActive = false
     }
   }, [resumeText])
+
+  useEffect(() => {
+    let isActive = true
+    createResumeAgentHash(resumeData)
+      .then((hash) => { if (isActive) setAgentResumeHash(hash) })
+      .catch(() => { if (isActive) setAgentResumeHash('') })
+    return () => { isActive = false }
+  }, [resumeData])
 
   useEffect(() => {
     let isActive = true
@@ -294,7 +318,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       if (
         record.application_id &&
         record.status === 'success' &&
-        record.analysis_result &&
+        isLegacyJDAnalysisResult(record.analysis_result) &&
         !map.has(record.application_id)
       ) {
         map.set(record.application_id, record)
@@ -315,7 +339,11 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const manualSuccessRecords = useMemo(
     () => historyRecords
-      .filter((record) => !record.application_id && record.status === 'success' && record.analysis_result),
+      .filter((record) => (
+        !record.application_id &&
+        record.status === 'success' &&
+        isLegacyJDAnalysisResult(record.analysis_result)
+      )),
     [historyRecords]
   )
   const displayedManualSuccessRecords = useMemo(
@@ -372,14 +400,18 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     (count, section) => count + section.suggestions.length,
     0
   ) ?? 0
-  const shouldShowBookmark =
-    visibleHasAnalysisStarted ||
-    visibleIsAnalyzing ||
-    Boolean(visibleAnalysisResult) ||
-    Boolean(visibleError)
-  const gridClass = visibleIsRightPanelCollapsed
+  const isAgentMode = jdMode === 'agent'
+  const agentHasTask = !['idle', 'configuring', 'confirming'].includes(agent.status)
+  const rightPanelCollapsed = isAgentMode ? agent.isRightPanelCollapsed : visibleIsRightPanelCollapsed
+  const shouldShowBookmark = isAgentMode
+    ? agentHasTask
+    : visibleHasAnalysisStarted || visibleIsAnalyzing || Boolean(visibleAnalysisResult) || Boolean(visibleError)
+  const gridClass = rightPanelCollapsed
     ? 'grid-cols-[45%_minmax(0,1fr)_0]'
     : 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
+
+  const isAgentDraftVisible = isAgentMode && agent.previewMode === 'draft' && Boolean(agent.agentDraftResumeData)
+  const isAgentStale = Boolean(agent.resumeHash && agentResumeHash && agent.resumeHash !== agentResumeHash)
 
   const abortCurrentAnalysis = useCallback(() => {
     abortAnalysis()
@@ -506,7 +538,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const loadHistoryRecord = useCallback(
     (record: JDAnalysisRecord, badges: HistoryBadges | null) => {
-      if (!record.analysis_result) return
+      if (!isLegacyJDAnalysisResult(record.analysis_result)) return
 
       setSession({
         resumeId: currentResumeId,
@@ -717,7 +749,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     ]
   )
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = useCallback(async () => {
     cancelLockedTargetClear()
     setHoverTarget(null)
     setLockedTarget(null)
@@ -805,7 +837,28 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     } finally {
       finishAnalysis(runId, controller)
     }
-  }
+  }, [
+    analyzeBlockReason,
+    beginAnalysis,
+    cancelLockedTargetClear,
+    createHistoryRecord,
+    currentResumeId,
+    finishAnalysis,
+    isCurrentRun,
+    resetAnalysisPresentation,
+    resumeHash,
+    resumeText,
+    setSession,
+    visibleJdText,
+  ])
+
+  useEffect(() => {
+    if (!pendingAutoAnalyze || !currentResumeId || !visibleJdText || isDirty) return
+    consumeAutoAnalysis()
+    setActiveTab('jd')
+    setJdMode('quick')
+    void handleAnalyze()
+  }, [consumeAutoAnalysis, currentResumeId, handleAnalyze, isDirty, pendingAutoAnalyze, visibleJdText])
 
   const registerAnchor = useCallback((key: string, element: HTMLElement | null) => {
     if (element) {
@@ -884,6 +937,28 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       setFlashTarget((current) => current?.key === target.key ? null : current)
     }, 760)
   }, [clearLockedTargetAfterDelay, scrollToAnchor])
+
+  const handleLocateAgentPatch = useCallback((patch: ResumeAgentPatch) => {
+    const itemId = patch.kind === 'rich_text_replace'
+      ? patch.target.itemId || 'summary'
+      : 'skills'
+    const problemText = patch.kind === 'rich_text_replace'
+      ? patch.revisedText
+      : patch.revisedValue || patch.originalValue || ''
+    handleSuggestionClick({
+      key: `agent:${patch.key}`,
+      section: patch.section,
+      itemId,
+      itemKey: createStableResumeAnchorKey(patch.section, itemId),
+      problemText,
+      suggestion: {
+        type: patch.kind === 'skill_item' && patch.operation === 'add' ? 'add' : 'modify',
+        category: patch.section === 'skills' ? 'skill' : 'experience',
+        suggestion: patch.reason,
+        reason: patch.reason,
+      },
+    })
+  }, [handleSuggestionClick])
 
   const getTargetContent = useCallback((target: SuggestionInteractionTarget): string | null => {
     if (target.section === 'internships') {
@@ -1029,29 +1104,46 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       <div className="min-h-0 min-w-0 border-r border-gray-200 overflow-hidden flex flex-col bg-white">
         <Editor
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          showAgentTab={RESUME_AGENT_ENABLED}
+          onTabChange={(nextTab) => {
+            if (isAgentMode && ['running', 'review', 'creating'].includes(agent.status) && nextTab === 'edit') {
+              toast('审核期间不能手工编辑 Agent 草稿；可切换预览核对基础简历', 'info')
+              return
+            }
+            if (nextTab === 'jd') setJdMode('quick')
+            if (nextTab === 'agent') setJdMode('agent')
+            setActiveTab(nextTab)
+          }}
           focusTarget={editorFocusRequest}
           jdPanel={(
-            <JDInputPanel
-              applications={applicationsWithJD}
-              manualRecords={displayedManualSuccessRecords}
-              selectedSourceKey={visibleSelectedSourceKey}
-              jdText={visibleJdText}
-              isLoadingApplications={isLoading}
-              isLoadingHistory={isLoadingHistory}
-              isAnalyzing={visibleIsAnalyzing}
-              error={visibleError}
-              analyzeBlockReason={analyzeBlockReason}
-              hasError={Boolean(visibleError)}
-              hasAnalysisResult={Boolean(visibleAnalysisResult)}
-              getApplicationBadges={getApplicationBadges}
-              getManualRecordBadges={getManualRecordBadges}
-              onSourceSelect={handleSourceSelect}
-              onJdTextChange={handleJdTextChange}
-              onAnalyze={handleAnalyze}
-              onToggleDetails={handleToggleDetails}
-              onClear={handleClear}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                {isAgentMode && RESUME_AGENT_ENABLED ? (
+                  <ResumeAgentConfigPanel applications={applicationsWithJD} historyRecords={historyRecords} currentResumeId={currentResumeId} resumeData={resumeData} isDirty={isDirty} />
+                ) : (
+                  <JDInputPanel
+                    applications={applicationsWithJD}
+                    manualRecords={displayedManualSuccessRecords}
+                    selectedSourceKey={visibleSelectedSourceKey}
+                    jdText={visibleJdText}
+                    isLoadingApplications={isLoading}
+                    isLoadingHistory={isLoadingHistory}
+                    isAnalyzing={visibleIsAnalyzing}
+                    error={visibleError}
+                    analyzeBlockReason={analyzeBlockReason}
+                    hasError={Boolean(visibleError)}
+                    hasAnalysisResult={Boolean(visibleAnalysisResult)}
+                    getApplicationBadges={getApplicationBadges}
+                    getManualRecordBadges={getManualRecordBadges}
+                    onSourceSelect={handleSourceSelect}
+                    onJdTextChange={handleJdTextChange}
+                    onAnalyze={handleAnalyze}
+                    onToggleDetails={handleToggleDetails}
+                    onClear={handleClear}
+                  />
+                )}
+              </div>
+            </div>
           )}
         />
       </div>
@@ -1061,37 +1153,55 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           ref={previewRef}
           analysisFocus={analysisFocus}
           registerAnchor={registerAnchor}
-          fitToWidth={!visibleIsRightPanelCollapsed}
+          fitToWidth={!rightPanelCollapsed}
+          dataOverride={isAgentDraftVisible ? agent.agentDraftResumeData || undefined : undefined}
+          publishPdfSnapshot={!isAgentDraftVisible}
+          onPageCountChange={isAgentDraftVisible ? setDraftPageCount : setBasePageCount}
           onScrollContainerChange={(element) => {
             previewScrollRef.current = element
           }}
         />
 
-        {shouldShowBookmark && visibleIsRightPanelCollapsed && (
+        {isAgentMode && agent.agentDraftResumeData && (
+          <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-sm backdrop-blur">
+            <button type="button" onClick={() => agent.setPreviewMode('base')} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${agent.previewMode === 'base' ? 'bg-slate-100 text-slate-800' : 'text-slate-500'}`}>基础简历</button>
+            <button type="button" onClick={() => agent.setPreviewMode('draft')} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${agent.previewMode === 'draft' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500'}`}>Agent 草稿</button>
+          </div>
+        )}
+
+        {shouldShowBookmark && rightPanelCollapsed && (
           <AnalysisBookmark
-            isOpen={!visibleIsRightPanelCollapsed}
-            isAnalyzing={visibleIsAnalyzing}
-            hasError={Boolean(visibleError)}
-            suggestionCount={suggestionCount}
-            onClick={() => setSession({ isRightPanelCollapsed: !visibleIsRightPanelCollapsed })}
+            isOpen={!rightPanelCollapsed}
+            isAnalyzing={isAgentMode ? agent.status === 'running' : visibleIsAnalyzing}
+            hasError={isAgentMode ? agent.status === 'failed' : Boolean(visibleError)}
+            suggestionCount={isAgentMode ? agent.proposal?.patches.length || 0 : suggestionCount}
+            onClick={() => isAgentMode ? agent.setRightPanelCollapsed(false) : setSession({ isRightPanelCollapsed: false })}
           />
         )}
       </section>
 
       <aside
         className={`min-h-0 min-w-0 overflow-hidden border-l border-slate-200 bg-slate-50 ${
-          visibleIsRightPanelCollapsed ? 'pointer-events-none invisible opacity-0' : 'visible opacity-100'
+          rightPanelCollapsed ? 'pointer-events-none invisible opacity-0' : 'visible opacity-100'
         }`}
         style={{
-          transition: visibleIsRightPanelCollapsed
+          transition: rightPanelCollapsed
             ? 'opacity 160ms ease, visibility 0s linear 300ms'
             : 'opacity 180ms ease 90ms, visibility 0s linear',
         }}
       >
-        <div
-          ref={analysisPanelScrollRef}
-          className="h-full min-w-80 overflow-y-auto overflow-x-hidden"
-        >
+        {isAgentMode ? (
+          <div className="h-full min-w-80 overflow-y-auto overflow-x-hidden">
+            <div className="sticky top-0 z-10 flex justify-end border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
+              <button type="button" onClick={() => agent.setRightPanelCollapsed(true)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 hover:bg-white hover:text-slate-700"><PanelRightClose className="h-3.5 w-3.5" />收起</button>
+            </div>
+            <ResumeAgentTaskPanel baseData={resumeData} basePageCount={basePageCount} draftPageCount={draftPageCount} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
+          </div>
+        ) : (
+          <div
+            ref={analysisPanelScrollRef}
+            className="h-full min-w-80 overflow-y-auto overflow-x-hidden"
+          >
           <div className="flex min-h-full flex-col">
             <div className="flex min-h-full flex-1 flex-col p-4">
               <div className="mb-3 flex min-h-8 items-center gap-3">
@@ -1178,7 +1288,8 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             )}
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </aside>
     </div>
   )

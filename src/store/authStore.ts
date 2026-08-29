@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { signIn as apiSignIn, signOut as apiSignOut } from '../lib/api'
 import type { User } from '../lib/supabase'
 import { useResumeStore } from './resumeStore'
+import { useResumeAgentSessionStore } from './resumeAgentSessionStore'
 
 const AUTHENTICATED_HINT_KEY = 'resume-authenticated'
 
@@ -66,6 +67,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
         error: null,
       })
+      useResumeAgentSessionStore.getState().bindUser(result.user.id)
       return true
     }
 
@@ -81,6 +83,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await apiSignOut()
     setAuthenticatedHint(false)
     useResumeStore.getState().resetAll()
+    useResumeAgentSessionStore.getState().bindUser(null)
     set({
       user: null,
       isAuthenticated: false,
@@ -123,10 +126,12 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           authInitializing: false,
         })
+        useResumeAgentSessionStore.getState().bindUser(session.user.id)
         return
       }
 
       setAuthenticatedHint(false)
+      useResumeAgentSessionStore.getState().bindUser(null)
       set({
         user: null,
         isAuthenticated: false,

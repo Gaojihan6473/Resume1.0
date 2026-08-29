@@ -9,11 +9,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
-const fetchWithGetRetry: typeof fetch = async (input, init) => {
+const RETRYABLE_READ_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
+
+export const fetchWithGetRetry: typeof fetch = async (input, init) => {
   const method = (init?.method || (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET')).toUpperCase()
 
   try {
-    return await fetch(input, init)
+    const response = await fetch(input, init)
+    if ((method === 'GET' || method === 'HEAD') && RETRYABLE_READ_STATUSES.has(response.status)) {
+      await sleep(350)
+      return fetch(input, init)
+    }
+    return response
   } catch (error) {
     if (method !== 'GET' && method !== 'HEAD') {
       throw error

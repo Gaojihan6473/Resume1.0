@@ -108,10 +108,13 @@ function hasPreviewableContent(resumeData: ResumeData): boolean {
 }
 
 interface PreviewProps {
+  dataOverride?: ResumeData
   analysisFocus?: ResumeAnalysisFocus | null
   registerAnchor?: (key: string, element: HTMLElement | null) => void
   onScrollContainerChange?: (element: HTMLDivElement | null) => void
+  onPageCountChange?: (pageCount: number) => void
   fitToWidth?: boolean
+  publishPdfSnapshot?: boolean
 }
 
 interface PreviewFitState {
@@ -178,12 +181,16 @@ function restoreCachedPreviewDocument(doc: Document, cached: PreviewDocumentCach
 }
 
 export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
+  dataOverride,
   analysisFocus,
   registerAnchor,
   onScrollContainerChange,
+  onPageCountChange,
   fitToWidth = false,
+  publishPdfSnapshot: shouldPublishPdfSnapshot = true,
 }, ref) => {
-  const { resumeData, zoom, setZoom } = useResumeStore()
+  const { resumeData: storeResumeData, zoom, setZoom } = useResumeStore()
+  const resumeData = dataOverride ?? storeResumeData
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const fitRestoreTimeoutRef = useRef<number | null>(null)
@@ -202,7 +209,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     () => buildResumeDocumentHtml(resumeData, title, { analysisFocus }),
     [analysisFocus, resumeData, title]
   )
-  const canCachePreview = !analysisFocus
+  const canCachePreview = !analysisFocus && shouldPublishPdfSnapshot
   const previewCacheKey = useMemo(() => createPreviewCacheKey(previewHtml), [previewHtml])
   const initialCachedPreviewRef = useRef<PreviewDocumentCacheEntry | null>(
     canCachePreview ? getCachedPreviewDocument(previewCacheKey, previewHtml) : null
@@ -777,13 +784,14 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
     const finalHeight = Math.max(A4_HEIGHT, nextHeight)
     setDocumentHeight(finalHeight)
+    onPageCountChange?.(Math.max(1, pages.length))
     if (canCachePreview) {
       cachePreviewDocument(previewCacheKey, previewHtml, doc, finalHeight)
     }
     publishPdfSnapshot(doc)
     syncIframeAnchors()
     setPreviewReady(true)
-  }, [canCachePreview, measureCssLength, previewCacheKey, previewHtml, publishPdfSnapshot, syncIframeAnchors])
+  }, [canCachePreview, measureCssLength, onPageCountChange, previewCacheKey, previewHtml, publishPdfSnapshot, syncIframeAnchors])
 
   const renderPreviewDocument = useCallback(() => {
     const iframe = iframeRef.current
@@ -796,6 +804,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       cancelScheduledFrames()
       styleTextRef.current = (doc.getElementById('resume-preview-style') as HTMLStyleElement | null)?.textContent || ''
       setDocumentHeight(cachedPreview.height)
+      onPageCountChange?.(Math.max(1, doc.querySelectorAll('#resume-page-stack .resume-page-frame').length))
       setPreviewReady(true)
       publishPdfSnapshot(doc)
       syncIframeAnchors()
@@ -880,6 +889,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     paginateIframeDocument,
     previewCacheKey,
     previewHtml,
+    onPageCountChange,
     publishPdfSnapshot,
     scheduleFrame,
     syncIframeAnchors,

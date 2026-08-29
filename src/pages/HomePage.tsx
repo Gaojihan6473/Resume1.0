@@ -1,7 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
-  Fish,
   FilePlus,
   FileText,
   Sparkles,
@@ -21,7 +20,10 @@ import {
   Plus,
   Target,
   Pencil,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
+import { FishLogo } from '../components/Brand/FishLogo'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
@@ -67,6 +69,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const {
     applications,
     isLoading: isLoadingApplications,
+    error: applicationsError,
     fetchApplications,
   } = useApplicationStore()
   const navigate = useNavigate()
@@ -74,6 +77,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
   const [recentResumes, setRecentResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(false)
+  const [resumeLoadError, setResumeLoadError] = useState<string | null>(null)
+  const [resumeRetryToken, setResumeRetryToken] = useState(0)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [openResumeMenuId, setOpenResumeMenuId] = useState<string | null>(null)
   const [deleteResumeId, setDeleteResumeId] = useState<string | null>(null)
@@ -125,6 +130,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
   useEffect(() => {
     if (isAuthenticated) {
+      setResumeLoadError(null)
       // 优先使用缓存
       if (cachedResumes.length > 0) {
         setRecentResumes(cachedResumes)
@@ -155,6 +161,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           } else if (cachedResumes.length === 0) {
             setRecentResumes(result.resumes)
           }
+        } else {
+          setResumeLoadError(result.error || '简历加载失败')
         }
         setIsLoadingResumes(false)
       })
@@ -164,9 +172,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       }
     } else {
       setRecentResumes([])
+      setResumeLoadError(null)
       setIsLoadingResumes(false)
     }
-  }, [cachedResumes, isAuthenticated, setCachedResumes])
+  }, [cachedResumes, isAuthenticated, resumeRetryToken, setCachedResumes])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -318,18 +327,6 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     navigate(options?.tab === 'jd' ? '/?tab=jd' : '/')
   }
 
-  const handleOpenLatestResumeJdAnalysis = () => {
-    const latestResume = [...getResumeListForAction()]
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
-
-    if (!latestResume) {
-      handleNewResume()
-      return
-    }
-
-    handleSelectResume(latestResume, { tab: 'jd' })
-  }
-
   const handleOpenUpload = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('upload')
@@ -354,6 +351,16 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       handleOpenUpload()
     }
   }, [handleNewResume, handleOpenUpload, isAuthenticated, searchParams, setSearchParams])
+
+  useEffect(() => {
+    const agentAction = searchParams.get('agentAction')
+    if (agentAction !== 'new' && agentAction !== 'upload') return
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('agentAction')
+    setSearchParams(nextSearchParams, { replace: true })
+    if (agentAction === 'new') handleNewResume()
+    else handleOpenUpload()
+  }, [handleNewResume, handleOpenUpload, searchParams, setSearchParams])
 
   const handleDuplicateResume = async (resume: Resume) => {
     if (resumeActionLoadingId) return
@@ -418,8 +425,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           onMouseLeave={onScheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
@@ -462,15 +469,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           <div ref={homeContentRef} className="relative mx-auto w-full max-w-[1180px]">
             {isAuthenticated ? (
               <>
-                <LoggedInActionStrip
-                  resumeCount={recentResumes.length}
-                  applicationCount={sortedApplications.length}
-                  onNewResume={handleNewResume}
-                  onAICreateApplication={handleAICreateApplication}
-                  onOpenJdAnalysis={handleOpenLatestResumeJdAnalysis}
-                />
-
-                <section className="mt-8">
+                <section>
                   <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <HomeSectionTitle
                       label="我的简历"
@@ -491,6 +490,12 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
                   {isLoadingResumes ? (
                     <HomeLoadingState text="简历加载中..." />
+                  ) : resumeLoadError && recentResumes.length === 0 ? (
+                    <HomeLoadErrorState
+                      itemName="简历"
+                      message={resumeLoadError}
+                      onRetry={() => setResumeRetryToken((current) => current + 1)}
+                    />
                   ) : recentResumes.length === 0 ? (
                     <HomeEmptyActionState
                       title="还没有简历"
@@ -557,6 +562,13 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
                   {isLoadingApplications ? (
                     <HomeLoadingState text="岗位加载中..." compact />
+                  ) : applicationsError && sortedApplications.length === 0 ? (
+                    <HomeLoadErrorState
+                      compact
+                      itemName="岗位"
+                      message={applicationsError}
+                      onRetry={() => void fetchApplications()}
+                    />
                   ) : sortedApplications.length === 0 ? (
                     <HomeEmptyActionState
                       compact
@@ -630,98 +642,40 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   )
 }
 
-function LoggedInActionStrip({
-  resumeCount,
-  applicationCount,
-  onNewResume,
-  onAICreateApplication,
-  onOpenJdAnalysis,
-}: {
-  resumeCount: number
-  applicationCount: number
-  onNewResume: () => void
-  onAICreateApplication: () => void
-  onOpenJdAnalysis: () => void
-}) {
-  const advice = resumeCount === 0
-    ? '先建立一份基础简历，开始管理你的投递版本。'
-    : applicationCount === 0
-      ? '已有简历后，可以新建岗位并关联 JD。'
-      : '继续用 JD 分析，让每份投递版本更匹配。'
-  const action = resumeCount === 0
-    ? {
-        label: '新建简历',
-        icon: <FilePlus className="h-4 w-4" />,
-        onClick: onNewResume,
-      }
-    : applicationCount === 0
-      ? {
-          label: '图文解析',
-          icon: <FileText className="h-4 w-4" />,
-          onClick: onAICreateApplication,
-        }
-      : {
-          label: 'JD分析',
-          icon: <Sparkles className="h-4 w-4" />,
-          onClick: onOpenJdAnalysis,
-        }
-
-  return (
-    <section className="home-action-strip">
-      <div className="home-action-strip-content flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="home-action-mark">
-            <Target className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="home-action-kicker">
-              <Sparkles className="h-3.5 w-3.5" />
-              推荐下一步
-            </p>
-            <p className="home-action-copy">{advice}</p>
-          </div>
-        </div>
-        <HomeActionButton onClick={action.onClick} icon={action.icon} primary>
-          {action.label}
-        </HomeActionButton>
-      </div>
-    </section>
-  )
-}
-
-function HomeActionButton({
-  children,
-  icon,
-  onClick,
-  onMouseEnter,
-  onMouseLeave,
-  primary = false,
-}: {
-  children: ReactNode
-  icon: ReactNode
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
-  onMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
-  onMouseLeave?: () => void
-  primary?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      className={primary ? 'home-action-button home-action-button-primary' : 'home-action-button'}
-    >
-      {icon}
-      {children}
-    </button>
-  )
-}
-
 function HomeSectionActions({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       {children}
+    </div>
+  )
+}
+
+function HomeLoadErrorState({
+  itemName,
+  message,
+  onRetry,
+  compact = false,
+}: {
+  itemName: string
+  message: string
+  onRetry: () => void
+  compact?: boolean
+}) {
+  return (
+    <div className={`flex flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50/70 px-6 text-center ${compact ? 'min-h-36 py-6' : 'min-h-48 py-8'}`} role="alert">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm">
+        <AlertCircle className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-slate-700">{itemName}暂时加载失败</p>
+      <p className="mt-1 text-xs text-slate-500">{message}，已有数据不会受到影响。</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-xs font-semibold text-amber-700 shadow-sm transition-colors hover:bg-amber-100"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        重新加载
+      </button>
     </div>
   )
 }

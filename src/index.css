@@ -305,6 +305,10 @@ body {
   isolation: isolate;
 }
 
+.editor-liquid-tabs-three {
+  flex-basis: calc(var(--tab-width) + var(--tab-width) + var(--tab-width) + var(--tab-gap) + var(--tab-gap));
+}
+
 .editor-liquid-tabs::before {
   content: "";
   position: absolute;
@@ -912,6 +916,572 @@ body {
   }
 }
 
+/* Global resume Agent intent launcher */
+.agent-intent-panel {
+  --agent-panel-bg: rgba(255, 255, 255, 0.68);
+  position: relative;
+  border: 1px solid rgba(219, 234, 254, 0.58);
+  border-radius: 24px;
+  background: var(--agent-panel-bg);
+  padding: 15px 18px 14px;
+  color: #172033;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -1px 0 rgba(148, 163, 184, 0.12),
+    0 10px 28px rgba(15, 23, 42, 0.055),
+    0 0 0 3px rgba(219, 234, 254, 0.1);
+  backdrop-filter: blur(18px) saturate(1.06);
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+  transition: background 200ms ease, border-color 180ms ease, box-shadow 240ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.agent-intent-panel:hover,
+.agent-intent-panel:focus-within {
+  --agent-panel-bg: rgba(255, 255, 255, 0.9);
+  border-color: rgba(191, 219, 254, 0.76);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(96, 165, 250, 0.24),
+    0 16px 38px rgba(15, 23, 42, 0.075),
+    0 0 0 4px rgba(219, 234, 254, 0.13);
+}
+
+.agent-intent-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.agent-intent-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.agent-intent-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 13px;
+}
+
+.agent-intent-title {
+  color: #1e293b;
+  font-weight: 650;
+}
+
+.agent-intent-title {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.agent-intent-summary {
+  overflow: hidden;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-intent-icon-button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  color: #64748b;
+  background: transparent;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.agent-intent-icon-button:hover,
+.agent-intent-icon-button:focus-visible {
+  color: #2563eb;
+  background: rgba(219, 234, 254, 0.7);
+}
+
+.agent-intent-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.agent-intent-field {
+  min-width: 0;
+}
+
+.agent-intent-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 5px 11px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agent-intent-primary {
+  display: inline-flex;
+  height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: #2563eb;
+  padding: 0 19px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: 0 7px 18px rgba(37, 99, 235, 0.18);
+  transition: background 160ms ease, box-shadow 200ms ease, transform 180ms ease;
+}
+
+.agent-intent-primary:hover {
+  background: #1d4ed8;
+  box-shadow: 0 9px 22px rgba(37, 99, 235, 0.24);
+  transform: translateY(-1px);
+}
+
+.agent-intent-primary:focus-visible {
+  outline: 3px solid rgba(147, 197, 253, 0.55);
+  outline-offset: 2px;
+}
+
+.agent-intent-primary:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
+.agent-intent-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.agent-intent-more,
+.agent-intent-segments button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  color: #526077;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.agent-intent-more {
+  height: 28px;
+  padding: 0 7px 0 10px;
+  color: #64748b;
+}
+
+.agent-intent-more:hover,
+.agent-intent-more:focus-visible {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+.agent-intent-advanced {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-5px);
+  transition: grid-template-rows 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 240ms;
+}
+
+.agent-intent-advanced.is-open {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.agent-intent-advanced-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  min-height: 0;
+  align-items: end;
+  gap: 20px;
+  overflow: hidden;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  margin-top: 7px;
+  padding: 13px 5px 4px;
+  transition: margin 240ms cubic-bezier(0.22, 1, 0.36, 1), padding 240ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease;
+}
+
+.agent-intent-advanced:not(.is-open) .agent-intent-advanced-inner {
+  border-top-color: transparent;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.agent-intent-line-field {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.agent-intent-line-field > span {
+  flex: 0 0 auto;
+  padding-left: 2px;
+  font-weight: 600;
+}
+
+.agent-intent-line-field input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.85);
+  background: transparent;
+  height: 31px;
+  padding: 5px 2px 7px;
+  color: #334155;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 160ms ease;
+}
+
+.agent-intent-line-field input:focus {
+  border-color: #60a5fa;
+}
+
+.agent-intent-page-field {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-intent-segments {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.agent-intent-segments button {
+  height: 25px;
+  padding: 0 9px;
+}
+
+.agent-intent-segments button[aria-pressed="true"] {
+  color: #1d4ed8;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.agent-intent-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 4px 7px;
+  color: #b45309;
+  font-size: 11px;
+}
+
+.agent-intent-active-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.agent-intent-context-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.78);
+  padding: 11px 14px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.agent-global-overlay {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 180;
+  width: min(460px, calc(100vw - 48px));
+  pointer-events: none;
+}
+
+.agent-global-overlay-panel {
+  width: 100%;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  border-radius: 24px;
+  pointer-events: auto;
+  animation: agentIntentPanelEnter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: right bottom;
+}
+
+.agent-global-overlay.is-closing {
+  pointer-events: none;
+}
+
+.agent-global-overlay.is-closing .agent-global-overlay-panel {
+  animation: agentIntentPanelExit 180ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.agent-global-overlay-panel .agent-intent-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(203, 213, 225, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 22px 52px rgba(15, 23, 42, 0.13),
+    0 5px 16px rgba(37, 99, 235, 0.05);
+}
+
+.agent-global-overlay-panel .agent-intent-controls {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-top: 14px;
+}
+
+.agent-global-overlay-panel .agent-intent-field + .agent-intent-field {
+  margin-top: 10px;
+}
+
+.agent-global-overlay-panel .agent-intent-advanced-inner {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.agent-global-overlay-panel .agent-intent-main-action {
+  width: 100%;
+  height: 46px;
+  margin-top: 16px;
+}
+
+.agent-global-overlay-panel .agent-intent-active-row {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agent-global-overlay-panel .agent-intent-footer {
+  margin-top: 8px;
+}
+
+.agent-corner-launcher-wrap {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 180;
+  pointer-events: none;
+}
+
+.agent-corner-launcher {
+  position: relative;
+  display: inline-flex;
+  width: 56px;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(191, 219, 254, 0.82);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #2563eb;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 12px 30px rgba(15, 23, 42, 0.14),
+    0 3px 10px rgba(37, 99, 235, 0.08);
+  backdrop-filter: blur(16px) saturate(1.08);
+  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  pointer-events: auto;
+  animation: agentCornerLauncherEnter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: color 180ms ease, border-color 180ms ease, box-shadow 220ms ease, transform 180ms ease;
+}
+
+.agent-corner-launcher:hover {
+  color: #1d4ed8;
+  border-color: rgba(147, 197, 253, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 16px 38px rgba(15, 23, 42, 0.16),
+    0 5px 14px rgba(37, 99, 235, 0.1);
+  transform: translateY(-2px);
+}
+
+.agent-corner-launcher:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.agent-corner-launcher:focus-visible {
+  outline: 3px solid rgba(147, 197, 253, 0.55);
+  outline-offset: 3px;
+}
+
+.agent-corner-launcher-icon {
+  width: 31px;
+  height: 22px;
+}
+
+.agent-corner-status {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  box-shadow: 0 3px 9px rgba(15, 23, 42, 0.16);
+}
+
+.agent-corner-status-progress {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #dbeafe;
+}
+
+.agent-corner-status-review {
+  min-width: 20px;
+  padding: 0 4px;
+  color: #fff;
+  background: #d97706;
+}
+
+.agent-corner-status-success {
+  color: #fff;
+  background: #059669;
+}
+
+.agent-corner-status-warning {
+  color: #fff;
+  background: #d97706;
+}
+
+@keyframes agentIntentPanelEnter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes agentIntentPanelExit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(7px) scale(0.985); }
+}
+
+@keyframes agentCornerLauncherEnter {
+  from { opacity: 0; transform: translateY(7px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 767px) {
+  .agent-intent-panel {
+    border-radius: 24px;
+    padding: 13px 14px;
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .agent-intent-controls {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .agent-intent-main-action {
+    width: 100%;
+  }
+
+  .agent-intent-more {
+    margin-left: 0;
+  }
+
+  .agent-intent-advanced-inner {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .agent-intent-active-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-global-overlay {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
+  }
+
+  .agent-global-overlay-panel {
+    max-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
+  }
+
+  .agent-corner-launcher-wrap {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .agent-corner-launcher {
+    width: 52px;
+    height: 52px;
+  }
+
+  .agent-global-overlay[data-avoid-bottom-nav="true"],
+  .agent-corner-launcher-wrap[data-avoid-bottom-nav="true"] {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .agent-global-overlay[data-avoid-bottom-nav="true"] .agent-global-overlay-panel {
+    max-height: calc(100dvh - 90px - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (hover: none) {
+  .agent-intent-panel {
+    background: rgba(255, 255, 255, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-intent-panel,
+  .agent-intent-advanced,
+  .agent-global-overlay-panel,
+  .agent-corner-launcher {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
 .analysis-notice-compact-shell {
   flex: 0 1 0%;
   max-width: 0;
@@ -1456,6 +2026,10 @@ body {
     flex: 1 1 100%;
   }
 
+  .editor-liquid-tabs-three {
+    --tab-width: calc((100% - var(--tab-gap) - var(--tab-gap)) / 3);
+  }
+
   .editor-liquid-tab {
     flex: 1 1 0;
   }
@@ -1831,4 +2405,69 @@ body {
 .dropdown-fade-in {
   animation: dropdownFadeIn 0.2s ease forwards;
   transform-origin: top center;
+}
+
+/* Resume Agent Dock transitions */
+@keyframes agentDockPanelOpen {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes agentDockPanelClose {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.975);
+  }
+}
+
+@keyframes agentDockContentEnter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.agent-dock-panel-open {
+  animation: agentDockPanelOpen 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: bottom center;
+}
+
+.agent-dock-panel-close {
+  animation: agentDockPanelClose 180ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+  transform-origin: bottom center;
+}
+
+.agent-dock-compact-enter {
+  animation: agentDockPanelOpen 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: bottom center;
+}
+
+.agent-dock-content-enter {
+  animation: agentDockContentEnter 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-dock-panel-open,
+  .agent-dock-panel-close,
+  .agent-dock-compact-enter,
+  .agent-dock-content-enter {
+    animation-duration: 1ms;
+  }
 }

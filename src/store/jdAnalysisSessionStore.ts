@@ -20,13 +20,16 @@ export interface JDAnalysisSessionState {
   error: string | null
   notice: JDAnalysisNotice | null
   runId: number
-  setSession: (patch: Partial<Omit<JDAnalysisSessionState, 'setSession' | 'beginAnalysis' | 'isCurrentRun' | 'finishAnalysis' | 'abortAnalysis' | 'clearAnalysisDisplay' | 'resetSession'>>) => void
+  pendingAutoAnalyze: boolean
+  setSession: (patch: Partial<Omit<JDAnalysisSessionState, 'setSession' | 'beginAnalysis' | 'isCurrentRun' | 'finishAnalysis' | 'abortAnalysis' | 'clearAnalysisDisplay' | 'resetSession' | 'requestAutoAnalysis' | 'consumeAutoAnalysis'>>) => void
   beginAnalysis: (resumeId: string) => { controller: AbortController; runId: number }
   isCurrentRun: (runId: number, controller: AbortController) => boolean
   finishAnalysis: (runId: number, controller: AbortController) => void
   abortAnalysis: () => void
   clearAnalysisDisplay: () => void
   resetSession: () => void
+  requestAutoAnalysis: (data: { resumeId: string; sourceKey: string; jdText: string }) => void
+  consumeAutoAnalysis: () => void
 }
 
 let activeController: AbortController | null = null
@@ -43,6 +46,7 @@ const initialSession = {
   error: null,
   notice: null,
   runId: 0,
+  pendingAutoAnalyze: false,
 }
 
 export const useJDAnalysisSessionStore = create<JDAnalysisSessionState>((set, get) => ({
@@ -108,4 +112,17 @@ export const useJDAnalysisSessionStore = create<JDAnalysisSessionState>((set, ge
       runId: state.runId + 1,
     }))
   },
+  requestAutoAnalysis: ({ resumeId, sourceKey, jdText }) => {
+    activeController?.abort()
+    activeController = null
+    set((state) => ({
+      ...initialSession,
+      resumeId,
+      selectedSourceKey: sourceKey,
+      jdText,
+      pendingAutoAnalyze: true,
+      runId: state.runId + 1,
+    }))
+  },
+  consumeAutoAnalysis: () => set({ pendingAutoAnalyze: false }),
 }))
