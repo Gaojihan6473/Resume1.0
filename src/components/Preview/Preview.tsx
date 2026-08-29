@@ -171,7 +171,12 @@ function cachePreviewDocument(key: string, sourceHtml: string, doc: Document, he
 function restoreCachedPreviewDocument(doc: Document, cached: PreviewDocumentCacheEntry): boolean {
   const parsed = new DOMParser().parseFromString(cached.html, 'text/html')
   const cachedStack = parsed.querySelector('#resume-page-stack')
-  if (!cachedStack?.querySelector('.resume-page-frame')) return false
+  if (
+    !cachedStack?.querySelector('.resume-page-frame') ||
+    !doc.documentElement ||
+    !doc.head ||
+    !doc.body
+  ) return false
 
   doc.documentElement.lang = parsed.documentElement.lang || 'zh-CN'
   doc.title = parsed.title
@@ -796,7 +801,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const renderPreviewDocument = useCallback(() => {
     const iframe = iframeRef.current
     const doc = iframe?.contentDocument
-    if (!doc) return
+    if (!doc?.documentElement || !doc.head || !doc.body) return
 
     const cachedPreview = canCachePreview ? getCachedPreviewDocument(previewCacheKey, previewHtml) : null
     if (cachedPreview && restoreCachedPreviewDocument(doc, cachedPreview)) {
