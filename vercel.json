@@ -1,7 +1,7 @@
 {
   "framework": "vite",
-  "buildCommand": "yarn build",
-  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 yarn install",
+  "buildCommand": "npm run build",
+  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci",
   "outputDirectory": "dist",
   "functions": {
     "api/render-resume-pdf.js": {
