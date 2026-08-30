@@ -67,7 +67,7 @@ export function Editor({
   const basicInfoRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({} as Record<SectionId, HTMLDivElement | null>)
   const tabHighlightStyle = {
-    '--active-tab-index': activeTab === 'edit' ? 0 : activeTab === 'jd' ? 1 : 2,
+    '--active-tab-index': activeTab === 'agent' ? 1 : 0,
   } as CSSProperties
 
   const handleSetExpandedSection = (newSection: SectionId | 'basic' | null) => {
@@ -134,7 +134,7 @@ export function Editor({
             <>
               <span className="relative z-[1] h-7 w-px shrink-0 rounded-full bg-gradient-to-b from-transparent via-slate-300/70 to-transparent" />
               <div
-                className={`editor-liquid-tabs ${showAgentTab ? 'editor-liquid-tabs-three' : ''}`}
+                className={`editor-liquid-tabs ${showAgentTab ? '' : 'editor-liquid-tabs-single'} ${activeTab === 'jd' ? 'editor-liquid-tabs-no-active' : ''}`}
                 style={tabHighlightStyle}
               >
               <EditorTabButton
@@ -142,12 +142,6 @@ export function Editor({
                 onClick={() => onTabChange('edit')}
               >
                 简历编辑
-              </EditorTabButton>
-              <EditorTabButton
-                active={activeTab === 'jd'}
-                onClick={() => onTabChange('jd')}
-              >
-                JD分析
               </EditorTabButton>
               {showAgentTab && (
                 <EditorTabButton

@@ -172,8 +172,15 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
 
   configure: (data) => set((state) => {
     if (['running', 'review', 'creating', 'completed'].includes(state.status)) return state
+    const jobContextChanged = (
+      (data.applicationId !== undefined && data.applicationId !== state.applicationId)
+      || (data.jobSource !== undefined && data.jobSource !== state.jobSource)
+      || (data.company !== undefined && data.company !== state.company)
+      || (data.position !== undefined && data.position !== state.position)
+    )
     return {
       ...data,
+      ...(jobContextChanged && data.versionTitle === undefined ? { versionTitle: '' } : {}),
       status: state.status === 'idle' ? 'configuring' : state.status,
       error: null,
       errorCode: null,
@@ -232,6 +239,7 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
       applicationLinkStatus: 'idle',
       error: null,
       errorCode: null,
+      versionTitle: defaultVersionTitle(state.company, state.position),
       isRightPanelCollapsed: false,
       previewMode: 'draft',
     })
@@ -265,7 +273,6 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
           agentDraftResumeData: normalizeResumeData(baseData),
           recordId: event.recordId,
           historyPersisted: event.historyPersisted,
-          versionTitle: state.versionTitle || defaultVersionTitle(state.company, state.position),
           previewMode: 'draft',
         })
         telemetry('agent_run_succeeded', { runId, completionStatus: event.completionStatus })
@@ -321,8 +328,8 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
       mustKeep: state.mustKeep,
       resumeHash: state.resumeHash,
       jdHash: state.jdHash,
-      versionTitle: state.versionTitle,
-      isRightPanelCollapsed: false,
+      versionTitle: '',
+      isRightPanelCollapsed: true,
     })
   },
 
@@ -364,6 +371,9 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
       proposal: result.proposal,
       recordId,
       historyPersisted: true,
+      company: result.source.company,
+      position: result.source.position,
+      versionTitle: defaultVersionTitle(result.source.company, result.source.position),
       acceptedPatchKeys: validAcceptedKeys,
       rejectedPatchKeys: state.rejectedPatchKeys.filter((key) => result.proposal?.patches.some((patch) => patch.key === key)),
       agentDraftResumeData: normalizeResumeData(baseData),
@@ -380,7 +390,7 @@ export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) =>
     const state = get()
     const patch = state.proposal?.patches.find((item) => item.key === patchKey)
     if (!patch) return { success: false, error: '找不到该修改' }
-    if (patch.risk === 'high') return { success: false, error: '高风险修改不能应用' }
+    if (patch.risk === 'high' && !mediumConfirmed) return { success: false, error: 'HIGH_CONFIRM_REQUIRED' }
     if (patch.risk === 'medium' && !mediumConfirmed) return { success: false, error: 'MEDIUM_CONFIRM_REQUIRED' }
     const validation = validateResumeAgentPatch(baseData, patch)
     if (!validation.valid) return { success: false, error: validation.reason || '修改位置已失效' }

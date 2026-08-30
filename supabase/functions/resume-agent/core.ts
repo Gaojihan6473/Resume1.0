@@ -6,6 +6,60 @@ export const RESUME_AGENT_LIMITS = {
   maxCompletionTokens: 20_000,
 } as const
 
+export const MAX_HIGH_RISK_PATCHES = 2
+
+function riskReasonPriority(reason: string): number {
+  if (/新增.*(?:数字|日期|金额)|数字.*缺少.*证据/.test(reason)) return 100
+  if (/(?:新增|替换).*技能.*缺少.*证据/.test(reason)) return 95
+  if (/无法.*核实.*证据|引用.*证据.*无法核实|缺少.*明确证据/.test(reason)) return 90
+  if (/锚点|唯一匹配|修改位置/.test(reason)) return 80
+  if (/冲突|不支持的字段|列表已变化/.test(reason)) return 70
+  return 10
+}
+
+export function selectPrimaryResumeAgentRiskReason(reasons: string[]): string | null {
+  const uniqueReasons = [...new Set(reasons.map((reason) => reason.trim()).filter(Boolean))]
+  if (!uniqueReasons.length) return null
+  return uniqueReasons
+    .map((reason, index) => ({ reason, index, priority: riskReasonPriority(reason) }))
+    .sort((left, right) => right.priority - left.priority || left.index - right.index)[0].reason
+}
+
+export function normalizeResumeAgentPatchRiskReason(
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const reasons = Array.isArray(patch.riskReasons)
+    ? patch.riskReasons.filter((reason): reason is string => typeof reason === 'string')
+    : []
+  const primaryReason = selectPrimaryResumeAgentRiskReason(reasons)
+  return {
+    ...patch,
+    riskReasons: primaryReason ? [primaryReason] : [],
+  }
+}
+
+export function capResumeAgentHighRiskPatches(
+  patches: Record<string, unknown>[],
+  limit = MAX_HIGH_RISK_PATCHES,
+): { patches: Record<string, unknown>[]; omittedPatches: Record<string, unknown>[] } {
+  const normalized = patches.map(normalizeResumeAgentPatchRiskReason)
+  const highRiskCandidates = normalized
+    .map((patch, index) => {
+      const reason = Array.isArray(patch.riskReasons) && typeof patch.riskReasons[0] === 'string'
+        ? patch.riskReasons[0]
+        : ''
+      return { index, priority: riskReasonPriority(reason) }
+    })
+    .filter(({ index }) => normalized[index].risk === 'high')
+    .sort((left, right) => right.priority - left.priority || left.index - right.index)
+  const retainedHighRiskIndexes = new Set(highRiskCandidates.slice(0, Math.max(0, limit)).map(({ index }) => index))
+  const omittedHighRiskIndexes = new Set(highRiskCandidates.slice(Math.max(0, limit)).map(({ index }) => index))
+  return {
+    patches: normalized.filter((patch, index) => patch.risk !== 'high' || retainedHighRiskIndexes.has(index)),
+    omittedPatches: normalized.filter((_patch, index) => omittedHighRiskIndexes.has(index)),
+  }
+}
+
 export interface ResumeAgentBudgetSnapshot {
   elapsedMs: number
   modelCalls: number
@@ -39,11 +93,12 @@ export function markResumeAgentPatchReviewOnly(
   const existingReasons = Array.isArray(patch.riskReasons)
     ? patch.riskReasons.filter((reason): reason is string => typeof reason === 'string')
     : []
+  const primaryReason = selectPrimaryResumeAgentRiskReason([...existingReasons, ...reasons.filter(Boolean)])
   return {
     ...patch,
     risk: 'high',
     anchorStatus: 'invalid',
-    riskReasons: [...new Set([...existingReasons, ...reasons.filter(Boolean)])],
+    riskReasons: primaryReason ? [primaryReason] : ['修改未通过安全校验'],
   }
 }
 

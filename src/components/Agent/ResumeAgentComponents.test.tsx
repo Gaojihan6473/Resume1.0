@@ -8,6 +8,7 @@ import { createDefaultResumeData } from '../../types/resume'
 import type { ResumeAgentProposal } from '../../types/resumeAgent'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { ResumeAgentConfigPanel } from './ResumeAgentConfigPanel'
+import { ResumeAgentHeaderNotice } from './ResumeAgentHeaderNotice'
 import { ResumeAgentTaskPanel } from './ResumeAgentTaskPanel'
 
 const baseData = createDefaultResumeData()
@@ -40,8 +41,14 @@ describe('resume agent components', () => {
     })
     render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
     await user.click(screen.getByRole('button', { name: '继续确认' }))
-    expect(await screen.findByText('确认后开始生成岗位专属方案')).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: '确认后开始生成岗位专属方案' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '确认并开始' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: '返回修改' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeEnabled()
   })
 
   it('returns from the locked review state to the previous configuration', async () => {
@@ -53,13 +60,40 @@ describe('resume agent components', () => {
     })
     render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
 
-    await user.click(screen.getByRole('button', { name: '返回配置' }))
+    expect(screen.getByText('方案已生成，等待审核')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '清空任务' }))
 
     expect(useResumeAgentSessionStore.getState()).toMatchObject({
       status: 'configuring', runId: null, resumeId: 'resume-1',
       jdText: '负责产品规划与跨团队交付', company: '示例科技', position: '产品经理', proposal: null,
     })
-    expect(screen.getByText('生成可审核的岗位专属版本')).toBeInTheDocument()
+    expect(screen.getByText('目标岗位')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeEnabled()
+    expect(screen.queryByText('生成可审核的岗位专属版本')).not.toBeInTheDocument()
+  })
+
+  it('keeps advanced requirements collapsed until requested', async () => {
+    const user = userEvent.setup()
+    useResumeAgentSessionStore.setState({
+      userId: 'user-1', status: 'configuring', resumeId: 'resume-1', jobSource: 'manual',
+      jdText: '负责产品规划、用户研究和跨团队交付。',
+    })
+    render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
+
+    const toggle = screen.getByRole('button', { name: '更多要求' })
+    const advanced = document.getElementById('agent-config-advanced-requirements')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(advanced).toHaveAttribute('aria-hidden', 'true')
+    expect(advanced).not.toHaveClass('is-open')
+
+    await user.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(advanced).toHaveAttribute('aria-hidden', 'false')
+    expect(advanced).toHaveClass('is-open')
+    expect(screen.getByRole('group', { name: '目标页数' })).toBeInTheDocument()
   })
 
   it('requires per-item fact confirmation for medium risk', async () => {
@@ -68,7 +102,7 @@ describe('resume agent components', () => {
       userId: 'user-1', status: 'review', completionStatus: 'success', proposal: proposal('medium'),
       agentDraftResumeData: baseData, versionTitle: '示例科技-产品经理-v1', historyPersisted: true,
     })
-    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} basePageCount={1} draftPageCount={1} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
+    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
     await user.click(screen.getByRole('button', { name: '接受' }))
     expect(screen.getByText('请确认这项内容符合真实经历')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '已核实事实' }))
@@ -85,43 +119,95 @@ describe('resume agent components', () => {
       agentDraftResumeData: baseData, historyPersisted: true,
     })
 
-    const view = render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} basePageCount={1} draftPageCount={1} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
+    const view = render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
 
     expect(view.getByText('当前简历中没有足够证据支持安全修改。')).toBeInTheDocument()
   })
 
-  it('keeps a high-risk suggestion visible as review-only', () => {
+  it('allows a high-risk suggestion after explicit confirmation', async () => {
+    const user = userEvent.setup()
     const highRiskProposal = proposal('high')
-    highRiskProposal.patches[0].anchorStatus = 'invalid'
-    highRiskProposal.patches[0].riskReasons = ['正文锚点不是唯一匹配']
+    highRiskProposal.patches[0].riskReasons = ['新增数字缺少明确证据', '次要风险原因']
     useResumeAgentSessionStore.setState({
       userId: 'user-1', status: 'review', completionStatus: 'partial', proposal: highRiskProposal,
       agentDraftResumeData: baseData, versionTitle: '示例科技-产品经理-v1', historyPersisted: true,
     })
 
-    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} basePageCount={1} draftPageCount={1} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
+    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
 
     expect(screen.getByText('高风险')).toBeInTheDocument()
-    expect(screen.getByText('正文锚点不是唯一匹配')).toBeInTheDocument()
-    expect(screen.getByText('仅供参考')).toBeInTheDocument()
-    expect(screen.getByText('已接受 0 项，待处理 0 项')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '接受' })).not.toBeInTheDocument()
+    expect(screen.getByText('新增数字缺少明确证据')).toBeInTheDocument()
+    expect(screen.queryByText('次要风险原因')).not.toBeInTheDocument()
+    expect(screen.getByText('已接受 0 项，待处理 1 项')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '接受' }))
+    expect(screen.getByText('请确认接受这项高风险修改')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '确认并接受' }))
+
+    expect(screen.getByText('已接受 1 项，待处理 0 项')).toBeInTheDocument()
   })
 
-  it('clears an in-progress task and returns to configuration for a rerun', async () => {
-    const user = userEvent.setup()
+  it('shows at most two high-risk suggestions from older saved proposals', () => {
+    const highRiskProposal = proposal('high')
+    highRiskProposal.patches = [0, 1, 2].map((index) => ({
+      ...highRiskProposal.patches[0],
+      key: `high-risk-${index + 1}`,
+      itemTitle: `高风险建议 ${index + 1}`,
+      riskReasons: [`风险原因 ${index + 1}`],
+      anchorStatus: 'invalid',
+    }))
+    useResumeAgentSessionStore.setState({
+      userId: 'user-1', status: 'review', completionStatus: 'partial', proposal: highRiskProposal,
+      agentDraftResumeData: baseData, versionTitle: '示例科技-产品经理-v1', historyPersisted: true,
+    })
+
+    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
+
+    expect(screen.getAllByText('高风险')).toHaveLength(2)
+    expect(screen.getByText('高风险建议 1')).toBeInTheDocument()
+    expect(screen.getByText('高风险建议 2')).toBeInTheDocument()
+    expect(screen.queryByText('高风险建议 3')).not.toBeInTheDocument()
+  })
+
+  it('does not show redundant task actions in the running details panel', () => {
     useResumeAgentSessionStore.setState({
       userId: 'user-1', status: 'running', runId: 'run-1', resumeId: 'resume-1',
       jdText: '负责产品规划与跨团队交付', company: '示例科技', position: '产品经理',
       resumeHash: 'resume-hash', jdHash: 'jd-hash', stage: 'generate_patches',
     })
 
-    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} basePageCount={1} draftPageCount={1} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
-    await user.click(screen.getByRole('button', { name: '清空并重新运行' }))
+    render(<MemoryRouter><ResumeAgentTaskPanel baseData={baseData} isStale={false} onLocatePatch={() => undefined} /></MemoryRouter>)
+    expect(screen.queryByRole('button', { name: '取消任务' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '清空并重新运行' })).not.toBeInTheDocument()
+  })
 
-    expect(useResumeAgentSessionStore.getState()).toMatchObject({
-      status: 'configuring', runId: null, resumeId: 'resume-1',
-      jdText: '负责产品规划与跨团队交付', proposal: null,
-    })
+  it('collapses long header notices and expands them on request', async () => {
+    const user = userEvent.setup()
+    render(<ResumeAgentHeaderNotice notices={[
+      '本次包含需核实或高风险建议；高风险项需逐条确认后才能接受。',
+      '岗位专属草稿当前为 2 页，基础简历为 1 页。页数是软约束，不影响创建。',
+    ]} />)
+
+    const toggle = screen.getByRole('button', { name: '展开完整提示' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(toggle)
+
+    expect(screen.getByRole('button', { name: '收起完整提示' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('岗位专属草稿当前为 2 页，基础简历为 1 页。页数是软约束，不影响创建。')).toBeInTheDocument()
+  })
+
+  it('makes a single narrow-panel warning expandable', async () => {
+    const user = userEvent.setup()
+    const notice = '本次包含需核实或高风险建议；高风险项需逐条确认后才能接受。'
+    render(<ResumeAgentHeaderNotice notices={[notice]} />)
+
+    const toggle = screen.getByRole('button', { name: '展开完整提示' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(toggle)
+
+    expect(screen.getByRole('button', { name: '收起完整提示' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(notice)).toBeInTheDocument()
   })
 })

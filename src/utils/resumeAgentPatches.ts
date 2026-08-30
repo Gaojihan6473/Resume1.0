@@ -122,9 +122,6 @@ function replaceExactTextInRichHtml(html: string, originalText: string, revisedT
 }
 
 export function validateResumeAgentPatch(base: ResumeData, patch: ResumeAgentPatch): PatchValidationResult {
-  if (patch.risk === 'high') {
-    return { valid: false, reason: '高风险修改不能应用', matchCount: 0 }
-  }
   if (patch.anchorStatus !== 'valid') {
     return { valid: false, reason: '修改位置已失效', matchCount: 0 }
   }

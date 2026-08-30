@@ -11,7 +11,6 @@ import {
   Loader2,
   MapPin,
   RotateCcw,
-  Square,
   XCircle,
 } from 'lucide-react'
 import { createResume, fetchResumes } from '../../lib/api'
@@ -22,13 +21,12 @@ import type { ResumeAgentPatch, ResumeAgentStage } from '../../types/resumeAgent
 import type { ResumeData } from '../../types/resume'
 import { normalizeResumeData, resumeDataToRecord } from '../../utils/resumeData'
 import { createResumeAgentSource, findResumeCreatedForRun, resolveResumeAgentVersionTitle } from '../../utils/resumeAgentDelivery'
+import { countPendingResumeAgentPatches, getVisibleResumeAgentPatches } from '../../utils/resumeAgentReview'
 import { scheduleResumePdfRefresh } from '../../utils/saveResume'
 import { toast } from '../Toast'
 
 interface ResumeAgentTaskPanelProps {
   baseData: ResumeData
-  basePageCount: number | null
-  draftPageCount: number | null
   isStale: boolean
   onLocatePatch: (patch: ResumeAgentPatch) => void
 }
@@ -47,18 +45,15 @@ const RISK_CLASS = {
   medium: 'bg-amber-50 text-amber-700 ring-amber-100',
   high: 'bg-red-50 text-red-700 ring-red-100',
 } as const
-
 export function ResumeAgentTaskPanel({
   baseData,
-  basePageCount,
-  draftPageCount,
   isStale,
   onLocatePatch,
 }: ResumeAgentTaskPanelProps) {
   const navigate = useNavigate()
   const agent = useResumeAgentSessionStore()
   const updateApplication = useApplicationStore((state) => state.updateApplication)
-  const [mediumConfirmationKey, setMediumConfirmationKey] = useState<string | null>(null)
+  const [riskConfirmationKey, setRiskConfirmationKey] = useState<string | null>(null)
   const [pendingCreationConfirmation, setPendingCreationConfirmation] = useState(false)
   const [exporting, setExporting] = useState(false)
 
@@ -83,28 +78,20 @@ export function ResumeAgentTaskPanel({
     })}`)
   }, [agent.completionStatus, agent.proposal])
 
-  const patches = agent.proposal?.patches || []
+  const patches = useMemo(() => {
+    return getVisibleResumeAgentPatches(agent.proposal?.patches || [])
+  }, [agent.proposal])
   const accepted = useMemo(() => new Set(agent.acceptedPatchKeys), [agent.acceptedPatchKeys])
   const rejected = useMemo(() => new Set(agent.rejectedPatchKeys), [agent.rejectedPatchKeys])
-  const pendingCount = patches.filter((patch) => patch.risk !== 'high' && !accepted.has(patch.key) && !rejected.has(patch.key)).length
-  const pageWarning = useMemo(() => {
-    if (!draftPageCount) return null
-    if (agent.targetPages === 'keep' && basePageCount && draftPageCount !== basePageCount) {
-      return `岗位专属草稿当前为 ${draftPageCount} 页，基础简历为 ${basePageCount} 页`
-    }
-    if (agent.targetPages !== 'keep' && draftPageCount !== agent.targetPages) {
-      return `岗位专属草稿当前为 ${draftPageCount} 页，未达到 ${agent.targetPages} 页目标`
-    }
-    return null
-  }, [agent.targetPages, basePageCount, draftPageCount])
-
+  const acceptedCount = patches.filter((patch) => accepted.has(patch.key)).length
+  const pendingCount = countPendingResumeAgentPatches(patches, agent.acceptedPatchKeys, agent.rejectedPatchKeys)
   const acceptPatch = (patch: ResumeAgentPatch, confirmed = false) => {
     const result = agent.acceptPatch(baseData, patch.key, confirmed)
     if (!result.success) {
-      if (result.error === 'MEDIUM_CONFIRM_REQUIRED') setMediumConfirmationKey(patch.key)
+      if (result.error === 'MEDIUM_CONFIRM_REQUIRED' || result.error === 'HIGH_CONFIRM_REQUIRED') setRiskConfirmationKey(patch.key)
       else toast(result.error || '无法应用修改', 'error')
     } else {
-      setMediumConfirmationKey(null)
+      setRiskConfirmationKey(null)
     }
   }
 
@@ -219,10 +206,6 @@ export function ResumeAgentTaskPanel({
             )
           })}
         </div>
-        <div className="mt-auto grid grid-cols-2 gap-2">
-          <button type="button" onClick={agent.cancelRun} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50"><Square className="h-3.5 w-3.5" />取消任务</button>
-          <button type="button" onClick={agent.clearTaskForRetry} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2.5 text-sm font-medium text-cyan-700 hover:bg-cyan-100"><RotateCcw className="h-3.5 w-3.5" />清空并重新运行</button>
-        </div>
       </div>
     )
   }
@@ -263,29 +246,27 @@ export function ResumeAgentTaskPanel({
   return (
     <div className="min-h-full p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div><h3 className="text-sm font-semibold text-slate-900">审核修改建议</h3><p className="mt-1 text-xs text-slate-500">已接受 {accepted.size} 项，待处理 {pendingCount} 项</p></div>
+        <div><h3 className="text-sm font-semibold text-slate-900">审核修改建议</h3><p className="mt-1 text-xs text-slate-500">已接受 {acceptedCount} 项，待处理 {pendingCount} 项</p></div>
         <button type="button" disabled={agent.status === 'creating'} onClick={() => { const result = agent.acceptAllLowRisk(baseData); if (!result.success) toast(result.error || '批量应用失败', 'error') }} className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">接受全部低风险</button>
       </div>
 
-      {agent.completionStatus === 'partial' && <div className="mb-3 flex gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />本次包含需核实或高风险建议；高风险项仅供参考，不会应用到岗位专属版本。</div>}
       {!agent.historyPersisted && <div className="mb-3 flex gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>当前结果可继续审核，但刷新后可能无法恢复。<button type="button" onClick={() => void agent.retryHistoryPersistence()} className="ml-1 font-medium underline">重新校验并保存</button></span></div>}
       {isStale && <div className="mb-3 flex gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />基础简历已变化，修改建议已失效，请重新运行 Agent。</div>}
-      {pageWarning && <div className="mb-3 flex gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{pageWarning}。页数是软约束，不影响创建。</div>}
 
       <div className="space-y-3">
         {patches.map((patch) => {
           const isAccepted = accepted.has(patch.key)
           const isRejected = rejected.has(patch.key)
-          const mediumConfirming = mediumConfirmationKey === patch.key
+          const riskConfirming = riskConfirmationKey === patch.key
           return (
             <article key={patch.key} className={`rounded-2xl border p-3 ${isAccepted ? 'border-emerald-200 bg-emerald-50/30' : isRejected ? 'border-slate-200 bg-slate-50 opacity-75' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-800">{patch.itemTitle}</p><p className="mt-1 text-xs leading-5 text-slate-500">{patch.reason}</p></div><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ring-1 ${RISK_CLASS[patch.risk]}`}>{RISK_LABEL[patch.risk]}</span></div>
               <div className="mt-2 rounded-xl bg-slate-50 p-2.5 text-xs leading-5"><p className="text-slate-400">修改前</p><p className="line-clamp-3 text-slate-600">{getPatchBefore(patch)}</p><div className="my-1 flex items-center gap-1 text-cyan-600"><ChevronRight className="h-3.5 w-3.5" />建议</div><p className="line-clamp-4 text-slate-800">{getPatchAfter(patch)}</p></div>
-              {patch.riskReasons.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{patch.riskReasons.map((reason, index) => <span key={`${patch.key}-risk-${index}`} className={`rounded-full px-2 py-1 text-[10px] leading-4 ring-1 ${patch.risk === 'high' ? 'bg-red-50 text-red-700 ring-red-100' : 'bg-amber-50 text-amber-700 ring-amber-100'}`}>{reason}</span>)}</div>}
-              {mediumConfirming && <div className="mt-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900"><p className="font-medium">请确认这项内容符合真实经历</p><p className="mt-1 text-amber-700">跨条目证据或责任强度变化需要你逐项核实。</p><div className="mt-2 flex gap-2"><button type="button" onClick={() => setMediumConfirmationKey(null)} className="flex-1 rounded-lg bg-white px-2 py-1.5 ring-1 ring-amber-200">返回</button><button type="button" onClick={() => acceptPatch(patch, true)} className="flex-1 rounded-lg bg-amber-600 px-2 py-1.5 font-medium text-white">已核实事实</button></div></div>}
+              {patch.riskReasons.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{patch.riskReasons.slice(0, 1).map((reason, index) => <span key={`${patch.key}-risk-${index}`} className={`rounded-full px-2 py-1 text-[10px] leading-4 ring-1 ${patch.risk === 'high' ? 'bg-red-50 text-red-700 ring-red-100' : 'bg-amber-50 text-amber-700 ring-amber-100'}`}>{reason}</span>)}</div>}
+              {riskConfirming && <div className={`mt-2 rounded-xl p-3 text-xs leading-5 ${patch.risk === 'high' ? 'bg-red-50 text-red-900' : 'bg-amber-50 text-amber-900'}`}><p className="font-medium">{patch.risk === 'high' ? '请确认接受这项高风险修改' : '请确认这项内容符合真实经历'}</p><p className={`mt-1 ${patch.risk === 'high' ? 'text-red-700' : 'text-amber-700'}`}>{patch.risk === 'high' ? '该内容存在事实或证据风险，确认真实无误后才会写入岗位专属草稿。' : '跨条目证据或责任强度变化需要你逐项核实。'}</p><div className="mt-2 flex gap-2"><button type="button" onClick={() => setRiskConfirmationKey(null)} className={`flex-1 rounded-lg bg-white px-2 py-1.5 ring-1 ${patch.risk === 'high' ? 'ring-red-200' : 'ring-amber-200'}`}>返回</button><button type="button" onClick={() => acceptPatch(patch, true)} className={`flex-1 rounded-lg px-2 py-1.5 font-medium text-white ${patch.risk === 'high' ? 'bg-red-600' : 'bg-amber-600'}`}>{patch.risk === 'high' ? '确认并接受' : '已核实事实'}</button></div></div>}
               <div className="mt-2 flex items-center gap-2">
                 <button type="button" onClick={() => onLocatePatch(patch)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-cyan-700 hover:bg-cyan-50"><MapPin className="h-3.5 w-3.5" />定位</button>
-                {isAccepted || isRejected ? <button type="button" onClick={() => agent.resetPatchDecision(baseData, patch.key)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100"><RotateCcw className="h-3.5 w-3.5" />撤销决定</button> : <><button type="button" onClick={() => agent.rejectPatch(baseData, patch.key)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100"><XCircle className="h-3.5 w-3.5" />忽略</button>{patch.risk === 'high' ? <span className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-100"><AlertCircle className="h-3.5 w-3.5" />仅供参考</span> : <button type="button" disabled={isStale} onClick={() => acceptPatch(patch)} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"><Check className="h-3.5 w-3.5" />接受</button>}</>}
+                {isAccepted || isRejected ? <button type="button" onClick={() => agent.resetPatchDecision(baseData, patch.key)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100"><RotateCcw className="h-3.5 w-3.5" />撤销决定</button> : <><button type="button" onClick={() => agent.rejectPatch(baseData, patch.key)} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100"><XCircle className="h-3.5 w-3.5" />忽略</button><button type="button" disabled={isStale} onClick={() => acceptPatch(patch)} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"><Check className="h-3.5 w-3.5" />接受</button></>}
               </div>
             </article>
           )

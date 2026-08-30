@@ -7,6 +7,7 @@ import {
   FileText,
   Loader2,
   Play,
+  RotateCcw,
   X,
 } from 'lucide-react'
 import { FishLogo } from '../Brand/FishLogo'
@@ -22,6 +23,7 @@ import type { Application } from '../../types/application'
 import type { ResumeAgentStatus } from '../../types/resumeAgent'
 import { createAnalysisHash } from '../../utils/analysisHash'
 import { createResumeAgentHash } from '../../utils/resumeAgentHash'
+import { countPendingResumeAgentPatches } from '../../utils/resumeAgentReview'
 import { normalizeResumeData } from '../../utils/resumeData'
 import { CustomSelect } from '../Application/CustomSelect'
 import { toast } from '../Toast'
@@ -59,6 +61,11 @@ export function ResumeAgentLauncherPanel({
   const [loading, setLoading] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const activeTask = hasActiveResumeAgentTask(agent.status)
+  const pendingPatchCount = countPendingResumeAgentPatches(
+    agent.proposal?.patches || [],
+    agent.acceptedPatchKeys,
+    agent.rejectedPatchKeys,
+  )
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -137,7 +144,7 @@ export function ResumeAgentLauncherPanel({
     status: agent.status,
     stage: agent.stage,
     stageSummary: agent.stage ? agent.stageSummaries[agent.stage] : undefined,
-    patchCount: agent.proposal?.patches.length || 0,
+    patchCount: pendingPatchCount,
     hasResumes: cachedResumes.length > 0,
     hasSelectedResume: Boolean(selectedResume),
     hasApplications: applications.length > 0,
@@ -257,9 +264,15 @@ export function ResumeAgentLauncherPanel({
               : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
             <span className="truncate">{[selectedResume?.title, selectedApplication ? `${selectedApplication.company} · ${selectedApplication.position}` : agent.position].filter(Boolean).join(' → ') || '当前 Agent 任务'}</span>
           </span>
-          <button type="button" onClick={() => void handlePrimary()} className="agent-intent-primary">
-            {model.primaryLabel}
-          </button>
+          <div className="agent-intent-active-actions">
+            <button type="button" onClick={agent.clearTaskForRetry} className="agent-intent-secondary">
+              <RotateCcw className="h-4 w-4" />
+              清空任务
+            </button>
+            <button type="button" onClick={() => void handlePrimary()} className="agent-intent-primary">
+              {model.primaryLabel}
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -350,11 +363,16 @@ export function ResumeAgentGlobalLauncher() {
   const overlayRef = useRef<HTMLDivElement | null>(null)
   const launcherRef = useRef<HTMLButtonElement | null>(null)
   const restoreLauncherFocusRef = useRef(false)
+  const pendingPatchCount = countPendingResumeAgentPatches(
+    agent.proposal?.patches || [],
+    agent.acceptedPatchKeys,
+    agent.rejectedPatchKeys,
+  )
   const model = deriveResumeAgentLauncherModel({
     status: agent.status,
     stage: agent.stage,
     stageSummary: agent.stage ? agent.stageSummaries[agent.stage] : undefined,
-    patchCount: agent.proposal?.patches.length || 0,
+    patchCount: pendingPatchCount,
     hasResumes: true,
     hasSelectedResume: Boolean(agent.resumeId),
     hasApplications: true,
@@ -450,7 +468,7 @@ export function ResumeAgentGlobalLauncher() {
             <AgentLauncherStatusBadge
               status={agent.status}
               tone={model.tone}
-              patchCount={agent.proposal?.patches.length || 0}
+              patchCount={pendingPatchCount}
             />
           </button>
         </div>

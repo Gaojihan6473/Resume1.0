@@ -20,6 +20,7 @@ import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { Resume } from '../../lib/api'
 import { createDefaultResumeData } from '../../types/resume'
+import type { ResumeAgentPatch } from '../../types/resumeAgent'
 import { ResumeAgentGlobalLauncher, ResumeAgentLauncherPanel } from './ResumeAgentLauncher'
 
 const resume: Resume = {
@@ -55,6 +56,24 @@ const application = {
   appliedAt: null,
   created_at: '2026-08-23T00:00:00.000Z',
   updated_at: '2026-08-23T00:00:00.000Z',
+}
+
+function reviewPatches(count: number): ResumeAgentPatch[] {
+  return Array.from({ length: count }, (_, index) => ({
+    key: `patch-${index + 1}`,
+    kind: 'rich_text_replace',
+    section: 'summary',
+    itemTitle: '个人总结',
+    target: { itemId: null, field: 'content' },
+    originalText: `原文 ${index + 1}`,
+    revisedText: `建议 ${index + 1}`,
+    requirementIds: [],
+    evidenceKeys: [],
+    reason: '对齐岗位',
+    risk: 'low',
+    riskReasons: [],
+    anchorStatus: 'valid',
+  }))
 }
 
 function seedStores() {
@@ -150,9 +169,16 @@ describe('ResumeAgentLauncher', () => {
 
     act(() => useResumeAgentSessionStore.setState({
       status: 'review',
-      proposal: { patches: Array.from({ length: 101 }) } as never,
+      proposal: { patches: reviewPatches(101) } as never,
     }))
     expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('99+')
+
+    act(() => useResumeAgentSessionStore.setState({
+      proposal: { patches: reviewPatches(7) } as never,
+      acceptedPatchKeys: ['patch-1'],
+      rejectedPatchKeys: ['patch-2'],
+    }))
+    expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('5')
 
     act(() => useResumeAgentSessionStore.setState({ status: 'completed' }))
     expect(container.querySelector('[data-agent-status="success"]')).toBeInTheDocument()
@@ -166,7 +192,7 @@ describe('ResumeAgentLauncher', () => {
     seedStores()
     useResumeAgentSessionStore.setState({
       status: 'review',
-      proposal: { patches: Array.from({ length: 7 }) } as never,
+      proposal: { patches: reviewPatches(7) } as never,
     })
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -184,6 +210,26 @@ describe('ResumeAgentLauncher', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location-probe')).toHaveTextContent('/?tab=jd&agent=task')
     })
+  })
+
+  it.each(['running', 'review'] as const)('clears a %s task from the launcher panel', async (status) => {
+    const user = userEvent.setup()
+    seedStores()
+    useResumeAgentSessionStore.setState({
+      status,
+      proposal: { patches: reviewPatches(7) } as never,
+    })
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ResumeAgentGlobalLauncher />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /打开小鱼 Agent/ }))
+    await user.click(await screen.findByRole('button', { name: '清空任务' }))
+
+    expect(useResumeAgentSessionStore.getState().status).toBe('configuring')
+    expect(screen.getByRole('button', { name: '分析并生成建议' })).toBeInTheDocument()
   })
 
   it('closes with Escape or an outside click and restores focus to the launcher', async () => {

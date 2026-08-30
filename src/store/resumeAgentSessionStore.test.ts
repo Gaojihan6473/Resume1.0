@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultResumeData } from '../types/resume'
-import type { ResumeAgentProposal } from '../types/resumeAgent'
+import type { ResumeAgentProposal, ResumeAgentStreamEvent } from '../types/resumeAgent'
 import { isResumeAgentHistoryResult } from '../types/resumeAgent'
+
+const { streamResumeAgentMock } = vi.hoisted(() => ({ streamResumeAgentMock: vi.fn() }))
+vi.mock('../lib/resumeAgent', () => ({ streamResumeAgent: streamResumeAgentMock }))
+
 import { useResumeAgentSessionStore } from './resumeAgentSessionStore'
 
 function proposal(): ResumeAgentProposal {
@@ -19,7 +23,10 @@ function proposal(): ResumeAgentProposal {
   }
 }
 
-afterEach(() => useResumeAgentSessionStore.getState().reset())
+afterEach(() => {
+  streamResumeAgentMock.mockReset()
+  useResumeAgentSessionStore.getState().reset()
+})
 
 describe('resume agent session decisions', () => {
   it('rebuilds the draft from the frozen base when accepting and undoing', () => {
@@ -33,7 +40,7 @@ describe('resume agent session decisions', () => {
     expect(useResumeAgentSessionStore.getState().agentDraftResumeData?.summary.content).toContain('关注用户价值')
   })
 
-  it('requires an explicit confirmation for medium risk and blocks high risk', () => {
+  it('requires an explicit confirmation for medium and high risk', () => {
     const base = createDefaultResumeData()
     base.summary.content = '<p>关注用户价值。</p>'
     const medium = proposal()
@@ -42,7 +49,8 @@ describe('resume agent session decisions', () => {
     expect(useResumeAgentSessionStore.getState().acceptPatch(base, 'summary-patch').error).toBe('MEDIUM_CONFIRM_REQUIRED')
     medium.patches[0].risk = 'high'
     useResumeAgentSessionStore.setState({ proposal: medium })
-    expect(useResumeAgentSessionStore.getState().acceptPatch(base, 'summary-patch').success).toBe(false)
+    expect(useResumeAgentSessionStore.getState().acceptPatch(base, 'summary-patch').error).toBe('HIGH_CONFIRM_REQUIRED')
+    expect(useResumeAgentSessionStore.getState().acceptPatch(base, 'summary-patch', true).success).toBe(true)
   })
 
   it('narrows agent history without treating legacy analysis as agent output', () => {
@@ -62,7 +70,9 @@ describe('resume agent session decisions', () => {
       resumeHash: 'resume-hash',
       jdHash: 'jd-hash',
       proposal: proposal(),
+      versionTitle: '示例科技-产品经理-v1',
       acceptedPatchKeys: ['summary-patch'],
+      isRightPanelCollapsed: false,
     })
 
     useResumeAgentSessionStore.getState().clearTaskForRetry()
@@ -80,6 +90,102 @@ describe('resume agent session decisions', () => {
       jdHash: 'jd-hash',
       proposal: null,
       acceptedPatchKeys: [],
+      versionTitle: '',
+      isRightPanelCollapsed: true,
+    })
+  })
+
+  it('clears a stale generated title when the target job changes', () => {
+    useResumeAgentSessionStore.setState({
+      status: 'configuring',
+      applicationId: 'bytedance-job',
+      jobSource: 'application',
+      company: '字节跳动',
+      position: '分发策略产品经理',
+      versionTitle: '字节跳动-分发策略产品经理-v1',
+    })
+
+    useResumeAgentSessionStore.getState().configure({
+      applicationId: 'huawei-job',
+      company: '华为',
+      position: '互联网产品经理',
+    })
+
+    expect(useResumeAgentSessionStore.getState()).toMatchObject({
+      applicationId: 'huawei-job',
+      company: '华为',
+      position: '互联网产品经理',
+      versionTitle: '',
+    })
+  })
+
+  it('replaces a stale title with the current job title when a run starts', async () => {
+    const base = createDefaultResumeData()
+    streamResumeAgentMock.mockImplementationOnce(async (
+      _request: unknown,
+      onEvent: (event: ResumeAgentStreamEvent) => void,
+    ) => {
+      onEvent({
+        type: 'proposal',
+        completionStatus: 'success',
+        proposal: proposal(),
+        recordId: 'record-huawei',
+        historyPersisted: true,
+      })
+    })
+    useResumeAgentSessionStore.setState({
+      userId: 'user-1',
+      status: 'confirming',
+      resumeId: 'resume-1',
+      applicationId: 'huawei-job',
+      jobSource: 'application',
+      jdText: '负责互联网产品规划与设计',
+      company: '华为',
+      position: '互联网产品经理',
+      resumeHash: 'resume-hash',
+      jdHash: 'jd-hash',
+      versionTitle: '字节跳动-分发策略产品经理-v1',
+    })
+
+    await useResumeAgentSessionStore.getState().startRun(base)
+
+    expect(useResumeAgentSessionStore.getState()).toMatchObject({
+      status: 'review',
+      company: '华为',
+      position: '互联网产品经理',
+      versionTitle: '华为-互联网产品经理-v1',
+    })
+  })
+
+  it('regenerates the title from the restored history job snapshot', () => {
+    const base = createDefaultResumeData()
+    useResumeAgentSessionStore.setState({
+      status: 'configuring',
+      resumeHash: 'resume-hash',
+      versionTitle: '字节跳动-分发策略产品经理-v1',
+    })
+
+    const restored = useResumeAgentSessionStore.getState().restoreFromHistory({
+      kind: 'resume-agent',
+      schemaVersion: 1,
+      runId: 'run-huawei',
+      completionStatus: 'success',
+      plan: null,
+      proposal: proposal(),
+      source: {
+        resumeHash: 'resume-hash',
+        jdHash: 'jd-hash',
+        company: '华为',
+        position: '互联网产品经理',
+      },
+      runSummary: null,
+    }, base, 'record-huawei')
+
+    expect(restored).toBe(true)
+    expect(useResumeAgentSessionStore.getState()).toMatchObject({
+      company: '华为',
+      position: '互联网产品经理',
+      versionTitle: '华为-互联网产品经理-v1',
     })
   })
 })

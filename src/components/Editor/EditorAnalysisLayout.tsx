@@ -44,6 +44,7 @@ import { Suggestions, type SuggestionInteractionTarget } from '../Analytics/Sugg
 import { Preview } from '../Preview/Preview'
 import type { ResumeAnalysisFocus } from '../Preview/PreviewContent'
 import { ResumeAgentConfigPanel } from '../Agent/ResumeAgentConfigPanel'
+import { ResumeAgentHeaderNotice } from '../Agent/ResumeAgentHeaderNotice'
 import { ResumeAgentTaskPanel } from '../Agent/ResumeAgentTaskPanel'
 import { Editor, type EditorMainTab } from './Editor'
 
@@ -129,7 +130,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     isAnalyzing,
     analysisResult,
     analysisResumeHash,
-    hasAnalysisStarted,
     isRightPanelCollapsed,
     error,
     notice,
@@ -157,7 +157,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const visibleIsAnalyzing = isSessionForCurrentResume ? isAnalyzing : false
   const visibleAnalysisResult = isSessionForCurrentResume ? analysisResult : null
   const visibleAnalysisResumeHash = isSessionForCurrentResume ? analysisResumeHash : null
-  const visibleHasAnalysisStarted = isSessionForCurrentResume ? hasAnalysisStarted : false
   const visibleIsRightPanelCollapsed = isSessionForCurrentResume ? isRightPanelCollapsed : true
   const visibleError = isSessionForCurrentResume ? error : null
   const visibleNotice = isSessionForCurrentResume ? notice : null
@@ -396,22 +395,31 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     [activeTarget, flashKey, flashMode, flashTarget, hoverTarget, lockedTarget]
   )
 
-  const suggestionCount = visibleAnalysisResult?.sectionAnalyses.reduce(
-    (count, section) => count + section.suggestions.length,
-    0
-  ) ?? 0
   const isAgentMode = jdMode === 'agent'
-  const agentHasTask = !['idle', 'configuring', 'confirming'].includes(agent.status)
   const rightPanelCollapsed = isAgentMode ? agent.isRightPanelCollapsed : visibleIsRightPanelCollapsed
-  const shouldShowBookmark = isAgentMode
-    ? agentHasTask
-    : visibleHasAnalysisStarted || visibleIsAnalyzing || Boolean(visibleAnalysisResult) || Boolean(visibleError)
   const gridClass = rightPanelCollapsed
     ? 'grid-cols-[45%_minmax(0,1fr)_0]'
     : 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
 
   const isAgentDraftVisible = isAgentMode && agent.previewMode === 'draft' && Boolean(agent.agentDraftResumeData)
   const isAgentStale = Boolean(agent.resumeHash && agentResumeHash && agent.resumeHash !== agentResumeHash)
+  const agentHeaderNotices = useMemo(() => {
+    if (!agent.proposal || !['review', 'creating'].includes(agent.status) || agent.completionStatus === 'no_changes') return []
+
+    const notices: string[] = []
+    if (agent.completionStatus === 'partial') {
+      notices.push('本次包含需核实或高风险建议；高风险项需逐条确认后才能接受。')
+    }
+    if (draftPageCount) {
+      if (agent.targetPages === 'keep' && basePageCount && draftPageCount !== basePageCount) {
+        notices.push(`岗位专属草稿当前为 ${draftPageCount} 页，基础简历为 ${basePageCount} 页。页数是软约束，不影响创建。`)
+      } else if (agent.targetPages !== 'keep' && draftPageCount !== agent.targetPages) {
+        notices.push(`岗位专属草稿当前为 ${draftPageCount} 页，未达到 ${agent.targetPages} 页目标。页数是软约束，不影响创建。`)
+      }
+    }
+    return notices
+  }, [agent.completionStatus, agent.proposal, agent.status, agent.targetPages, basePageCount, draftPageCount])
+  const agentHeaderNoticeKey = agentHeaderNotices.join('|')
 
   const abortCurrentAnalysis = useCallback(() => {
     abortAnalysis()
@@ -1163,21 +1171,42 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         />
 
         {isAgentMode && agent.agentDraftResumeData && (
-          <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-sm backdrop-blur">
-            <button type="button" onClick={() => agent.setPreviewMode('base')} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${agent.previewMode === 'base' ? 'bg-slate-100 text-slate-800' : 'text-slate-500'}`}>基础简历</button>
-            <button type="button" onClick={() => agent.setPreviewMode('draft')} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${agent.previewMode === 'draft' ? 'bg-cyan-50 text-cyan-700' : 'text-slate-500'}`}>Agent 草稿</button>
+          <div
+            role="group"
+            aria-label="简历预览版本"
+            className="absolute left-1/2 top-3 z-30 grid w-[210px] -translate-x-1/2 grid-cols-2 rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur"
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-sm transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+                agent.previewMode === 'draft'
+                  ? 'translate-x-full bg-cyan-50 shadow-cyan-100/70'
+                  : 'translate-x-0 bg-slate-100 shadow-slate-200/70'
+              }`}
+            />
+            <button
+              type="button"
+              aria-pressed={agent.previewMode === 'base'}
+              onClick={() => agent.setPreviewMode('base')}
+              className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-300 motion-reduce:transition-none ${
+                agent.previewMode === 'base' ? 'text-slate-800' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              基础简历
+            </button>
+            <button
+              type="button"
+              aria-pressed={agent.previewMode === 'draft'}
+              onClick={() => agent.setPreviewMode('draft')}
+              className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-300 motion-reduce:transition-none ${
+                agent.previewMode === 'draft' ? 'text-cyan-700' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Agent 草稿
+            </button>
           </div>
         )}
 
-        {shouldShowBookmark && rightPanelCollapsed && (
-          <AnalysisBookmark
-            isOpen={!rightPanelCollapsed}
-            isAnalyzing={isAgentMode ? agent.status === 'running' : visibleIsAnalyzing}
-            hasError={isAgentMode ? agent.status === 'failed' : Boolean(visibleError)}
-            suggestionCount={isAgentMode ? agent.proposal?.patches.length || 0 : suggestionCount}
-            onClick={() => isAgentMode ? agent.setRightPanelCollapsed(false) : setSession({ isRightPanelCollapsed: false })}
-          />
-        )}
       </section>
 
       <aside
@@ -1192,10 +1221,15 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       >
         {isAgentMode ? (
           <div className="h-full min-w-80 overflow-y-auto overflow-x-hidden">
-            <div className="sticky top-0 z-10 flex justify-end border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
-              <button type="button" onClick={() => agent.setRightPanelCollapsed(true)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 hover:bg-white hover:text-slate-700"><PanelRightClose className="h-3.5 w-3.5" />收起</button>
+            <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
+              {agentHeaderNotices.length > 0 ? (
+                <div className="min-w-0 flex-1">
+                  <ResumeAgentHeaderNotice key={agentHeaderNoticeKey} notices={agentHeaderNotices} />
+                </div>
+              ) : null}
+              <button type="button" onClick={() => agent.setRightPanelCollapsed(true)} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 hover:bg-white hover:text-slate-700"><PanelRightClose className="h-3.5 w-3.5" />收起</button>
             </div>
-            <ResumeAgentTaskPanel baseData={resumeData} basePageCount={basePageCount} draftPageCount={draftPageCount} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
+            <ResumeAgentTaskPanel baseData={resumeData} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
           </div>
         ) : (
           <div
@@ -1674,40 +1708,6 @@ function AnalysisNoticeBox({
     <div className={`flex items-start gap-1.5 rounded-lg px-3 py-2 text-sm ring-1 ${toneClass} ${className}`}>
       {content}
     </div>
-  )
-}
-
-function AnalysisBookmark({
-  isOpen,
-  isAnalyzing,
-  hasError,
-  suggestionCount,
-  onClick,
-}: {
-  isOpen: boolean
-  isAnalyzing: boolean
-  hasError: boolean
-  suggestionCount: number
-  onClick: () => void
-}) {
-  const tone = hasError
-    ? 'border-red-200 bg-red-50/95 text-red-600 hover:bg-red-100'
-    : isAnalyzing
-      ? 'border-blue-200 bg-blue-50/95 text-blue-600 hover:bg-blue-100'
-      : 'border-blue-200 bg-white/95 text-blue-600 hover:bg-blue-50'
-  const StatusIcon = hasError ? AlertCircle : isAnalyzing ? Loader2 : PanelRightOpen
-  const label = hasError ? '错误' : isAnalyzing ? '分析' : `${suggestionCount}`
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={isOpen ? '收起逐模块优化建议' : '展开逐模块优化建议'}
-      className={`absolute right-0 top-20 z-30 flex h-[74px] w-9 flex-col items-center justify-center gap-1 rounded-l-2xl border px-1 py-2 text-[11px] font-semibold shadow-md shadow-slate-200/60 backdrop-blur transition-all ${tone}`}
-    >
-      <StatusIcon className={`h-4 w-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
-      <span>{label}</span>
-    </button>
   )
 }
 

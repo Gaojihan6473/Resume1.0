@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertResumeAgentBudget,
+  capResumeAgentHighRiskPatches,
   markResumeAgentPatchReviewOnly,
   RESUME_AGENT_LIMITS,
   summarizeResumeAgentProposal,
@@ -93,7 +94,20 @@ describe('resume agent review-only risk strategy', () => {
       key: 'patch-2',
       risk: 'high',
       anchorStatus: 'invalid',
-      riskReasons: ['原有提醒', '正文锚点不是唯一匹配'],
+      riskReasons: ['正文锚点不是唯一匹配'],
     })
+  })
+
+  it('keeps only the two most important high-risk patches and one reason per patch', () => {
+    const result = capResumeAgentHighRiskPatches([
+      { key: 'patch-1', risk: 'high', riskReasons: ['普通提醒', '正文锚点不是唯一匹配'] },
+      { key: 'patch-2', risk: 'high', riskReasons: ['新增数字、日期或金额缺少同条目明确证据', '普通提醒'] },
+      { key: 'patch-3', risk: 'high', riskReasons: ['新增或替换的技能缺少明确原文证据'] },
+      { key: 'patch-4', risk: 'medium', riskReasons: ['需人工核实', '次要提醒'] },
+    ])
+
+    expect(result.patches.map((patch) => patch.key)).toEqual(['patch-2', 'patch-3', 'patch-4'])
+    expect(result.omittedPatches.map((patch) => patch.key)).toEqual(['patch-1'])
+    expect(result.patches.every((patch) => Array.isArray(patch.riskReasons) && patch.riskReasons.length <= 1)).toBe(true)
   })
 })

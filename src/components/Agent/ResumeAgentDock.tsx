@@ -10,6 +10,7 @@ import { FishLogo } from '../Brand/FishLogo'
 import { useResumeStore } from '../../store/resumeStore'
 import { createAnalysisHash } from '../../utils/analysisHash'
 import { createResumeAgentHash } from '../../utils/resumeAgentHash'
+import { countPendingResumeAgentPatches } from '../../utils/resumeAgentReview'
 import { normalizeResumeData } from '../../utils/resumeData'
 import { toast } from '../Toast'
 import { CustomSelect } from '../Application/CustomSelect'
@@ -30,6 +31,11 @@ export function ResumeAgentDock() {
   const currentResumeId = useResumeStore((state) => state.currentResumeId)
   const isDirty = useResumeStore((state) => state.isDirty)
   const agent = useResumeAgentSessionStore()
+  const pendingPatchCount = countPendingResumeAgentPatches(
+    agent.proposal?.patches || [],
+    agent.acceptedPatchKeys,
+    agent.rejectedPatchKeys,
+  )
 
   const loadOptions = useCallback(async () => {
     setLoading(true)
@@ -200,7 +206,7 @@ export function ResumeAgentDock() {
                 {agent.status === 'running'
                   ? '正在生成岗位专属方案'
                   : agent.status === 'review'
-                    ? `${agent.proposal?.patches.length || 0} 项修改待审核`
+                    ? `${pendingPatchCount} 项修改待审核`
                     : agent.status === 'completed'
                       ? '岗位专属版本已创建'
                       : agent.resumeId && agent.jdText.trim()

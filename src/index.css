@@ -305,8 +305,8 @@ body {
   isolation: isolate;
 }
 
-.editor-liquid-tabs-three {
-  flex-basis: calc(var(--tab-width) + var(--tab-width) + var(--tab-width) + var(--tab-gap) + var(--tab-gap));
+.editor-liquid-tabs-single {
+  flex-basis: var(--tab-width);
 }
 
 .editor-liquid-tabs::before {
@@ -336,6 +336,10 @@ body {
 .editor-liquid-tabs:active::before {
   filter: blur(0.8px);
   opacity: 0.9;
+}
+
+.editor-liquid-tabs.editor-liquid-tabs-no-active::before {
+  opacity: 0;
 }
 
 .editor-liquid-tab {
@@ -1065,6 +1069,36 @@ body {
   transform: none;
 }
 
+.agent-intent-secondary {
+  display: inline-flex;
+  height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0 18px;
+  color: #526077;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 180ms ease;
+}
+
+.agent-intent-secondary:hover {
+  border-color: #a5f3fc;
+  background: #ecfeff;
+  color: #0e7490;
+  transform: translateY(-1px);
+}
+
+.agent-intent-secondary:focus-visible {
+  outline: 3px solid rgba(165, 243, 252, 0.6);
+  outline-offset: 2px;
+}
+
 .agent-intent-footer {
   display: flex;
   justify-content: flex-end;
@@ -1216,6 +1250,12 @@ body {
   margin-top: 12px;
 }
 
+.agent-intent-active-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 .agent-intent-context-text {
   display: flex;
   min-width: 0;
@@ -1290,6 +1330,14 @@ body {
   align-items: stretch;
   flex-direction: column;
   gap: 14px;
+}
+
+.agent-global-overlay-panel .agent-intent-active-actions {
+  width: 100%;
+}
+
+.agent-global-overlay-panel .agent-intent-active-actions > button {
+  flex: 1;
 }
 
 .agent-global-overlay-panel .agent-intent-footer {
@@ -1433,6 +1481,14 @@ body {
   .agent-intent-active-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .agent-intent-active-actions {
+    width: 100%;
+  }
+
+  .agent-intent-active-actions > button {
+    flex: 1;
   }
 
   .agent-global-overlay {
@@ -2026,8 +2082,8 @@ body {
     flex: 1 1 100%;
   }
 
-  .editor-liquid-tabs-three {
-    --tab-width: calc((100% - var(--tab-gap) - var(--tab-gap)) / 3);
+  .editor-liquid-tabs-single {
+    --tab-width: 100%;
   }
 
   .editor-liquid-tab {

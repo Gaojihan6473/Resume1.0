@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -18,9 +18,29 @@ vi.mock('../../lib/api', () => ({
 
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
+import type { ResumeAgentPatch } from '../../types/resumeAgent'
 import { ResumeAgentDock } from './ResumeAgentDock'
 
+function reviewPatch(key: string): ResumeAgentPatch {
+  return {
+    key,
+    kind: 'rich_text_replace',
+    section: 'summary',
+    itemTitle: '个人总结',
+    target: { itemId: null, field: 'content' },
+    originalText: `原文 ${key}`,
+    revisedText: `建议 ${key}`,
+    requirementIds: [],
+    evidenceKeys: [],
+    reason: '对齐岗位',
+    risk: 'low',
+    riskReasons: [],
+    anchorStatus: 'valid',
+  }
+}
+
 afterEach(() => {
+  cleanup()
   useAuthStore.setState({ isAuthenticated: false, user: null })
   useResumeAgentSessionStore.getState().reset()
 })
@@ -52,6 +72,21 @@ describe('resume agent dock', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '打开小鱼 Agent' })).toBeInTheDocument()
     })
+  })
+
+  it('shows the remaining review count instead of the proposal total', () => {
+    useAuthStore.setState({ isAuthenticated: true })
+    useResumeAgentSessionStore.setState({
+      userId: 'user-1',
+      status: 'review',
+      proposal: { patches: Array.from({ length: 7 }, (_, index) => reviewPatch(`patch-${index + 1}`)) } as never,
+      acceptedPatchKeys: ['patch-1'],
+      rejectedPatchKeys: ['patch-2'],
+    })
+
+    render(<MemoryRouter initialEntries={['/']}><ResumeAgentDock /></MemoryRouter>)
+
+    expect(screen.getByText('5 项修改待审核')).toBeInTheDocument()
   })
 
 })

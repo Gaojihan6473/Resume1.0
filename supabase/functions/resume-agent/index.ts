@@ -2,7 +2,9 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   assertResumeAgentBudget,
+  capResumeAgentHighRiskPatches,
   markResumeAgentPatchReviewOnly,
+  normalizeResumeAgentPatchRiskReason,
   RESUME_AGENT_LIMITS,
   summarizeResumeAgentProposal,
   validateResumeAgentProposalEnvelope,
@@ -13,7 +15,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 const MODEL = 'deepseek-v4-flash'
-const PROMPT_VERSION = 'resume-agent-p0-v1'
+const PROMPT_VERSION = 'resume-agent-p0-v2'
 const MAX_JD_LENGTH = 12_000
 const MAX_RESUME_TEXT_LENGTH = 40_000
 const MAX_TOTAL_INPUT_LENGTH = 80_000
@@ -271,7 +273,12 @@ const proposalSchema: JsonRecord = {
           evidenceKeys: { type: 'array', items: { type: 'string' } },
           reason: { type: 'string' },
           risk: { type: 'string', enum: ['low', 'medium', 'high'] },
-          riskReasons: { type: 'array', items: { type: 'string' } },
+          riskReasons: {
+            type: 'array',
+            maxItems: 1,
+            description: '最多一个最重要的风险原因；低风险必须为空数组',
+            items: { type: 'string' },
+          },
           anchorStatus: { type: 'string', enum: ['valid', 'invalid'] },
           operation: { type: 'string', enum: ['add', 'remove', 'replace'] },
           originalText: { type: 'string' },
@@ -368,6 +375,7 @@ function validateProposal(proposal: unknown, data: JsonRecord): { proposal: Json
   }
   for (const rawPatch of patches) {
     if (!isRecord(rawPatch)) { errors.push('修改项格式无效'); continue }
+    const patchErrorStart = errors.length
     const key = asString(rawPatch.key)
     if (!key || keys.has(key)) errors.push('修改项标识缺失或重复')
     keys.add(key)
@@ -413,28 +421,46 @@ function validateProposal(proposal: unknown, data: JsonRecord): { proposal: Json
     const before = asString(rawPatch.originalText || rawPatch.originalValue)
     const after = asString(rawPatch.revisedText || rawPatch.revisedValue)
     const introducedFacts = (after.match(/\d+(?:\.\d+)?%?|(?:19|20)\d{2}|[$¥￥]\s?\d+(?:\.\d+)?/g) || []).filter((fact) => !before.includes(fact))
-    const hasStrongEvidence = evidenceItems.some((item) => item.strength === 'strong' && introducedFacts.every((fact) => asString(item.quote).includes(fact)))
+    const hasStrongEvidence = evidenceItems.some((item) => (
+      item.strength === 'strong'
+      && item.section === section
+      && (section === 'summary' || asString(item.itemId) === asString(target.itemId))
+      && introducedFacts.every((fact) => asString(item.quote).includes(fact))
+    ))
+    const proposedRisk = ['low', 'medium', 'high'].includes(asString(rawPatch.risk)) ? asString(rawPatch.risk) : 'medium'
+    const proposedReasons = Array.isArray(rawPatch.riskReasons)
+      ? rawPatch.riskReasons.filter((reason): reason is string => typeof reason === 'string')
+      : []
+    const highRiskReasons: string[] = []
+    const mediumRiskReasons: string[] = []
     if (!evidenceItems.length || evidenceItems.some((item) => item.strength === 'weak')) {
-      rawPatch.risk = 'high'
-      rawPatch.riskReasons = [...(Array.isArray(rawPatch.riskReasons) ? rawPatch.riskReasons : []), '缺少可核实的明确证据']
+      mediumRiskReasons.push('缺少充分的同条目证据，需人工核实')
     }
     if (introducedFacts.length && !hasStrongEvidence) {
-      rawPatch.risk = 'high'
-      rawPatch.riskReasons = [...(Array.isArray(rawPatch.riskReasons) ? rawPatch.riskReasons : []), '新增数字、日期或金额缺少同条目明确证据']
+      highRiskReasons.push('新增数字、日期或金额缺少同条目明确证据')
     }
     if (kind === 'skill_item' && (rawPatch.operation === 'add' || rawPatch.operation === 'replace')) {
       const revisedSkill = asString(rawPatch.revisedValue).toLocaleLowerCase()
       const supported = evidenceItems.some((item) => item.strength === 'strong' && asString(item.quote).toLocaleLowerCase().includes(revisedSkill))
       if (!revisedSkill || !supported) {
-        rawPatch.risk = 'high'
-        rawPatch.riskReasons = [...(Array.isArray(rawPatch.riskReasons) ? rawPatch.riskReasons : []), '新增或替换的技能缺少明确原文证据']
+        highRiskReasons.push('新增或替换的技能缺少明确原文证据')
       }
     }
-    if (rawPatch.risk === 'low' && evidenceItems.some((item) => item.itemId && item.itemId !== target.itemId)) {
-      rawPatch.risk = 'medium'
-      rawPatch.riskReasons = [...(Array.isArray(rawPatch.riskReasons) ? rawPatch.riskReasons : []), '使用了跨条目证据']
+    if (evidenceItems.some((item) => item.itemId && item.itemId !== target.itemId)) {
+      mediumRiskReasons.push('使用了跨条目证据，需人工核实')
     }
-    rawPatch.anchorStatus = errors.length ? rawPatch.anchorStatus || 'invalid' : 'valid'
+    if (highRiskReasons.length) {
+      rawPatch.risk = 'high'
+      rawPatch.riskReasons = highRiskReasons
+    } else if (mediumRiskReasons.length || proposedRisk === 'medium' || proposedRisk === 'high') {
+      rawPatch.risk = 'medium'
+      rawPatch.riskReasons = [...mediumRiskReasons, ...proposedReasons, '建议人工核实后应用']
+    } else {
+      rawPatch.risk = 'low'
+      rawPatch.riskReasons = []
+    }
+    Object.assign(rawPatch, normalizeResumeAgentPatchRiskReason(rawPatch))
+    rawPatch.anchorStatus = errors.length > patchErrorStart ? 'invalid' : 'valid'
   }
   proposal.schemaVersion = 1
   proposal.patches = patches
@@ -563,7 +589,7 @@ function createStream(context: RequestContext, req: Request): Response {
           })
           send({ type: 'run_started', runId, at: new Date().toISOString() })
           send({ type: 'stage', stage: 'understand_job', status: 'running', summary: '正在整理目标岗位要求与任务约束' })
-          const system = `你是简历优化编排器。只基于给定事实生成可审核方案；不得修改基本信息、教育、公司、职位、日期，不得增删整段经历。无证据要求必须放入 missingEvidence。高风险修改不得建议应用。输出必须通过指定工具，不输出推理过程。`
+          const system = `你是简历优化编排器。只基于给定事实生成可审核方案；不得修改基本信息、教育、公司、职位、日期，不得增删整段经历。无证据要求必须放入 missingEvidence。风险分级必须克制：仅当新增数字/日期/金额缺少同条目原文证据，或新增/替换技能缺少明确原文证据时主动标为高风险；普通措辞优化证据不足、跨条目引用、责任强度变化标为需核实。最多生成 2 条高风险修改。每条 riskReasons 最多保留 1 个最重要原因，低风险为空数组。高风险修改不得建议应用。输出必须通过指定工具，不输出推理过程。`
           const goal = asString(context.request.goal).slice(0, 500)
           const constraints = isRecord(context.request.constraints) ? context.request.constraints : {}
           modelCalls += 1
@@ -612,7 +638,7 @@ function createStream(context: RequestContext, req: Request): Response {
             assertResumeAgentBudget({ elapsedMs: Date.now() - startedAt, modelCalls, toolCalls, revisionCount, completionTokens })
             modelCalls += 1
             const prompt = attempt === 0
-              ? `计划：${JSON.stringify(planCall.args.plan)}\n证据：${JSON.stringify(evidence)}\n基础简历：${context.resumeText}\n职位描述：${context.jdText}\n提交完整 Proposal。顶层字段必须使用 schemaVersion、goalSummary、targetRequirements、evidence、sectionAnalyses、patches、missingEvidence、validation；禁止使用 objective、keyFocus、modifications、constraints 等自定义替代字段。所有实际修改必须放入 patches，最多 ${MAX_PATCHES} 条。正文修改 originalText 必须在对应条目纯文本中唯一存在；技能修改必须携带基础数组 hash。若确无安全修改，patches 必须为空数组且 missingEvidence 至少说明一项原因。`
+              ? `计划：${JSON.stringify(planCall.args.plan)}\n证据：${JSON.stringify(evidence)}\n基础简历：${context.resumeText}\n职位描述：${context.jdText}\n提交完整 Proposal。顶层字段必须使用 schemaVersion、goalSummary、targetRequirements、evidence、sectionAnalyses、patches、missingEvidence、validation；禁止使用 objective、keyFocus、modifications、constraints 等自定义替代字段。所有实际修改必须放入 patches，最多 ${MAX_PATCHES} 条，其中高风险最多 2 条；每条 riskReasons 最多 1 个最重要原因。正文修改 originalText 必须在对应条目纯文本中唯一存在；技能修改必须携带基础数组 hash。若确无安全修改，patches 必须为空数组且 missingEvidence 至少说明一项原因。`
               : `上一版 Proposal 校验失败：${validationErrors.join('；')}\n请在不引入新事实的前提下进行唯一一次修订。必须返回完整 canonical Proposal。rich_text_replace 的 originalText 必须从对应条目正文逐字复制一个仅出现一次的 8-60 字短片段，不得改写、概括或包含公司/职位/日期；revisedText 只做局部改写。skill_item 的 originalValue 必须等于技能数组中的单个完整元素；新增不存在的技能必须使用 add，且 expectedArrayHash 必须复制对应证据中的值。无法安全修复的 patch 应删除，并在 missingEvidence 中说明。\n候选证据：${JSON.stringify(evidence)}\n基础简历：${context.resumeText}\n上一版 Proposal：${JSON.stringify(proposal)}`
             const proposalCall = await callModel([{ role: 'system', content: system }, { role: 'user', content: prompt }], tools, 'validate_resume_proposal', deadline.signal)
             completionTokens += proposalCall.completionTokens
@@ -658,6 +684,27 @@ function createStream(context: RequestContext, req: Request): Response {
             validationErrors = salvaged.errors
           }
           if (!proposal || validationErrors.length) throw new Error(`最终方案校验失败：${validationErrors.join('；')}`)
+          const riskLimited = capResumeAgentHighRiskPatches(
+            Array.isArray(proposal.patches) ? proposal.patches.filter(isRecord) : [],
+          )
+          proposal.patches = riskLimited.patches
+          if (riskLimited.omittedPatches.length) {
+            const existingMissingEvidence = Array.isArray(proposal.missingEvidence) ? proposal.missingEvidence : []
+            const existingWarnings = Array.isArray(isRecord(proposal.validation) ? proposal.validation.warnings : null)
+              ? (proposal.validation as JsonRecord).warnings as unknown[]
+              : []
+            proposal.missingEvidence = [
+              ...existingMissingEvidence,
+              ...riskLimited.omittedPatches.map((patch, index) => ({
+                requirementId: asString(patch.key) || `omitted-high-risk-${index + 1}`,
+                message: '该候选修改未达到安全展示标准，已从审核列表移除',
+              })),
+            ]
+            proposal.validation = {
+              passed: false,
+              warnings: [...existingWarnings.map(asString), `已隐藏 ${riskLimited.omittedPatches.length} 条超出上限的高风险候选修改`],
+            }
+          }
           const patches = Array.isArray(proposal.patches) ? proposal.patches : []
           const missingEvidence = Array.isArray(proposal.missingEvidence) ? proposal.missingEvidence : []
           const completionStatus = patches.length === 0 ? 'no_changes' : missingEvidence.length ? 'partial' : 'success'
