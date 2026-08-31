@@ -87,6 +87,7 @@ export interface StyleSettings {
 export type SectionId = 'education' | 'internships' | 'projects' | 'summary' | 'skills'
 
 export interface ResumeData {
+  schemaVersion: number
   resumeTitle: string
   basic: BasicInfo
   education: EducationItem[]
@@ -114,16 +115,16 @@ export interface AppState {
   zoom: number
   showMultiPage: boolean
   isAIEnabled: boolean
-  apiKey: string
   currentResumeId: string | null
   isDirty: boolean
   currentFile: File | null
+  savedResumeSnapshot: ResumeData | null
 
   // 简历列表缓存
   cachedResumes: Resume[]
   cachedResumesLastFetched: number | null
 
-  setResumeData: (data: ResumeData, title?: string) => void
+  setResumeData: (data: unknown, title?: string) => void
   updateBasic: (basic: Partial<BasicInfo>) => void
   setResumeTitle: (title: string) => void
   addEducation: () => void
@@ -162,6 +163,8 @@ export interface AppState {
   setIsAIEnabled: (enabled: boolean) => void
   setCurrentResumeId: (id: string | null) => void
   setIsDirty: (dirty: boolean) => void
+  markCurrentResumeSaved: (data?: ResumeData) => void
+  discardCurrentChanges: () => void
 
   parseFile: (file: File) => Promise<void>
   cancelParse: () => void
@@ -173,6 +176,7 @@ export interface AppState {
 }
 
 export const createDefaultResumeData = (): ResumeData => ({
+  schemaVersion: 1,
   resumeTitle: '',
   basic: {
     name: '',

@@ -45,7 +45,7 @@ const getWeekKey = (date: Date): string => {
 }
 
 export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
-  timeRange: '3m',
+  timeRange: 'all',
   selectedResumeId: null,
 
   setTimeRange: (range) => set({ timeRange: range }),
@@ -80,10 +80,10 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
     const statuses: Application['status'][] = [
       'interested',
       'applied',
+      'assessing',
       'interviewing',
       'offered',
       'rejected',
-      'ghosted',
     ]
 
     return statuses.map((status) => ({
@@ -129,10 +129,10 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
         weeklyData[weekKey] = {
           week: weekKey,
           applied: 0,
+          assessing: 0,
           interviewing: 0,
           offered: 0,
           rejected: 0,
-          ghosted: 0,
           interested: 0,
         }
       }
@@ -150,11 +150,10 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
     const statusCounts = get().getStatusCounts(applications)
     const offerCount = statusCounts.find((s) => s.status === 'offered')?.count || 0
     const rejectedCount = statusCounts.find((s) => s.status === 'rejected')?.count || 0
-    const ghostedCount = statusCounts.find((s) => s.status === 'ghosted')?.count || 0
 
     const passRate =
       total > 0
-        ? Math.round((offerCount / (offerCount + rejectedCount + ghostedCount || 1)) * 100)
+        ? Math.round((offerCount / (offerCount + rejectedCount || 1)) * 100)
         : 0
 
     const channelCounts = get().getChannelCounts(applications)

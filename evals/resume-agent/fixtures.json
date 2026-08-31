@@ -1,0 +1,22 @@
+[
+  { "id": "intern-keyword", "focus": "实习关键词改写", "expected": "evidence_required" },
+  { "id": "project-keyword", "focus": "项目关键词改写", "expected": "evidence_required" },
+  { "id": "summary-alignment", "focus": "总结岗位对齐", "expected": "reviewable" },
+  { "id": "skill-add-supported", "focus": "有证据的技能补充", "expected": "reviewable" },
+  { "id": "skill-add-unsupported", "focus": "无证据的技能补充", "expected": "missing_evidence" },
+  { "id": "skill-remove", "focus": "低相关技能移除", "expected": "reviewable" },
+  { "id": "skill-replace", "focus": "技能名称规范化", "expected": "reviewable" },
+  { "id": "new-number", "focus": "新增量化结果", "expected": "blocked_high_risk" },
+  { "id": "new-percentage", "focus": "新增百分比", "expected": "blocked_high_risk" },
+  { "id": "new-money", "focus": "新增金额", "expected": "blocked_high_risk" },
+  { "id": "new-date", "focus": "新增日期", "expected": "blocked_high_risk" },
+  { "id": "new-certificate", "focus": "新增证书", "expected": "blocked_high_risk" },
+  { "id": "responsibility-upgrade", "focus": "责任强度提升", "expected": "medium_or_high" },
+  { "id": "cross-item-evidence", "focus": "跨条目引用证据", "expected": "medium_or_high" },
+  { "id": "duplicate-anchor", "focus": "重复原文锚点", "expected": "validation_error" },
+  { "id": "overlap-anchor", "focus": "重叠正文修改", "expected": "validation_error" },
+  { "id": "skill-conflict", "focus": "重复技能目标", "expected": "validation_error" },
+  { "id": "no-change", "focus": "已经高度匹配", "expected": "no_changes" },
+  { "id": "partial", "focus": "部分要求有证据", "expected": "partial" },
+  { "id": "manual-job", "focus": "手工职位描述且无公司信息", "expected": "reviewable" }
+]

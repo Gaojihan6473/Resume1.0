@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
@@ -33,24 +33,35 @@ export function ModuleWrapper({
     }
   }
 
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleToggle()
+  }
+
   return (
     <div
-      className="border border-gray-200 rounded-xl overflow-hidden mb-3 shadow-sm transition-all duration-200 hover:shadow-md"
+      className="mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-all duration-200 hover:shadow-md"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div
-        className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
           isHovered ? 'bg-gray-50/80' : 'bg-white'
         }`}
         onClick={handleToggle}
+        onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex items-center gap-2.5">
           <div
             className={`w-5 h-5 rounded-md flex items-center justify-center transition-all duration-300 ${
               expanded
-                ? 'bg-blue-500 text-white rotate-90'
-                : 'bg-gray-100 text-gray-400 rotate-0'
+                ? 'bg-blue-500 text-white rotate-0'
+                : 'bg-gray-100 text-gray-400 -rotate-90'
             }`}
           >
             <ChevronDown className="w-3 h-3" />
@@ -59,7 +70,10 @@ export function ModuleWrapper({
         </div>
         {action && (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!expanded) handleToggle()
+            }}
             className="transition-opacity duration-200"
           >
             {action}
@@ -67,11 +81,14 @@ export function ModuleWrapper({
         )}
       </div>
       <div
-        className={`overflow-hidden transition-all duration-300 ease-out ${
-          expanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+        hidden={!expanded}
+        className={`grid overflow-hidden transition-all duration-300 ease-out ${
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
-        <div className="p-4 bg-gray-50/50">{children}</div>
+        <div className="min-h-0 overflow-hidden">
+          <div className="p-4 bg-gray-50/50">{children}</div>
+        </div>
       </div>
     </div>
   )

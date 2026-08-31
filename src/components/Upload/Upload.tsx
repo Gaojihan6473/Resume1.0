@@ -7,9 +7,27 @@ interface UploadProps {
   embedded?: boolean
   showBottomHint?: boolean
   onAuthRequired?: () => void
+  emptyTitle?: string
+  emptyActiveTitle?: string
+  emptyDescription?: string
+  emptyActionLabel?: string
+  emptyBadge?: string
+  emphasizeAction?: boolean
+  compact?: boolean
 }
 
-export function Upload({ embedded = false, showBottomHint = true, onAuthRequired }: UploadProps) {
+export function Upload({
+  embedded = false,
+  showBottomHint = true,
+  onAuthRequired,
+  emptyTitle = '点击或拖拽文件到这里',
+  emptyActiveTitle = '松开即可上传',
+  emptyDescription = '支持 PDF、DOCX、DOC、TXT 文件',
+  emptyActionLabel = '上传简历',
+  emptyBadge,
+  emphasizeAction = false,
+  compact = false,
+}: UploadProps) {
   const { parseFile, cancelParse, parseStatus, parseError, setCurrentFile } = useResumeStore()
   const { isAuthenticated } = useAuthStore()
 
@@ -17,12 +35,29 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
   const [isDragActive, setIsDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const requestAuthIfNeeded = useCallback(() => {
+    if (isAuthenticated) return false
+
+    if (onAuthRequired) {
+      onAuthRequired()
+    } else {
+      window.dispatchEvent(new CustomEvent('auth:required', { detail: { action: 'upload' } }))
+    }
+
+    return true
+  }, [isAuthenticated, onAuthRequired])
+
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile)
     setCurrentFile(selectedFile)
   }, [setCurrentFile])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (requestAuthIfNeeded()) {
+      e.target.value = ''
+      return
+    }
+
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
       handleFileSelect(selectedFile)
@@ -44,13 +79,15 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
     setIsDragActive(false)
     const droppedFile = e.dataTransfer.files?.[0]
     if (droppedFile) {
+      if (requestAuthIfNeeded()) return
+
       const validTypes = ['.pdf', '.docx', '.doc', '.txt']
       const ext = '.' + droppedFile.name.split('.').pop()?.toLowerCase()
       if (validTypes.includes(ext)) {
         handleFileSelect(droppedFile)
       }
     }
-  }, [handleFileSelect])
+  }, [handleFileSelect, requestAuthIfNeeded])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -91,28 +128,36 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
   const dropzoneHeightClass = embedded
     ? embeddedHasFile
       ? 'min-h-[188px]'
+      : compact
+      ? 'min-h-[190px] flex-1'
       : 'min-h-[248px] flex-1'
     : ''
   const dropzonePaddingClass = embedded
     ? embeddedHasFile
       ? 'px-5 py-4 md:px-6 md:py-5'
+      : compact
+      ? 'p-5'
       : 'p-6'
     : 'p-10'
   const dropzoneVisualClass = embedded
     ? hasFile
       ? 'rounded-[28px] border-blue-200/80 bg-white/85 shadow-[0_18px_55px_rgba(37,99,235,0.10)] hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.15)]'
-      : isDragActive
+    : isDragActive
       ? 'rounded-[28px] upload-drag-active border-blue-400 bg-blue-50/80 shadow-[0_24px_70px_rgba(37,99,235,0.18)]'
-      : 'rounded-[28px] border-blue-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.84)_56%,rgba(219,234,254,0.92))] shadow-[0_18px_55px_rgba(37,99,235,0.13)] hover:-translate-y-1 hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.18)]'
+      : `rounded-[28px] border-blue-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.84)_56%,rgba(219,234,254,0.92))] shadow-[0_18px_55px_rgba(37,99,235,0.13)] hover:-translate-y-1 hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.18)] ${emphasizeAction ? 'ring-1 ring-blue-300/70' : ''}`
     : hasFile
     ? 'border-green-300 bg-green-50/50'
     : isDragActive
     ? 'upload-drag-active border-blue-400 bg-blue-50/50'
     : 'border-dashed border-gray-200 hover:border-blue-300 hover:bg-gray-50/50'
+  const emptyIconBoxClass = compact ? 'h-16 w-16 rounded-[22px]' : 'h-[76px] w-[76px] rounded-[24px]'
+  const emptyIconClass = compact ? 'h-8 w-8' : 'h-9 w-9'
+  const emptyTitleClass = compact ? 'text-lg' : 'text-xl'
+  const emptyActionClass = compact ? 'mt-5 h-10 px-6' : 'mt-6 h-11 px-8'
 
   return (
     <div
-      className={embedded ? 'w-full min-w-0 flex flex-col' : 'w-full max-w-lg mx-auto px-6'}
+      className={embedded ? 'flex h-full w-full min-w-0 flex-col' : 'w-full max-w-lg mx-auto px-6'}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
@@ -121,10 +166,8 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
       <div
         className={`group relative overflow-hidden border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
         onClick={() => {
-          if (!isAuthenticated && onAuthRequired) {
-            onAuthRequired()
-            return
-          }
+          if (requestAuthIfNeeded()) return
+
           if (fileInputRef.current) {
             fileInputRef.current.value = ''
             fileInputRef.current.click()
@@ -178,6 +221,11 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
           </div>
         ) : embedded ? (
           <>
+            {emptyBadge && (
+              <div className="absolute left-5 top-5 z-[2] rounded-full border border-blue-200 bg-white/85 px-3 py-1 text-[11px] font-semibold text-blue-600 shadow-sm shadow-blue-100 backdrop-blur">
+                {emptyBadge}
+              </div>
+            )}
             <div className="pointer-events-none absolute left-7 top-7 grid grid-cols-5 gap-2 opacity-35">
               {Array.from({ length: 25 }).map((_, index) => (
                 <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
@@ -191,21 +239,21 @@ export function Upload({ embedded = false, showBottomHint = true, onAuthRequired
                 <div className="relative">
                   <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-blue-200/45 blur-sm" />
                   <div className="absolute -bottom-5 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] border border-blue-200 bg-white/45" />
-                  <div className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-[24px] bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 text-white shadow-xl shadow-blue-300/80 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-105'}`}>
-                    <UploadIcon className={`h-9 w-9 transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
+                  <div className={`relative flex ${emptyIconBoxClass} items-center justify-center bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 text-white shadow-xl shadow-blue-300/80 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-105'}`}>
+                    <UploadIcon className={`${emptyIconClass} transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
                   </div>
                 </div>
               </div>
 
               <div className="min-w-0 text-center md:text-left">
-                <h2 className="text-xl font-bold text-slate-900">
-                  {isDragActive ? '松开即可上传' : '点击或拖拽文件到这里'}
+                <h2 className={`${emptyTitleClass} font-bold text-slate-900`}>
+                  {isDragActive ? emptyActiveTitle : emptyTitle}
                 </h2>
                 <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
-                  支持 PDF、DOCX、DOC、TXT 文件
+                  {emptyDescription}
                 </p>
-                <span className="mt-6 inline-flex h-11 min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:shadow-xl group-hover:shadow-blue-300">
-                  上传简历
+                <span className={`${emptyActionClass} inline-flex min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:shadow-xl group-hover:shadow-blue-300 ${emphasizeAction ? 'shadow-xl shadow-blue-300 ring-4 ring-blue-100/80 group-hover:ring-blue-200/80' : ''}`}>
+                  {emptyActionLabel}
                 </span>
               </div>
             </div>

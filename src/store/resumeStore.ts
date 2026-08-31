@@ -3,9 +3,12 @@ import { v4 as uuidv4 } from 'uuid'
 import type { AppState } from '../types/resume'
 import { createDefaultResumeData } from '../types/resume'
 import { applyReferenceTemplate } from '../utils/template'
+import { normalizeResumeData } from '../utils/resumeData'
 
 let activeParseController: AbortController | null = null
 let parseRunId = 0
+
+const cloneResumeData = (data: unknown) => normalizeResumeData(data)
 
 export const useResumeStore = create<AppState>((set, get) => ({
   resumeData: createDefaultResumeData(),
@@ -15,10 +18,10 @@ export const useResumeStore = create<AppState>((set, get) => ({
   zoom: 1,
   showMultiPage: true,
   isAIEnabled: true,
-  apiKey: import.meta.env.VITE_MINIMAX_API_KEY as string || '',
   currentResumeId: null,
   isDirty: false,
   currentFile: null,
+  savedResumeSnapshot: null,
 
   // 简历列表缓存
   cachedResumes: [],
@@ -35,11 +38,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
   clearCurrentFile: () => set({ currentFile: null }),
 
   setResumeData: (data, title) => set({
-    resumeData: {
-      ...createDefaultResumeData(),
-      ...data,
-      resumeTitle: title ?? data.resumeTitle ?? '',
-    }
+    resumeData: normalizeResumeData(data, title),
   }),
 
   updateBasic: (basic) =>
@@ -111,6 +110,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, education: items },
+        isDirty: true,
       }
     }),
 
@@ -120,7 +120,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, education: items } }
+      return { resumeData: { ...state.resumeData, education: items }, isDirty: true }
     }),
 
   addInternship: () =>
@@ -176,6 +176,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, internships: items },
+        isDirty: true,
       }
     }),
 
@@ -185,7 +186,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, internships: items } }
+      return { resumeData: { ...state.resumeData, internships: items }, isDirty: true }
     }),
 
   addInternshipProject: (internshipId) =>
@@ -300,6 +301,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       ;[items[index], items[newIndex]] = [items[newIndex], items[index]]
       return {
         resumeData: { ...state.resumeData, projects: items },
+        isDirty: true,
       }
     }),
 
@@ -309,7 +311,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, projects: items } }
+      return { resumeData: { ...state.resumeData, projects: items }, isDirty: true }
     }),
 
   updateSummary: (summary) =>
@@ -327,7 +329,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return state
       const [removed] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, removed)
-      return { resumeData: { ...state.resumeData, sectionOrder: items } }
+      return { resumeData: { ...state.resumeData, sectionOrder: items }, isDirty: true }
     }),
 
   updateSkills: (skills) =>
@@ -354,6 +356,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
         ...state.resumeData,
         style: createDefaultResumeData().style,
       },
+      isDirty: true,
     })),
 
   setZoom: (zoom) => set({ zoom }),
@@ -362,8 +365,37 @@ export const useResumeStore = create<AppState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
   setRawText: (text) => set({ rawText: text }),
   setIsAIEnabled: (enabled) => set({ isAIEnabled: enabled }),
-  setCurrentResumeId: (id) => set({ currentResumeId: id }),
+  setCurrentResumeId: (id) => set((state) => ({
+    currentResumeId: id,
+    savedResumeSnapshot: id ? cloneResumeData(state.resumeData) : null,
+  })),
   setIsDirty: (dirty) => set({ isDirty: dirty }),
+  markCurrentResumeSaved: (data) => set((state) => ({
+    resumeData: data ? cloneResumeData(data) : state.resumeData,
+    savedResumeSnapshot: cloneResumeData(data ?? state.resumeData),
+    isDirty: false,
+  })),
+  discardCurrentChanges: () => set((state) => {
+    if (!state.currentResumeId || !state.savedResumeSnapshot) {
+      return {
+        resumeData: createDefaultResumeData(),
+        parseStatus: 'idle' as const,
+        parseError: null,
+        rawText: '',
+        currentResumeId: null,
+        isDirty: false,
+        currentFile: null,
+        savedResumeSnapshot: null,
+      }
+    }
+    return {
+      resumeData: cloneResumeData(state.savedResumeSnapshot),
+      isDirty: false,
+      currentFile: null,
+      parseError: null,
+      parseStatus: 'success' as const,
+    }
+  }),
 
   parseFile: async (file) => {
     parseRunId += 1
@@ -374,10 +406,15 @@ export const useResumeStore = create<AppState>((set, get) => ({
     const controller = new AbortController()
     activeParseController = controller
     const startedAt = new Date().toISOString()
-    set({ parseStatus: 'parsing', parseError: null })
+    set({
+      parseStatus: 'parsing',
+      parseError: null,
+      currentResumeId: null,
+      savedResumeSnapshot: null,
+    })
     try {
       const { parseFile } = await import('../parsers')
-      const result = await parseFile(file, get().isAIEnabled, get().apiKey, controller.signal)
+      const result = await parseFile(file, get().isAIEnabled, controller.signal)
       if (runId !== parseRunId || controller.signal.aborted) return
       const endAt = new Date().toISOString()
       const sectionLine = result.parseLog.find((line: string) => line.startsWith('[result] sections:'))
@@ -385,9 +422,11 @@ export const useResumeStore = create<AppState>((set, get) => ({
       console.info(`[Resume Parser] success | file=${file.name} | ${summary} | start=${startedAt} | end=${endAt}`)
 
       set({
-        resumeData: applyReferenceTemplate(result.data),
+        resumeData: normalizeResumeData(applyReferenceTemplate(result.data)),
         rawText: result.rawText,
         parseStatus: 'success',
+        currentResumeId: null,
+        isDirty: true,
       })
     } catch (error) {
       if (runId !== parseRunId || controller.signal.aborted) {
@@ -399,7 +438,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       console.debug(`- size: ${file.size} bytes`)
       console.debug(`- type: ${file.type || 'unknown'}`)
       console.debug(`- AI enabled: ${get().isAIEnabled}`)
-      console.debug(`- API key configured: ${Boolean(get().apiKey?.trim())}`)
+      console.debug('- AI proxy configured: server-side')
       console.debug(`[${new Date().toISOString()}] ERROR: ${message}`)
       console.groupEnd()
       set({
@@ -431,5 +470,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
       rawText: '',
       currentResumeId: null,
       isDirty: false,
+      currentFile: null,
+      savedResumeSnapshot: null,
     }),
 }))

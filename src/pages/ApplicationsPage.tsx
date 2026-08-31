@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Loader2, Fish, ChevronsRight } from 'lucide-react'
+import { Plus, Loader2, ChevronsRight, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
-import { fetchResumes, type Resume } from '../lib/api'
+import { fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
-import type { ResumeData } from '../types/resume'
+import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
+import { FishLogo } from '../components/Brand/FishLogo'
 import { toast } from '../components/Toast'
 import { ResumeSelector } from '../components/Application/ResumeSelector'
 import { ApplicationList } from '../components/Application/ApplicationList'
@@ -17,13 +19,14 @@ import type { JDParsedResult } from '../types/application'
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     setResumeData,
     setCurrentResumeId,
     setIsDirty,
     setParseError,
     setParseStatus,
+    clearCurrentFile,
     cachedResumes,
     setCachedResumes,
   } = useResumeStore()
@@ -85,7 +88,10 @@ export function ApplicationsPage() {
           cachedResumes.length !== result.resumes.length ||
           result.resumes.some((r) => {
             const cached = cachedResumes.find((c) => c.id === r.id)
-            return !cached || cached.updated_at !== r.updated_at || cached.preview_url !== r.preview_url
+            return !cached ||
+              cached.updated_at !== r.updated_at ||
+              !isSameResumeAsset(cached.preview_url, r.preview_url) ||
+              !isSameResumeAsset(cached.file_url, r.file_url)
           })
 
         if (hasChanges) {
@@ -120,9 +126,7 @@ export function ApplicationsPage() {
         return
       }
 
-      if (applicationFromQuery.resume_id) {
-        setSelectedResumeId(applicationFromQuery.resume_id)
-      }
+      setSelectedResumeId(null)
       setHasAppliedQuerySelection(true)
       return
     }
@@ -138,28 +142,47 @@ export function ApplicationsPage() {
   }, [applications, hasAppliedQuerySelection, isLoading, resumes, searchParams])
 
   const handleCreateApplication = async (data: SaveData) => {
-    await createApplication(data as import('../types/application').CreateApplicationInput)
-    toast('创建成功', 'success')
-    setShowModal(false)
-    const result = await fetchResumes()
-    if (result.success && result.resumes) {
-      setResumes(result.resumes)
-      setCachedResumes(result.resumes, Date.now())
+    try {
+      await createApplication(data as import('../types/application').CreateApplicationInput)
+      toast('创建成功', 'success')
+      const result = await fetchResumes()
+      if (result.success && result.resumes) {
+        setResumes(result.resumes)
+        setCachedResumes(result.resumes, Date.now())
+      }
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '创建失败，请重试', 'error')
+      throw error
     }
   }
 
-  const handleUpdateApplication = async (application: import('../types/application').Application) => {
+  const handleUpdateApplication = async (
+    application: import('../types/application').Application,
+    options?: { silent?: boolean }
+  ) => {
     const { id, ...updateData } = application
     console.log('[handleUpdateApplication] id:', id, 'updateData:', updateData)
-    await updateApplication(id, updateData)
-    console.log('[handleUpdateApplication] after updateApplication')
-    toast('更新成功', 'success')
+    try {
+      await updateApplication(id, updateData)
+      console.log('[handleUpdateApplication] after updateApplication')
+      if (!options?.silent) {
+        toast('更新成功', 'success')
+      }
+    } catch (error) {
+      console.error('[handleUpdateApplication] error:', error)
+      toast(error instanceof Error ? error.message : '保存失败，请重试', 'error')
+      throw error
+    }
   }
 
   const handleDeleteApplication = async (id: string) => {
-    await deleteApplication(id)
-    toast('删除成功', 'success')
-    setShowDeleteConfirm(null)
+    try {
+      await deleteApplication(id)
+      toast('删除成功', 'success')
+      setShowDeleteConfirm(null)
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '删除失败，请重试', 'error')
+    }
   }
 
   const handleManualCreate = () => {
@@ -171,6 +194,22 @@ export function ApplicationsPage() {
     setAiParsedData(null)
     setShowJDModal(true)
   }
+
+  useEffect(() => {
+    const createMode = searchParams.get('create')
+    if (createMode !== 'manual' && createMode !== 'ai') return
+
+    setAiParsedData(null)
+    if (createMode === 'manual') {
+      setShowModal(true)
+    } else {
+      setShowJDModal(true)
+    }
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('create')
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const handleJDParsed = (data: JDParsedResult) => {
     setAiParsedData({
@@ -202,6 +241,27 @@ const handleGoHome = () => {
     setResumeData(resume.content as unknown as ResumeData)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
+    setParseError(null)
+    setParseStatus('success')
+    navigate('/')
+  }
+
+  const handleAnalyzeResume = (resume: Resume) => {
+    setResumeData(resume.content as unknown as ResumeData)
+    setCurrentResumeId(resume.id)
+    setIsDirty(false)
+    clearCurrentFile()
+    setParseError(null)
+    setParseStatus('success')
+    navigate('/?tab=jd')
+  }
+
+  const handleNewResume = () => {
+    setResumeData(createDefaultResumeData())
+    setCurrentResumeId(null)
+    setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/')
@@ -217,12 +277,13 @@ const handleGoHome = () => {
           onMouseLeave={scheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={triggerRef} />
 
       </header>
 
@@ -252,9 +313,17 @@ const handleGoHome = () => {
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
               </div>
             ) : resumes.length === 0 ? (
-              <div className="text-center py-8">
+              <div className="flex min-h-full flex-col items-center justify-center text-center">
                 <p className="text-sm text-slate-500">暂无简历</p>
                 <p className="text-xs text-slate-400 mt-1">点击上方按钮创建第一个简历</p>
+                <button
+                  type="button"
+                  onClick={handleNewResume}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-400 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500"
+                >
+                  <FilePlus className="h-4 w-4" />
+                  新建简历
+                </button>
               </div>
             ) : (
               <ResumeSelector
@@ -262,6 +331,7 @@ const handleGoHome = () => {
                 selectedResumeId={selectedResumeId}
                 onSelectResume={(id) => setSelectedResumeId(id || null)}
                 onEditResume={handleEditResume}
+                onAnalyzeResume={handleAnalyzeResume}
               />
             )}
           </div>
@@ -274,6 +344,7 @@ const handleGoHome = () => {
               selectedResumeId={selectedResumeId}
               isLoading={isLoading}
               initialExpandedId={searchParams.get('applicationId')}
+              pendingDeleteId={showDeleteConfirm}
               headerAction={
                 <button
                   ref={createButtonRef}

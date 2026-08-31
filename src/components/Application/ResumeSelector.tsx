@@ -6,6 +6,7 @@ interface Props {
   selectedResumeId: string | null
   onSelectResume: (id: string) => void
   onEditResume?: (resume: Resume) => void
+  onAnalyzeResume?: (resume: Resume) => void
 }
 
 export function ResumeSelector({
@@ -13,6 +14,7 @@ export function ResumeSelector({
   selectedResumeId,
   onSelectResume,
   onEditResume,
+  onAnalyzeResume,
 }: Props) {
   const selectedResume = resumes.find((r) => r.id === selectedResumeId)
   const otherResumes = resumes.filter((r) => r.id !== selectedResumeId)
@@ -42,6 +44,7 @@ export function ResumeSelector({
               isMinimized={false}
               onClick={() => handleResumeClick(resume.id)}
               onEdit={() => onEditResume?.(resume)}
+              onAnalyze={() => onAnalyzeResume?.(resume)}
             />
           ))}
         </div>
@@ -61,6 +64,7 @@ export function ResumeSelector({
                 isMinimized={false}
                 onClick={() => handleResumeClick(selectedResume.id)}
                 onEdit={() => onEditResume?.(selectedResume)}
+                onAnalyze={() => onAnalyzeResume?.(selectedResume)}
               />
             </div>
 
@@ -75,6 +79,7 @@ export function ResumeSelector({
                       isMinimized={true}
                       onClick={() => handleResumeClick(resume.id)}
                       onEdit={() => onEditResume?.(resume)}
+                      onAnalyze={() => onAnalyzeResume?.(resume)}
                     />
                   ))}
                 </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { Maximize2, Network } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
@@ -11,6 +11,8 @@ interface ResumeJobGraphProps {
   resumes: Resume[]
   selectedResumeId: string | null
   resumeTitleMap: Map<string, string>
+  active: boolean
+  resetKey: string
 }
 
 type TooltipData =
@@ -85,11 +87,6 @@ interface GraphData {
 
 type FocusedCategory = 'resume' | 'job' | null
 
-interface LegendEventParam {
-  componentType?: string
-  name?: string
-}
-
 const UNBOUND_RESUME_ID = 'unbound'
 const UNBOUND_NODE_ID = `resume-${UNBOUND_RESUME_ID}`
 const GRAPH_SERIES_ID = 'resume-job-graph'
@@ -99,6 +96,8 @@ export function ResumeJobGraph({
   resumes,
   selectedResumeId,
   resumeTitleMap,
+  active,
+  resetKey,
 }: ResumeJobGraphProps) {
   const [focusedCategory, setFocusedCategory] = useState<FocusedCategory>(null)
   const [isTooltipSuppressed, setIsTooltipSuppressed] = useState(false)
@@ -126,9 +125,11 @@ export function ResumeJobGraph({
       return '未知简历'
     }
 
-    if (selectedResumeId) {
+    const isUnboundOnly = selectedResumeId === UNBOUND_RESUME_ID
+
+    if (selectedResumeId && !isUnboundOnly) {
       resumeNodeMap.set(selectedResumeId, getResumeTitle(selectedResumeId))
-    } else {
+    } else if (!isUnboundOnly) {
       resumes.forEach((resume) => {
         resumeNodeMap.set(resume.id, resume.title)
       })
@@ -190,7 +191,7 @@ export function ResumeJobGraph({
       })
     })
 
-    if (!selectedResumeId && unboundApplications.length > 0) {
+    if ((!selectedResumeId || isUnboundOnly) && unboundApplications.length > 0) {
       nodes.push({
         id: UNBOUND_NODE_ID,
         name: '未关联简历',
@@ -220,8 +221,11 @@ export function ResumeJobGraph({
       })
     }
 
+    const shouldShowJobLabels = applications.length <= 30
+
     applications.forEach((app) => {
-      if (!app.resume_id && selectedResumeId) return
+      if (!app.resume_id && selectedResumeId && !isUnboundOnly) return
+      if (app.resume_id && isUnboundOnly) return
 
       const resumeId = app.resume_id || UNBOUND_RESUME_ID
       const resumeName = app.resume_id ? getResumeTitle(app.resume_id) : '未关联简历'
@@ -244,7 +248,7 @@ export function ResumeJobGraph({
           shadowColor: `${statusColor}33`,
         },
         label: {
-          show: true,
+          show: shouldShowJobLabels,
           position: 'right',
           color: '#475569',
           fontSize: 9,
@@ -331,26 +335,19 @@ export function ResumeJobGraph({
         textStyle: { color: '#334155', fontSize: 13 },
         formatter: renderTooltip,
       },
-      legend: {
-        bottom: 0,
-        left: 'center',
-        icon: 'circle',
-        data: ['简历', '岗位'],
-        itemWidth: 8,
-        itemHeight: 8,
-        textStyle: { fontSize: 12, color: '#64748b' },
-      },
       series: [
         {
           name: '简历岗位关系',
           id: GRAPH_SERIES_ID,
           type: 'graph' as const,
           layout: 'force' as const,
-          legendHoverLink: true,
-          top: 12,
-          left: 20,
-          right: 20,
-          bottom: 48,
+          preserveAspect: 'contain' as const,
+          legendHoverLink: false,
+          roamTrigger: 'global' as const,
+          top: 38,
+          left: 24,
+          right: 24,
+          bottom: 42,
           roam: true,
           draggable: true,
           edgeSymbol: ['none', 'arrow'],
@@ -366,13 +363,23 @@ export function ResumeJobGraph({
             max: 2.2,
           },
           force: {
-            repulsion: 330,
-            edgeLength: [72, 118],
-            gravity: 0.06,
-            friction: 0.76,
-          },
-          labelLayout: {
-            hideOverlap: true,
+            repulsion: graphData.nodes.length > 40
+              ? 190
+              : graphData.nodes.length > 20
+                ? 280
+                : 400,
+            edgeLength: graphData.nodes.length > 40
+              ? [52, 82]
+              : graphData.nodes.length > 20
+                ? [72, 108]
+                : [92, 138],
+            gravity: graphData.nodes.length > 40
+              ? 0.1
+              : graphData.nodes.length > 20
+                ? 0.065
+                : 0.045,
+            friction: 0.74,
+            layoutAnimation: true,
           },
           lineStyle: {
             color: '#cbd5e1',
@@ -393,18 +400,7 @@ export function ResumeJobGraph({
     }
   }, [focusedCategory, graphData, isTooltipSuppressed])
 
-  const graphEvents = useMemo(() => ({
-    mouseover: (params: LegendEventParam) => {
-      if (params.componentType !== 'legend') return
-      const nextFocus = getLegendFocus(params.name)
-      if (nextFocus) setFocusedCategory(nextFocus)
-    },
-    mouseout: (params: LegendEventParam) => {
-      if (params.componentType === 'legend') setFocusedCategory(null)
-    },
-  }), [])
-
-  const handleFitView = () => {
+  const handleFitView = useCallback(() => {
     const chart = chartRef.current?.getEchartsInstance()
     if (!chart) return
 
@@ -416,15 +412,28 @@ export function ResumeJobGraph({
           series: [
             {
               id: GRAPH_SERIES_ID,
-              center: null,
-              zoom: 0.84,
+              center: ['50%', '50%'],
+              zoom: 0.92,
             },
           ],
         },
         { lazyUpdate: false }
       )
     })
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!active) return
+    const frame = window.requestAnimationFrame(() => {
+      chartRef.current?.getEchartsInstance()?.resize()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [active, graphData.nodes.length])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(handleFitView)
+    return () => window.cancelAnimationFrame(frame)
+  }, [handleFitView, resetKey])
 
   const hideTooltip = () => {
     chartRef.current?.getEchartsInstance()?.dispatchAction({ type: 'hideTip' })
@@ -452,7 +461,7 @@ export function ResumeJobGraph({
 
   if (graphData.nodes.length === 0) {
     return (
-      <div className="h-80 flex items-center justify-center">
+      <div className="flex h-[clamp(400px,calc(100dvh-390px),680px)] items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
             <Network className="w-8 h-8 text-slate-300" />
@@ -465,7 +474,7 @@ export function ResumeJobGraph({
 
   return (
     <div
-      className="relative h-80"
+      className="relative h-[clamp(400px,calc(100dvh-390px),680px)] min-h-[400px]"
       onMouseDownCapture={suppressTooltip}
       onMouseMoveCapture={() => {
         if (isTooltipSuppressed) hideTooltip()
@@ -474,13 +483,47 @@ export function ResumeJobGraph({
       onMouseLeave={restoreTooltipSoon}
     >
       <ReactECharts
+        key={`resume-job-graph-${resetKey}`}
         ref={chartRef}
-        key={`resume-job-graph-${graphData.nodes.length}-${graphData.links.length}-${selectedResumeId || 'all'}`}
         option={option}
         style={{ height: '100%', width: '100%' }}
         lazyUpdate={true}
-        onEvents={graphEvents}
       />
+      <div
+        role="list"
+        aria-label="关系图谱图例"
+        onMouseLeave={() => setFocusedCategory(null)}
+        className="absolute right-2 top-1 z-10 flex items-center gap-3 rounded-lg bg-white/72 px-2.5 py-1.5 text-xs text-slate-500 backdrop-blur-md"
+      >
+        <span
+          role="listitem"
+          tabIndex={0}
+          aria-label="简历：悬停或聚焦以突出简历节点"
+          onMouseEnter={() => setFocusedCategory('resume')}
+          onFocus={() => setFocusedCategory('resume')}
+          onBlur={() => setFocusedCategory(null)}
+          className={`inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-blue-300 ${
+            focusedCategory && focusedCategory !== 'resume' ? 'opacity-35' : 'opacity-100'
+          }`}
+        >
+          <span className="h-2.5 w-3.5 rounded-[3px] border border-blue-400 bg-blue-50" />
+          简历
+        </span>
+        <span
+          role="listitem"
+          tabIndex={0}
+          aria-label="岗位：悬停或聚焦以突出岗位节点"
+          onMouseEnter={() => setFocusedCategory('job')}
+          onFocus={() => setFocusedCategory('job')}
+          onBlur={() => setFocusedCategory(null)}
+          className={`inline-flex cursor-default items-center gap-1.5 rounded px-1 py-0.5 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-slate-300 ${
+            focusedCategory && focusedCategory !== 'job' ? 'opacity-35' : 'opacity-100'
+          }`}
+        >
+          <span className="h-2.5 w-2.5 rounded-full bg-slate-500 ring-2 ring-white" />
+          岗位
+        </span>
+      </div>
       <button
         type="button"
         title="适应视图"
@@ -542,12 +585,6 @@ function renderTooltip(params: TooltipParam) {
 
 function hasTooltipData(data: unknown): data is { tooltipData: TooltipData } {
   return typeof data === 'object' && data !== null && 'tooltipData' in data
-}
-
-function getLegendFocus(name: string | undefined): FocusedCategory {
-  if (name === '简历') return 'resume'
-  if (name === '岗位') return 'job'
-  return null
 }
 
 function formatDate(value: string | null) {

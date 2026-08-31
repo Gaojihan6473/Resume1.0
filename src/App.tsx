@@ -3,8 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { useResumeStore } from './store/resumeStore'
 import { useAuthStore } from './store/authStore'
 import { Toolbar } from './components/Toolbar/Toolbar'
-import { Editor } from './components/Editor/Editor'
-import { Preview } from './components/Preview/Preview'
+import { EditorAnalysisLayout } from './components/Editor/EditorAnalysisLayout'
 import { HomePage } from './pages/HomePage'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
@@ -16,11 +15,12 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
+import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLauncher'
 
-type DirtyNavTarget = 'home' | 'me' | 'analytics-jd'
+type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
 function AppContent() {
-  const { parseStatus, isDirty, currentResumeId } = useResumeStore()
+  const { parseStatus, isDirty } = useResumeStore()
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
@@ -33,7 +33,41 @@ function AppContent() {
   // Initialize auth session on app load
   useEffect(() => {
     checkSession()
+
+    const handleOnline = () => {
+      checkSession()
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
   }, [checkSession])
+
+  useEffect(() => {
+    if (!isDirty) return
+    let restoringHistory = false
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const handlePopState = () => {
+      if (restoringHistory) return
+      const shouldLeave = window.confirm('当前简历有未保存的修改，确定要放弃修改并离开吗？')
+      if (shouldLeave) {
+        useResumeStore.getState().discardCurrentChanges()
+        return
+      }
+      restoringHistory = true
+      window.history.forward()
+      window.setTimeout(() => {
+        restoringHistory = false
+      }, 0)
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [isDirty])
 
   // Listen for auth required events from Toolbar/Upload
   useEffect(() => {
@@ -67,7 +101,7 @@ function AppContent() {
 
   const handleNavigateToMe = () => {
     closeSidebar()
-    if (isDirty || currentResumeId === null) {
+    if (isDirty) {
       setDirtyNavTarget('me')
       setShowDirtyModal(true)
     } else {
@@ -75,35 +109,34 @@ function AppContent() {
     }
   }
 
-  const getAnalyticsJDPath = (resumeId: string | null) => {
-    const params = new URLSearchParams({ tab: 'jd' })
-    if (resumeId) params.set('resumeId', resumeId)
-    return `/analytics?${params.toString()}`
-  }
-
   const handleNavigateToApplications = () => {
     closeSidebar()
-    navigate('/applications')
+    if (isDirty) {
+      setDirtyNavTarget('applications')
+      setShowDirtyModal(true)
+    } else {
+      navigate('/applications')
+    }
   }
 
   const handleNavigateToAnalytics = () => {
     closeSidebar()
-    navigate('/analytics')
-  }
-
-  const handleNavigateToAnalysis = () => {
-    closeSidebar()
-    if (isDirty || currentResumeId === null) {
-      setDirtyNavTarget('analytics-jd')
+    if (isDirty) {
+      setDirtyNavTarget('analytics')
       setShowDirtyModal(true)
     } else {
-      navigate(getAnalyticsJDPath(currentResumeId))
+      navigate('/analytics')
     }
   }
 
   const handleNavigateToLogin = () => {
     closeSidebar()
-    navigate('/login')
+    if (isDirty) {
+      setDirtyNavTarget('login')
+      setShowDirtyModal(true)
+    } else {
+      navigate('/login')
+    }
   }
 
   // Show loading while initializing auth
@@ -159,7 +192,7 @@ function AppContent() {
           path="/"
           element={
             <div className="h-screen flex flex-col bg-gray-50">
-              {parseStatus === 'idle' || parseStatus === 'parsing' ? (
+              {parseStatus !== 'success' ? (
                 <HomePage
                   sidebarOpen={sidebarOpen}
                   sidebarTriggerRef={triggerRef}
@@ -176,7 +209,6 @@ function AppContent() {
                 <div className="flex-1 flex flex-col overflow-hidden relative">
                   {/* 工具栏 */}
                   <Toolbar
-                    previewRef={previewRef}
                     sidebarTriggerRef={triggerRef}
                     onOpenSidebar={openSidebar}
                     onScheduleCloseSidebar={scheduleCloseSidebar}
@@ -184,7 +216,6 @@ function AppContent() {
                       setPendingAction(action)
                       setShowAuthModal(true)
                     }}
-                    onNavigateToAnalysis={handleNavigateToAnalysis}
                   />
 
                   {/* 侧边栏 + 主内容，放在同一 relative 容器中 */}
@@ -206,14 +237,7 @@ function AppContent() {
                     />
 
                     {/* 主内容 */}
-                    <div className="flex-1 flex overflow-hidden">
-                      <div className="w-[45%] border-r border-gray-200 overflow-hidden flex flex-col bg-white">
-                        <Editor />
-                      </div>
-                      <div className="w-[55%] preview-container bg-gray-100">
-                        <Preview ref={previewRef} />
-                      </div>
-                    </div>
+                    <EditorAnalysisLayout previewRef={previewRef} />
                   </div>
                 </div>
               )}
@@ -224,6 +248,8 @@ function AppContent() {
         {/* Redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      <ResumeAgentGlobalLauncher />
 
       {/* Auth Required Modal */}
       <AuthRequiredModal
@@ -260,18 +286,19 @@ function AppContent() {
         onDiscardAndNavigateToMe={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
+          useResumeStore.getState().discardCurrentChanges()
           navigate('/me')
         }}
-        onSaveAndNavigateToAnalyticsJD={() => {
+        onSaveAndNavigateToPath={(path) => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
-          const resumeId = useResumeStore.getState().currentResumeId
-          navigate(getAnalyticsJDPath(resumeId))
+          navigate(path)
         }}
-        onDiscardAndNavigateToAnalyticsJD={() => {
+        onDiscardAndNavigateToPath={(path) => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
-          navigate(getAnalyticsJDPath(currentResumeId))
+          useResumeStore.getState().discardCurrentChanges()
+          navigate(path)
         }}
       />
 

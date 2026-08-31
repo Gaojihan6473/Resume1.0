@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
@@ -22,7 +22,89 @@ interface SidebarProps {
   sidebarRef?: RefObject<HTMLDivElement | null>
 }
 
-export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, onNavigateToMe, onNavigateToApplications, onNavigateToAnalytics, onNavigateToLogin, onMouseEnter, onMouseLeave, sidebarRef }: SidebarProps) {
+interface NavItemButtonProps {
+  active?: boolean
+  badge?: string
+  disabled?: boolean
+  icon: ReactNode
+  label: string
+  onClick?: () => void
+  title: string
+  tone?: 'blue' | 'indigo' | 'slate'
+}
+
+function NavItemButton({
+  active = false,
+  badge,
+  disabled = false,
+  icon,
+  label,
+  onClick,
+  title,
+  tone = 'blue',
+}: NavItemButtonProps) {
+  const toneClass = {
+    blue: 'text-blue-500',
+    indigo: 'text-indigo-500',
+    slate: 'text-slate-400',
+  }[tone]
+
+  const buttonClass = disabled
+    ? 'cursor-default text-slate-400'
+    : active
+      ? 'cursor-pointer text-slate-900 hover:bg-blue-50/55'
+      : 'cursor-pointer text-slate-500 hover:bg-blue-50/55 hover:text-slate-900'
+
+  const iconClass = active
+    ? 'text-blue-600'
+    : disabled
+      ? 'text-slate-400'
+      : toneClass
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-current={active ? 'page' : undefined}
+      className={`group relative flex min-h-[68px] w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-[18px] px-2 py-2.5 text-center text-sm font-semibold transition-colors duration-200 ${buttonClass}`}
+    >
+      <span
+        aria-hidden
+        className={`absolute left-1.5 top-4 bottom-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-indigo-500 transition-opacity duration-200 ${
+          active ? 'opacity-100' : disabled ? 'opacity-0' : 'opacity-0 group-hover:opacity-70'
+        }`}
+      />
+      <span
+        className={`flex h-8 w-8 items-center justify-center transition-colors duration-200 ${iconClass}`}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 max-w-full truncate leading-5">{label}</span>
+      {badge && (
+        <span className="text-[10px] font-medium leading-none text-slate-400/80">
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
+export function Sidebar({
+  open,
+  onClose,
+  topOffset = 0,
+  backdropTop,
+  onGoHome,
+  onNavigateToMe,
+  onNavigateToApplications,
+  onNavigateToAnalytics,
+  onNavigateToLogin,
+  onMouseEnter,
+  onMouseLeave,
+  sidebarRef,
+}: SidebarProps) {
   const internalSidebarRef = useRef<HTMLDivElement>(null)
   const containerRef = sidebarRef ?? internalSidebarRef
   const effectiveBackdropTop = backdropTop ?? topOffset
@@ -30,15 +112,11 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
   const { isAuthenticated } = useAuthStore()
   const { parseStatus } = useResumeStore()
 
-  // 判断当前页面
-  // 编辑页：parseStatus === 'success' 且有 currentResumeId
-  // 首页：仅上传页（parseStatus === 'idle'）
   const isUploadPage = location.pathname === '/' && parseStatus === 'idle'
   const isMePage = location.pathname === '/me'
   const isApplicationsPage = location.pathname === '/applications'
   const isAnalyticsPage = location.pathname === '/analytics'
 
-  // ESC 键关闭
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) onClose()
@@ -54,7 +132,6 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
 
   return (
     <>
-      {/* 遮罩层 */}
       <div
         aria-hidden
         className={`absolute inset-0 z-0 transition-opacity duration-300 ${
@@ -63,110 +140,89 @@ export function Sidebar({ open, onClose, topOffset = 0, backdropTop, onGoHome, o
         style={{ top: `${effectiveBackdropTop}px` }}
       />
 
-      {/* 侧边栏 */}
       <div
         ref={containerRef}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className="absolute left-0 flex flex-col w-40 z-10"
+        className="absolute left-0 z-[80] flex w-28 flex-col"
         style={{
           top: `${topOffset}px`,
           bottom: 0,
           transition: 'transform 280ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 280ms ease',
           transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          boxShadow: open ? '4px 0 24px rgba(0,0,0,0.08)' : 'none',
+          boxShadow: 'none',
         }}
       >
-        {/* 内容区 */}
         <div
-          className="flex flex-col w-40 h-full bg-gradient-to-b from-white/95 to-slate-50/90 backdrop-blur-md border-r border-slate-100/50 pointer-events-auto"
+          className="pointer-events-auto relative flex h-full w-28 flex-col overflow-hidden border-r border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.94)_0%,rgba(248,251,255,0.88)_48%,rgba(239,246,255,0.82)_100%)] backdrop-blur-xl"
           style={{
             transition: 'opacity 200ms ease',
             opacity: open ? 1 : 0,
           }}
         >
-          {/* 顶部导航组 */}
-          <nav className="flex flex-col gap-0.5 px-2 pt-3 pb-2">
-            {/* 首页 - 仅上传页（parseStatus === 'idle'）显示活跃状态 */}
-            <button
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-slate-200/70" />
+
+          <nav className="relative z-[1] flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-4">
+            <NavItemButton
+              active={isUploadPage}
+              icon={<Home className="h-4.5 w-4.5 shrink-0" />}
+              label="首页"
               onClick={() => handleAction(onGoHome)}
-              className="group relative flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
               title="返回首页"
-            >
-              {/* 左侧活跃指示条 - 仅在上传页显示 */}
-              <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isUploadPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-              <Home className="w-4 h-4 shrink-0 text-blue-500" />
-              <span>首页</span>
-            </button>
+            />
 
-            {/* 岗位 */}
             {isAuthenticated && (
-              <button
+              <NavItemButton
+                active={isApplicationsPage}
+                icon={<Briefcase className="h-4.5 w-4.5 shrink-0" />}
+                label="岗位"
                 onClick={() => handleAction(onNavigateToApplications)}
-                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
                 title="岗位"
-              >
-                {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isApplicationsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                <Briefcase className="w-4 h-4 shrink-0 text-blue-500" />
-                <span>岗位</span>
-              </button>
+              />
             )}
 
-            {/* 分析 */}
             {isAuthenticated && (
-              <button
+              <NavItemButton
+                active={isAnalyticsPage}
+                icon={<BarChart2 className="h-4.5 w-4.5 shrink-0" />}
+                label="面板"
                 onClick={() => handleAction(onNavigateToAnalytics)}
-                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
-                title="分析页"
-              >
-                {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isAnalyticsPage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                <BarChart2 className="w-4 h-4 shrink-0 text-blue-500" />
-                <span>分析</span>
-              </button>
+                title="面板"
+              />
             )}
 
-            {/* 模板 */}
-            <button
+            <NavItemButton
+              badge="coming"
               disabled
-              className="flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-400 cursor-default"
+              icon={<Layout className="h-4.5 w-4.5 shrink-0" />}
+              label="模板"
               title="即将上线"
-            >
-              <Layout className="w-4 h-4 shrink-0" />
-              <span>模板</span>
-              <span className="ml-auto text-[10px] font-normal text-slate-400/60">coming</span>
-            </button>
+              tone="slate"
+            />
           </nav>
 
-          {/* 分隔线 */}
-          <div className="mx-3 mb-2 border-t border-slate-100/60" />
-
-          {/* 底部固定区 */}
-          <div className="mt-auto px-2 pb-3 flex flex-col gap-0.5">
-            {isAuthenticated ? (
-              <button
-                onClick={() => handleAction(onNavigateToMe)}
-                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
-                title="我的简历"
-              >
-                {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${isMePage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                <User className="w-4 h-4 shrink-0 text-indigo-500" />
-                <span>我的</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => handleAction(onNavigateToLogin)}
-                className="group relative w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100/70 transition-all duration-150 cursor-pointer"
-                title="登录"
-              >
-                {/* 左侧活跃指示条 */}
-                <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-blue-500 transition-opacity duration-150 ${location.pathname === '/login' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
-                <Lock className="w-4 h-4 shrink-0" />
-                <span>登录</span>
-              </button>
-            )}
+          <div className="relative z-[1] px-3 pb-4 pt-2">
+            <div className="border-t border-slate-200/60 pt-3">
+              {isAuthenticated ? (
+                <NavItemButton
+                  active={isMePage}
+                  icon={<User className="h-4.5 w-4.5 shrink-0" />}
+                  label="我的"
+                  onClick={() => handleAction(onNavigateToMe)}
+                  title="我的简历"
+                  tone="indigo"
+                />
+              ) : (
+                <NavItemButton
+                  active={location.pathname === '/login'}
+                  icon={<Lock className="h-4.5 w-4.5 shrink-0" />}
+                  label="登录"
+                  onClick={() => handleAction(onNavigateToLogin)}
+                  title="登录"
+                  tone="indigo"
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

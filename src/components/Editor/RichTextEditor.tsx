@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
+import type { ClipboardEvent as ReactClipboardEvent } from 'react'
 import {
   Bold,
   Italic,
@@ -8,6 +9,7 @@ import {
   IndentIncrease,
   IndentDecrease,
 } from 'lucide-react'
+import { sanitizeRichHtml } from '../../utils/richText'
 
 interface RichTextEditorProps {
   value: string
@@ -27,11 +29,20 @@ export function RichTextEditor({
   placeholder,
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
+  const onChangeRef = useRef(onChange)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
 
   useEffect(() => {
     if (!editorRef.current) return
-    if (editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || ''
+    const safeValue = sanitizeRichHtml(value || '')
+    if (editorRef.current.innerHTML !== safeValue) {
+      editorRef.current.innerHTML = safeValue
+    }
+    if ((value || '') !== safeValue) {
+      onChangeRef.current(safeValue)
     }
   }, [value])
 
@@ -44,6 +55,18 @@ export function RichTextEditor({
 
   const keepSelectionOnMouseDown = (event: ReactMouseEvent) => {
     event.preventDefault()
+  }
+
+  const handlePaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    const html = event.clipboardData.getData('text/html')
+    if (!html) return
+
+    event.preventDefault()
+    editorRef.current?.focus()
+    document.execCommand('insertHTML', false, sanitizeRichHtml(html))
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML)
+    }
   }
 
   return (
@@ -128,6 +151,7 @@ export function RichTextEditor({
         contentEditable
         suppressContentEditableWarning
         onInput={(e) => onChange((e.currentTarget as HTMLDivElement).innerHTML)}
+        onPaste={handlePaste}
         className="rich-content min-h-[120px] max-h-[280px] overflow-y-auto px-3 py-2 text-gray-700 focus:outline-none"
         style={{ fontSize: '14px', lineHeight: 1.55 }}
         data-placeholder={placeholder || ''}

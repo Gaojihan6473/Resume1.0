@@ -12,6 +12,7 @@ import { useResumeStore } from '../store/resumeStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { toast } from '../components/Toast'
 import {
   FileText,
@@ -23,12 +24,12 @@ import {
   Loader2,
   CheckCircle,
   Clock,
-  Fish,
   User,
   LogOut,
   Copy,
   ChevronsRight,
 } from 'lucide-react'
+import { FishLogo } from '../components/Brand/FishLogo'
 
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
 
@@ -52,7 +53,7 @@ export function MePage() {
   const { user, signOut } = useAuthStore()
   const {
     resumeData, setResumeData, setParseStatus, setParseError, currentResumeId, setCurrentResumeId, setIsDirty,
-    cachedResumes, setCachedResumes, clearCachedResumes
+    cachedResumes, setCachedResumes, clearCachedResumes, clearCurrentFile
   } = useResumeStore()
 
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
@@ -63,6 +64,7 @@ export function MePage() {
   const [retryCount, setRetryCount] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const accountDisplayName = user?.keyName || user?.email || ''
 
   // 首次渲染使用缓存，后台静默刷新
   useEffect(() => {
@@ -116,6 +118,7 @@ export function MePage() {
       setResumeData(result.resume.content as unknown as ResumeData)
       setCurrentResumeId(result.resume.id)
       setIsDirty(false)
+      clearCurrentFile()
       setParseError(null)
       setParseStatus('success')
       toast('新建简历成功', 'success')
@@ -151,6 +154,7 @@ export function MePage() {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
     navigate('/')
@@ -290,16 +294,17 @@ export function MePage() {
           onMouseLeave={scheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={triggerRef} />
 
         <div className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/70">
           <User className="w-4 h-4 text-indigo-500" />
-          <span className="text-sm font-medium text-slate-700">{user?.email}</span>
+          <span className="text-sm font-medium text-slate-700">{accountDisplayName}</span>
         </div>
 
         <div className="ml-auto flex items-center gap-3">
@@ -483,7 +488,7 @@ export function MePage() {
                   <User className="w-5 h-5 text-indigo-500" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-slate-800">{user?.email}</h4>
+                  <h4 className="text-sm font-medium text-slate-800">{accountDisplayName}</h4>
                   <p className="text-xs text-slate-400 mt-0.5">当前登录账号</p>
                 </div>
               </div>

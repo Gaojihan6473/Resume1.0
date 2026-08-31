@@ -1,8 +1,31 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
-import { signIn as apiSignIn, signOut as apiSignOut, fetchCurrentUser } from '../lib/api'
+import { signIn as apiSignIn, signOut as apiSignOut } from '../lib/api'
 import type { User } from '../lib/supabase'
 import { useResumeStore } from './resumeStore'
+import { useResumeAgentSessionStore } from './resumeAgentSessionStore'
+
+const AUTHENTICATED_HINT_KEY = 'resume-authenticated'
+
+function hasAuthenticatedHint(): boolean {
+  try {
+    return window.localStorage.getItem(AUTHENTICATED_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function setAuthenticatedHint(authenticated: boolean): void {
+  try {
+    if (authenticated) {
+      window.localStorage.setItem(AUTHENTICATED_HINT_KEY, '1')
+    } else {
+      window.localStorage.removeItem(AUTHENTICATED_HINT_KEY)
+    }
+  } catch {
+    // Supabase remains the source of truth when browser storage is unavailable.
+  }
+}
 
 interface AuthState {
   user: User | null
@@ -11,16 +34,17 @@ interface AuthState {
   isLoading: boolean
   error: string | null
 
-  // Actions
   signIn: (key: string) => Promise<boolean>
   signOut: () => Promise<void>
   checkSession: () => Promise<void>
   clearError: () => void
 }
 
+const authenticatedHint = hasAuthenticatedHint()
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: false,
+  isAuthenticated: authenticatedHint,
   authInitializing: true,
   isLoading: false,
   error: null,
@@ -28,7 +52,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   signIn: async (key: string) => {
     set({ isLoading: true, error: null })
 
-    // Validate key format
     if (!key.startsWith('sk-')) {
       set({ error: '密钥格式不正确', isLoading: false })
       return false
@@ -37,12 +60,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     const result = await apiSignIn(key)
 
     if (result.success && result.user) {
+      setAuthenticatedHint(true)
       set({
         user: result.user,
         isAuthenticated: true,
         isLoading: false,
         error: null,
       })
+      useResumeAgentSessionStore.getState().bindUser(result.user.id)
       return true
     }
 
@@ -56,7 +81,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     set({ isLoading: true })
     await apiSignOut()
+    setAuthenticatedHint(false)
     useResumeStore.getState().resetAll()
+    useResumeAgentSessionStore.getState().bindUser(null)
     set({
       user: null,
       isAuthenticated: false,
@@ -72,37 +99,46 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data: { session }, error } = await supabase.auth.getSession()
 
       if (error) {
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+        if (error.status === 400 || error.status === 401) {
+          setAuthenticatedHint(false)
+          set({
+            user: null,
+            isAuthenticated: false,
+            authInitializing: false,
+          })
+          return
+        }
+
         set({
-          user: null,
-          isAuthenticated: false,
           authInitializing: false,
         })
         return
       }
 
       if (session) {
-        const result = await fetchCurrentUser()
-        if (result.authenticated && result.user) {
-          set({
-            user: result.user,
-            isAuthenticated: true,
-            authInitializing: false,
-          })
-          return
-        }
+        setAuthenticatedHint(true)
+        set({
+          user: {
+            id: session.user.id,
+            email: session.user.email || '',
+            keyName: '',
+          },
+          isAuthenticated: true,
+          authInitializing: false,
+        })
+        useResumeAgentSessionStore.getState().bindUser(session.user.id)
+        return
       }
 
+      setAuthenticatedHint(false)
+      useResumeAgentSessionStore.getState().bindUser(null)
       set({
         user: null,
         isAuthenticated: false,
         authInitializing: false,
       })
     } catch {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
       set({
-        user: null,
-        isAuthenticated: false,
         authInitializing: false,
       })
     }

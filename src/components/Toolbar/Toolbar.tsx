@@ -3,15 +3,15 @@ import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
-import { updateResume, createResume, uploadResumeFile, uploadResumePreview, updateResumePreviewUrl } from '../../lib/api'
+import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { toast } from '../../components/Toast'
+import { SidebarTriggerHint } from '../Sidebar/SidebarTriggerHint'
 import type { StyleSettings } from '../../types/resume'
+import { saveCurrentResumeToCloud } from '../../utils/saveResume'
 import {
   Type,
   AlignVerticalJustifyCenter,
   Scissors,
-  Maximize2,
-  Minimize2,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -19,19 +19,16 @@ import {
   FileDown,
   ChevronDown,
   Check,
-  Fish,
   ChevronsRight,
   Send,
-  BarChart2,
 } from 'lucide-react'
+import { FishLogo } from '../Brand/FishLogo'
 
 interface ToolbarProps {
-  previewRef: RefObject<HTMLDivElement | null>
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
   onOpenSidebar: () => void
   onScheduleCloseSidebar: () => void
   onAuthRequired?: (action: 'new' | 'upload') => void
-  onNavigateToAnalysis?: () => void
 }
 
 const FONT_OPTIONS = [
@@ -57,6 +54,7 @@ const SPACING_OPTIONS = [
 ]
 
 const PADDING_OPTIONS = [
+  { label: '16', value: 16 },
   { label: '24', value: 24 },
   { label: '32', value: 32 },
   { label: '40', value: 40 },
@@ -65,6 +63,7 @@ const PADDING_OPTIONS = [
 ]
 
 const HORIZONTAL_PADDING_OPTIONS = [
+  { label: '16', value: 16 },
   { label: '24', value: 24 },
   { label: '32', value: 32 },
   { label: '40', value: 40 },
@@ -80,6 +79,9 @@ const LETTER_SPACING_OPTIONS = [
   { label: '0.5', value: 0.5 },
   { label: '1.0', value: 1.0 },
 ]
+
+const MIN_ZOOM = 0.45
+const MAX_ZOOM = 1.5
 
 interface SelectProps {
   value: string | number
@@ -191,123 +193,97 @@ function CardButton({
   )
 }
 
-export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar, onNavigateToAnalysis }: ToolbarProps) {
+export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSidebar }: ToolbarProps) {
   const navigate = useNavigate()
   const {
     resumeData,
     zoom,
-    showMultiPage,
     currentResumeId,
     isDirty,
-    currentFile,
     setZoom,
-    setShowMultiPage,
     updateStyle,
     resetStyle,
     parseStatus,
-    setCurrentResumeId,
-    setIsDirty,
-    cachedResumes,
-    setCachedResumes,
-    clearCurrentFile,
   } = useResumeStore()
   useAuthStore()
+  const agentPreviewMode = useResumeAgentSessionStore((state) => state.previewMode)
+  const hasAgentDraft = useResumeAgentSessionStore((state) => Boolean(state.agentDraftResumeData))
+  const isAgentDraftVisible = agentPreviewMode === 'draft' && hasAgentDraft
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isExportingWord, setIsExportingWord] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [zoomInput, setZoomInput] = useState(() => `${Math.round(zoom * 100)}%`)
+  const [isZoomInputFocused, setIsZoomInputFocused] = useState(false)
+
+  useEffect(() => {
+    if (!isZoomInputFocused) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+    }
+  }, [zoom, isZoomInputFocused])
+
+  const commitZoomInput = () => {
+    const parsedZoom = Number.parseFloat(zoomInput.replace('%', '').trim())
+    if (!Number.isFinite(parsedZoom)) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+      return
+    }
+
+    const clampedZoom = Math.min(MAX_ZOOM * 100, Math.max(MIN_ZOOM * 100, parsedZoom))
+    setZoom(clampedZoom / 100)
+    setZoomInput(`${Math.round(clampedZoom)}%`)
+  }
 
   const handleExportPdf = async () => {
-    if (!previewRef.current) return
-    const { exportToPdf } = await import('../../utils/exporters')
-    const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.pdf` : '简历.pdf'
-    await exportToPdf(previewRef.current, fileName)
+    if (isExportingPdf) return
+    setIsExportingPdf(true)
+
+    try {
+      const { exportToPdf } = await import('../../utils/exporters')
+      const fileName = resumeData.resumeTitle.trim() || '未命名简历'
+      await exportToPdf(resumeData, fileName)
+    } catch (error) {
+      console.error('Export PDF error:', error)
+      toast(error instanceof Error ? error.message : 'PDF 生成失败', 'error')
+    } finally {
+      setIsExportingPdf(false)
+    }
   }
 
   const handleExportWord = async () => {
-    const { exportToWord } = await import('../../utils/exporters')
-    const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.docx` : '简历.docx'
-    await exportToWord(resumeData, fileName)
+    if (isExportingWord) return
+    setIsExportingWord(true)
+
+    try {
+      const { exportToWord } = await import('../../utils/exporters')
+      const fileName = resumeData.basic.name ? `${resumeData.basic.name}_简历.docx` : '简历.docx'
+      await exportToWord(resumeData, fileName)
+    } catch (error) {
+      console.error('Export Word error:', error)
+      toast(error instanceof Error ? error.message : 'Word 生成失败', 'error')
+    } finally {
+      setIsExportingWord(false)
+    }
   }
 
-  const [isSaving, setIsSaving] = useState(false)
   const canNavigateToApplications = !!currentResumeId && !isDirty && !isSaving
 
   const handleSaveDraft = async () => {
     if (isSaving) return
     setIsSaving(true)
 
-    const title = resumeData.resumeTitle || resumeData.basic.name || '我的简历'
-
     try {
-      let resumeId = currentResumeId
-
-      if (currentResumeId) {
-        const result = await updateResume(currentResumeId, title, resumeData as unknown as Record<string, unknown>)
-        if (!result.success) {
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
-        if (result.resume) {
-          const updatedResumes = cachedResumes.map(r =>
-            r.id === currentResumeId ? { ...r, ...result.resume } : r
-          )
-          setCachedResumes(updatedResumes, Date.now())
-        }
-      } else {
-        let fileUrl: string | null = null
-        if (currentFile) {
-          const uploadResult = await uploadResumeFile(currentFile)
-          if (uploadResult.success && uploadResult.fileUrl) {
-            fileUrl = uploadResult.fileUrl
-          }
-        }
-        const result = await createResume(title, resumeData as unknown as Record<string, unknown>, 'cloud', fileUrl)
-        if (result.success && result.resume) {
-          resumeId = result.resume.id
-          setCurrentResumeId(result.resume.id)
-          clearCurrentFile()
-          const updatedResumes = [result.resume, ...cachedResumes]
-          setCachedResumes(updatedResumes, Date.now())
-        } else {
-          toast(result.error || '保存失败', 'error')
-          setIsSaving(false)
-          return
-        }
+      const result = await saveCurrentResumeToCloud()
+      if (!result.success) {
+        toast(result.error || '保存失败', 'error')
+        return
       }
-
-      // 生成并上传预览图
-      if (resumeId && previewRef.current) {
-        console.log('[Preview] Starting preview generation for resume:', resumeId)
-        const { generatePreviewImage } = await import('../../utils/exporters')
-        const previewBlob = await generatePreviewImage(previewRef.current)
-        console.log('[Preview] Blob generated:', previewBlob ? `${previewBlob.size} bytes` : 'NULL')
-        if (previewBlob) {
-          const uploadResult = await uploadResumePreview(previewBlob, resumeId)
-          console.log('[Preview] Upload result:', uploadResult)
-          if (uploadResult.success && uploadResult.previewUrl) {
-            const previewUrl = uploadResult.previewUrl
-            await updateResumePreviewUrl(resumeId, previewUrl)
-            // 更新缓存中的 preview_url
-            const updatedResumes = cachedResumes.map(r =>
-              r.id === resumeId ? { ...r, preview_url: previewUrl } : r
-            )
-            setCachedResumes(updatedResumes, Date.now())
-          } else {
-            console.error('[Preview] Upload failed:', uploadResult.error)
-          }
-        } else {
-          console.error('[Preview] Blob generation returned null')
-        }
-      } else {
-        console.log('[Preview] Skipped - resumeId:', resumeId, 'previewRef:', previewRef.current ? 'exists' : 'null')
-      }
-
-      setIsDirty(false)
       toast('保存成功', 'success')
     } catch (err) {
       console.error('Save error:', err)
       toast('保存失败，请重试', 'error')
+    } finally {
+      setIsSaving(false)
     }
-
-    setIsSaving(false)
   }
 
   const iconSize = 'w-3.5 h-3.5'
@@ -318,24 +294,25 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
   }
 
   return (
-    <div className="app-topbar h-14 shrink-0 flex items-center relative z-50 min-w-0">
+    <div className="app-topbar h-14 shrink-0 flex items-center relative z-[100] min-w-0">
       {/* 左侧 Logo - 固定不滚动 */}
       <div
         ref={sidebarTriggerRef}
         onMouseEnter={onOpenSidebar}
         onMouseLeave={onScheduleCloseSidebar}
-        className="h-full w-40 flex items-center gap-2 px-3 border-r border-slate-200 shrink-0"
+        className="h-full w-40 flex items-center gap-2 px-3 shrink-0"
       >
         <div
           className="flex items-center gap-2 px-1.5 py-1"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-sm">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-7 w-7 items-center justify-center text-black">
+            <FishLogo className="h-5 w-6" />
           </div>
           <span className="text-sm font-semibold text-slate-800 whitespace-nowrap">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
       </div>
+      <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
 
       {/* 中间区域 - 可滚动 */}
       <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar min-w-0 gap-1 px-2">
@@ -383,25 +360,49 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
 
         <div className="w-px h-6 bg-slate-200 mx-1 shrink-0" />
 
-        <CardButton
-          onClick={() => setShowMultiPage(!showMultiPage)}
-          active={showMultiPage}
-          icon={showMultiPage ? <Minimize2 className={iconSize} /> : <Maximize2 className={iconSize} />}
-          label={showMultiPage ? '多页' : '单页'}
-          title={showMultiPage ? '切换到单页预览' : '切换到多页预览'}
-        />
-
         <div className="flex items-center gap-0.5 px-1.5 rounded-xl border border-slate-200 bg-white shrink-0 h-8">
-          <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="缩小" variant="ghost" />
-          <span className="text-xs font-mono w-10 text-center text-slate-700">{Math.round(zoom * 100)}%</span>
-          <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(1.5, zoom + 0.1))} title="放大" variant="ghost" />
+          <CardButton icon={<ZoomOut className="w-3 h-3" />} onClick={() => setZoom(Math.max(MIN_ZOOM, zoom - 0.1))} title="缩小" variant="ghost" />
+          <label className="flex items-center justify-center h-6 rounded-md border border-transparent focus-within:border-blue-300 focus-within:bg-blue-50/50 transition-colors">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={zoomInput}
+              onChange={(event) => setZoomInput(event.target.value)}
+              onFocus={(event) => {
+                setIsZoomInputFocused(true)
+                event.currentTarget.select()
+              }}
+              onBlur={() => {
+                commitZoomInput()
+                setIsZoomInputFocused(false)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur()
+                } else if (event.key === 'Escape') {
+                  setZoomInput(`${Math.round(zoom * 100)}%`)
+                  event.currentTarget.blur()
+                }
+              }}
+              aria-label="预览缩放百分比"
+              title={`输入 ${MIN_ZOOM * 100}%–${MAX_ZOOM * 100}%`}
+              className="w-10 bg-transparent text-center text-xs font-mono text-slate-700 outline-none"
+            />
+          </label>
+          <CardButton icon={<ZoomIn className="w-3 h-3" />} onClick={() => setZoom(Math.min(MAX_ZOOM, zoom + 0.1))} title="放大" variant="ghost" />
         </div>
       </div>
 
       {/* 右侧操作区 - 固定不滚动 */}
       <div className="flex items-center gap-1 px-3 border-l border-slate-200 shrink-0">
         <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
-        <CardButton onClick={handleSaveDraft} disabled={isSaving} icon={<Save className={iconSize} />} label={isSaving ? '保存中' : '保存'} title="保存到云端" />
+        <CardButton
+          onClick={handleSaveDraft}
+          disabled={isSaving || isAgentDraftVisible}
+          icon={<Save className={iconSize} />}
+          label={isSaving ? '保存中' : '保存'}
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '保存到云端'}
+        />
         <CardButton
           onClick={handleGoToApplications}
           disabled={!canNavigateToApplications}
@@ -409,31 +410,23 @@ export function Toolbar({ previewRef, sidebarTriggerRef, onOpenSidebar, onSchedu
           label="岗位"
           title={canNavigateToApplications ? '进入岗位页' : '请先保存最新更改'}
         />
-        <CardButton
-          onClick={onNavigateToAnalysis}
-          disabled={isSaving}
-          icon={<BarChart2 className={iconSize} />}
-          label="分析"
-          title={isSaving ? '保存中，请稍候' : '进入 JD 分析页'}
-        />
-
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
         <CardButton
           onClick={handleExportPdf}
-          disabled={parseStatus === 'idle'}
+          disabled={parseStatus !== 'success' || isExportingPdf || isAgentDraftVisible}
           icon={<FileDown className={iconSize} />}
-          label="PDF"
-          title="Export PDF"
+          label={isExportingPdf ? '生成中' : 'PDF'}
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '导出 PDF'}
           variant="primary"
           className="bg-slate-800 border-slate-800 text-white hover:bg-slate-700"
         />
         <CardButton
           onClick={handleExportWord}
-          disabled={parseStatus === 'idle'}
+          disabled={parseStatus !== 'success' || isExportingWord || isAgentDraftVisible}
           icon={<FileDown className={iconSize} />}
-          label="Word"
-          title="Export Word"
+          label={isExportingWord ? '生成中' : 'Word'}
+          title={isAgentDraftVisible ? 'Agent 草稿需先创建岗位专属版本' : '导出 Word'}
         />
 
         <div

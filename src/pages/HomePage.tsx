@@ -1,30 +1,37 @@
-import { useState, useEffect, useMemo } from 'react'
-import type { RefObject } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
-  Fish,
   FilePlus,
   FileText,
   Sparkles,
-  BarChart3,
-  UserRound,
   Upload as UploadIcon,
   X,
   MapPin,
   Calendar,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   ChevronsRight,
+  GitBranch,
   Loader2,
   MoreHorizontal,
   Copy,
   Trash2,
+  Plus,
+  Target,
+  Pencil,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { FishLogo } from '../components/Brand/FishLogo'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Upload } from '../components/Upload/Upload'
 import { Sidebar } from '../components/Sidebar/Sidebar'
-import { createResume, deleteResume, fetchResumes, type Resume } from '../lib/api'
+import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
+import { createResume, deleteResume, fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useApplicationStore } from '../store/applicationStore'
 import {
   APPLICATION_CHANNEL_LABELS,
@@ -32,7 +39,8 @@ import {
   type Application,
   type ApplicationStatus,
 } from '../types/application'
-import { PdfPreview } from '../components/Application/PdfPreview'
+import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
+import { ResumeThumbnail } from '../components/Application/ResumeThumbnail'
 import { toast } from '../components/Toast'
 
 interface HomePageProps {
@@ -45,31 +53,87 @@ interface HomePageProps {
   onAuthRequired?: (action: 'new' | 'upload' | 'me') => void
 }
 
-const HOME_RECENT_RESUME_LIMIT = 5
-const HOME_RECENT_APPLICATION_LIMIT = 8
+const HOME_RESUME_CARD_MIN_WIDTH = 190
+const HOME_RESUME_GRID_GAP = 20
+const HOME_APPLICATION_CARD_MIN_WIDTH = 230
+const HOME_APPLICATION_GRID_GAP = 16
+const HOME_APPLICATION_ROW_COUNT = 2
+
+function getGridColumnCount(containerWidth: number, cardMinWidth: number, gap: number) {
+  return Math.max(1, Math.floor((containerWidth + gap) / (cardMinWidth + gap)))
+}
 
 export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
-  const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
+  const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, clearCurrentFile, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
   const { isAuthenticated } = useAuthStore()
   const {
     applications,
     isLoading: isLoadingApplications,
+    error: applicationsError,
     fetchApplications,
   } = useApplicationStore()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [recentResumes, setRecentResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(false)
+  const [resumeLoadError, setResumeLoadError] = useState<string | null>(null)
+  const [resumeRetryToken, setResumeRetryToken] = useState(0)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [openResumeMenuId, setOpenResumeMenuId] = useState<string | null>(null)
   const [deleteResumeId, setDeleteResumeId] = useState<string | null>(null)
   const [resumeActionLoadingId, setResumeActionLoadingId] = useState<string | null>(null)
+  const [resumePage, setResumePage] = useState(0)
+  const [applicationPage, setApplicationPage] = useState(0)
+  const [resumePageDirection, setResumePageDirection] = useState<'next' | 'previous'>('next')
+  const [applicationPageDirection, setApplicationPageDirection] = useState<'next' | 'previous'>('next')
+  const [showCreateApplicationDropdown, setShowCreateApplicationDropdown] = useState(false)
+  const [resumePageSize, setResumePageSize] = useState(1)
+  const [applicationPageSize, setApplicationPageSize] = useState(HOME_APPLICATION_ROW_COUNT)
+  const homeContentRef = useRef<HTMLDivElement | null>(null)
+  const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
+  const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const consumedPostLoginActionRef = useRef<string | null>(null)
+
+  useLayoutEffect(() => {
+    const element = homeContentRef.current
+    if (!element) return
+
+    const updatePageSizes = () => {
+      const containerWidth = element.clientWidth
+      if (containerWidth <= 0) return
+
+      const resumeColumns = getGridColumnCount(
+        containerWidth,
+        HOME_RESUME_CARD_MIN_WIDTH,
+        HOME_RESUME_GRID_GAP
+      )
+      const applicationColumns = getGridColumnCount(
+        containerWidth,
+        HOME_APPLICATION_CARD_MIN_WIDTH,
+        HOME_APPLICATION_GRID_GAP
+      )
+
+      setResumePageSize((current) => current === resumeColumns ? current : resumeColumns)
+      setApplicationPageSize((current) => {
+        const nextPageSize = applicationColumns * HOME_APPLICATION_ROW_COUNT
+        return current === nextPageSize ? current : nextPageSize
+      })
+    }
+
+    updatePageSizes()
+
+    const resizeObserver = new ResizeObserver(updatePageSizes)
+    resizeObserver.observe(element)
+    return () => resizeObserver.disconnect()
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated) {
+      setResumeLoadError(null)
       // 优先使用缓存
       if (cachedResumes.length > 0) {
-        setRecentResumes(cachedResumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+        setRecentResumes(cachedResumes)
         setIsLoadingResumes(false)
       } else {
         setIsLoadingResumes(true)
@@ -85,15 +149,20 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           const hasChanges = cachedResumes.length !== result.resumes.length ||
             result.resumes.some((r, i) => {
               const cached = cachedResumes[i]
-              return !cached || r.updated_at !== cached.updated_at || r.preview_url !== cached.preview_url
+              return !cached ||
+                r.updated_at !== cached.updated_at ||
+                !isSameResumeAsset(r.preview_url, cached.preview_url) ||
+                !isSameResumeAsset(r.file_url, cached.file_url)
             })
 
           if (hasChanges) {
-            setRecentResumes(result.resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+            setRecentResumes(result.resumes)
             setCachedResumes(result.resumes, Date.now())
           } else if (cachedResumes.length === 0) {
-            setRecentResumes(result.resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+            setRecentResumes(result.resumes)
           }
+        } else {
+          setResumeLoadError(result.error || '简历加载失败')
         }
         setIsLoadingResumes(false)
       })
@@ -103,9 +172,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       }
     } else {
       setRecentResumes([])
+      setResumeLoadError(null)
       setIsLoadingResumes(false)
     }
-  }, [cachedResumes, isAuthenticated, setCachedResumes])
+  }, [cachedResumes, isAuthenticated, resumeRetryToken, setCachedResumes])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -113,13 +183,63 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     }
   }, [fetchApplications, isAuthenticated])
 
-  const recentApplications = useMemo(
+  const sortedApplications = useMemo(
     () =>
       [...applications]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, HOME_RECENT_APPLICATION_LIMIT),
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [applications]
   )
+
+  const resumePageCount = Math.max(1, Math.ceil(recentResumes.length / resumePageSize))
+  const applicationPageCount = Math.max(1, Math.ceil(sortedApplications.length / applicationPageSize))
+  const safeResumePage = Math.min(resumePage, resumePageCount - 1)
+  const safeApplicationPage = Math.min(applicationPage, applicationPageCount - 1)
+
+  useEffect(() => {
+    setResumePage((current) => Math.min(current, resumePageCount - 1))
+  }, [resumePageCount])
+
+  useEffect(() => {
+    setApplicationPage((current) => Math.min(current, applicationPageCount - 1))
+  }, [applicationPageCount])
+
+  const pagedResumes = useMemo(
+    () => recentResumes.slice(
+      safeResumePage * resumePageSize,
+      (safeResumePage + 1) * resumePageSize
+    ),
+    [recentResumes, resumePageSize, safeResumePage]
+  )
+
+  const pagedApplications = useMemo(
+    () => sortedApplications.slice(
+      safeApplicationPage * applicationPageSize,
+      (safeApplicationPage + 1) * applicationPageSize
+    ),
+    [applicationPageSize, safeApplicationPage, sortedApplications]
+  )
+
+  const handleNextResumePage = useCallback(() => {
+    setOpenResumeMenuId(null)
+    setResumePageDirection('next')
+    setResumePage((current) => (Math.min(current, resumePageCount - 1) + 1) % resumePageCount)
+  }, [resumePageCount])
+
+  const handlePreviousResumePage = useCallback(() => {
+    setOpenResumeMenuId(null)
+    setResumePageDirection('previous')
+    setResumePage((current) => (Math.min(current, resumePageCount - 1) - 1 + resumePageCount) % resumePageCount)
+  }, [resumePageCount])
+
+  const handleNextApplicationPage = useCallback(() => {
+    setApplicationPageDirection('next')
+    setApplicationPage((current) => (Math.min(current, applicationPageCount - 1) + 1) % applicationPageCount)
+  }, [applicationPageCount])
+
+  const handlePreviousApplicationPage = useCallback(() => {
+    setApplicationPageDirection('previous')
+    setApplicationPage((current) => (Math.min(current, applicationPageCount - 1) - 1 + applicationPageCount) % applicationPageCount)
+  }, [applicationPageCount])
 
   useEffect(() => {
     if (!openResumeMenuId) return
@@ -132,39 +252,115 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [openResumeMenuId])
 
+  useEffect(() => {
+    return () => {
+      if (closeCreateApplicationTimeoutRef.current) {
+        clearTimeout(closeCreateApplicationTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleCreateApplicationButtonMouseEnter = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+    setShowCreateApplicationDropdown(true)
+  }, [])
+
+  const handleCreateApplicationButtonClick = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+    setShowCreateApplicationDropdown(true)
+  }, [])
+
+  const handleCreateApplicationButtonMouseLeave = useCallback(() => {
+    closeCreateApplicationTimeoutRef.current = setTimeout(() => {
+      setShowCreateApplicationDropdown(false)
+    }, 200)
+  }, [])
+
+  const handleCreateApplicationDropdownMouseEnter = useCallback(() => {
+    if (closeCreateApplicationTimeoutRef.current) {
+      clearTimeout(closeCreateApplicationTimeoutRef.current)
+      closeCreateApplicationTimeoutRef.current = null
+    }
+  }, [])
+
+  const handleManualCreateApplication = useCallback(() => {
+    navigate('/applications?create=manual')
+  }, [navigate])
+
+  const handleAICreateApplication = useCallback(() => {
+    navigate('/applications?create=ai')
+  }, [navigate])
+
   const syncResumeList = (resumes: Resume[], fetchedAt: number) => {
-    setRecentResumes(resumes.slice(0, HOME_RECENT_RESUME_LIMIT))
+    setRecentResumes(resumes)
     setCachedResumes(resumes, fetchedAt)
   }
 
   const getResumeListForAction = () => cachedResumes.length > 0 ? cachedResumes : recentResumes
 
-  const handleNewResume = () => {
+  const handleNewResume = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('new')
       return
     }
     setResumeData(createDefaultResumeData())
+    setCurrentResumeId(null)
+    setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-  }
+  }, [clearCurrentFile, isAuthenticated, onAuthRequired, setCurrentResumeId, setIsDirty, setParseError, setParseStatus, setResumeData])
 
-  const handleSelectResume = (resume: Resume) => {
+  const handleSelectResume = (resume: Resume, options?: { tab?: 'jd' }) => {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
     setCurrentResumeId(resume.id)
     setIsDirty(false)
+    clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate('/')
+    navigate(options?.tab === 'jd' ? '/?tab=jd' : '/')
   }
 
-  const handleOpenUpload = () => {
+  const handleOpenUpload = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('upload')
       return
     }
     setShowUploadModal(true)
-  }
+  }, [isAuthenticated, onAuthRequired])
+
+  useEffect(() => {
+    const postLoginAction = searchParams.get('postLoginAction')
+    if (!postLoginAction || !isAuthenticated) return
+    if (consumedPostLoginActionRef.current === postLoginAction) return
+    consumedPostLoginActionRef.current = postLoginAction
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('postLoginAction')
+    setSearchParams(nextSearchParams, { replace: true })
+
+    if (postLoginAction === 'new') {
+      handleNewResume()
+    } else if (postLoginAction === 'upload') {
+      handleOpenUpload()
+    }
+  }, [handleNewResume, handleOpenUpload, isAuthenticated, searchParams, setSearchParams])
+
+  useEffect(() => {
+    const agentAction = searchParams.get('agentAction')
+    if (agentAction !== 'new' && agentAction !== 'upload') return
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('agentAction')
+    setSearchParams(nextSearchParams, { replace: true })
+    if (agentAction === 'new') handleNewResume()
+    else handleOpenUpload()
+  }, [handleNewResume, handleOpenUpload, searchParams, setSearchParams])
 
   const handleDuplicateResume = async (resume: Resume) => {
     if (resumeActionLoadingId) return
@@ -229,12 +425,13 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           onMouseLeave={onScheduleCloseSidebar}
           className="flex items-center gap-2 px-2 py-1.5"
         >
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md shadow-blue-200">
-            <Fish className="w-4 h-4 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center text-black">
+            <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
+        <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
       </header>
 
       {/* 主体 */}
@@ -269,162 +466,161 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.72)_0%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.62)_72%,rgba(255,255,255,0)_100%)]" />
             </>
           )}
-          <div className="relative mx-auto w-full max-w-[1180px]">
+          <div ref={homeContentRef} className="relative mx-auto w-full max-w-[1180px]">
             {isAuthenticated ? (
               <>
                 <section>
-                  <div className="mb-7 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <HomeSectionTitle label="我的简历" count={recentResumes.length} />
+                  <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <HomeSectionTitle
+                      label="我的简历"
+                      count={recentResumes.length}
+                    />
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      <button
-                        onClick={handleOpenUpload}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white/80 px-5 text-sm font-semibold text-blue-600 shadow-sm shadow-blue-100 transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-400 hover:bg-blue-50"
-                      >
-                        <UploadIcon className="h-4 w-4" />
-                        上传简历
-                      </button>
-                      <button
-                        onClick={handleNewResume}
-                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 px-5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-600 hover:shadow-xl hover:shadow-blue-300"
-                      >
-                        <FilePlus className="h-4 w-4" />
-                        新建简历
-                      </button>
-                    </div>
+                    {recentResumes.length > 0 && (
+                      <HomeSectionActions>
+                        <HomeGhostButton onClick={handleOpenUpload} icon={<UploadIcon className="h-4 w-4" />}>
+                          上传
+                        </HomeGhostButton>
+                        <HomeGhostButton onClick={handleNewResume} icon={<FilePlus className="h-4 w-4" />} variant="primary">
+                          新建
+                        </HomeGhostButton>
+                      </HomeSectionActions>
+                    )}
                   </div>
 
                   {isLoadingResumes ? (
                     <HomeLoadingState text="简历加载中..." />
+                  ) : resumeLoadError && recentResumes.length === 0 ? (
+                    <HomeLoadErrorState
+                      itemName="简历"
+                      message={resumeLoadError}
+                      onRetry={() => setResumeRetryToken((current) => current + 1)}
+                    />
                   ) : recentResumes.length === 0 ? (
-                    <HomeEmptyState text="暂无最近编辑的简历" />
-                  ) : (
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                      {recentResumes.map((resume) => (
-                        <HomeResumeCard
-                          key={resume.id}
-                          resume={resume}
-                          onClick={() => handleSelectResume(resume)}
-                          isMenuOpen={openResumeMenuId === resume.id}
-                          isLoading={resumeActionLoadingId === resume.id}
-                          onToggleMenu={() => setOpenResumeMenuId((current) => current === resume.id ? null : resume.id)}
-                          onDuplicate={() => handleDuplicateResume(resume)}
-                          onRequestDelete={() => handleRequestDeleteResume(resume)}
+                    <HomeEmptyActionState
+                      title="还没有简历"
+                      description="先建立一份基础简历，之后可以复制成不同岗位版本。"
+                      actions={(
+                        <HomeResumeCreateActions
+                          onCreate={handleNewResume}
+                          onUpload={handleOpenUpload}
                         />
-                      ))}
-                    </div>
+                      )}
+                    />
+                  ) : (
+                    <>
+                      <div
+                        key={`resume-page-${safeResumePage}`}
+                        className={`home-page-slide-in grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-5 ${resumePageDirection === 'previous' ? 'home-page-slide-in-reverse' : ''}`}
+                      >
+                        {pagedResumes.map((resume) => (
+                          <HomeResumeCard
+                            key={resume.id}
+                            resume={resume}
+                            onClick={() => handleSelectResume(resume)}
+                            isMenuOpen={openResumeMenuId === resume.id}
+                            isLoading={resumeActionLoadingId === resume.id}
+                            onToggleMenu={() => setOpenResumeMenuId((current) => current === resume.id ? null : resume.id)}
+                            onDuplicate={() => handleDuplicateResume(resume)}
+                            onRequestDelete={() => handleRequestDeleteResume(resume)}
+                          />
+                        ))}
+                      </div>
+                      <HomePager
+                        label="简历"
+                        page={safeResumePage}
+                        pageCount={resumePageCount}
+                        onPrevious={handlePreviousResumePage}
+                        onNext={handleNextResumePage}
+                      />
+                    </>
                   )}
                 </section>
 
                 <section className="mt-12">
-                  <div className="mb-5">
-                    <HomeSectionTitle label="岗位" count={recentApplications.length} />
+                  <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <HomeSectionTitle
+                      label="岗位"
+                      count={sortedApplications.length}
+                    />
+                    {sortedApplications.length > 0 && (
+                      <HomeSectionActions>
+                        <HomeGhostButton
+                          buttonRef={createApplicationButtonRef}
+                          onMouseEnter={handleCreateApplicationButtonMouseEnter}
+                          onMouseLeave={handleCreateApplicationButtonMouseLeave}
+                          onClick={handleCreateApplicationButtonClick}
+                          icon={<Plus className="h-4 w-4" />}
+                          variant="primary"
+                          menuAligned
+                        >
+                          新建岗位
+                        </HomeGhostButton>
+                      </HomeSectionActions>
+                    )}
                   </div>
 
                   {isLoadingApplications ? (
                     <HomeLoadingState text="岗位加载中..." compact />
-                  ) : recentApplications.length === 0 ? (
-                    <HomeEmptyState text="暂无岗位记录" compact />
-                  ) : (
-                    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-                      {recentApplications.map((application) => (
-                        <HomeApplicationCard
-                          key={application.id}
-                          application={application}
-                          resumes={cachedResumes}
-                          onClick={() => navigate(`/applications?applicationId=${application.id}`)}
+                  ) : applicationsError && sortedApplications.length === 0 ? (
+                    <HomeLoadErrorState
+                      compact
+                      itemName="岗位"
+                      message={applicationsError}
+                      onRetry={() => void fetchApplications()}
+                    />
+                  ) : sortedApplications.length === 0 ? (
+                    <HomeEmptyActionState
+                      compact
+                      title="还没有岗位"
+                      description="新建岗位后，可以把 JD 和对应简历版本关联起来。"
+                      actions={(
+                        <HomeApplicationCreateActions
+                          onAICreate={handleAICreateApplication}
+                          onManualCreate={handleManualCreateApplication}
                         />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </>
-            ) : (
-              <>
-                {/* 标题区 */}
-                <div className="relative mb-7 grid items-center gap-6 lg:grid-cols-[1fr_420px]">
-                  <div className="pt-4 text-center lg:text-left">
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/60">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      AI 简历工作台
-                    </div>
-                    <h1 className="text-[40px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl">
-                      <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">智能</span> 制作简历
-                    </h1>
-                    <p className="mt-4 text-base font-medium leading-7 text-slate-500">
-                      上传现有简历，AI 瞬间解析 · 从空白开始，自由创作
-                    </p>
-                  </div>
-
-                  <div className="relative hidden h-44 lg:block">
-                    <div className="absolute right-3 top-7 h-24 w-80 rotate-[-8deg] rounded-[50%] border-2 border-indigo-200/70" />
-                    <div className="absolute right-24 top-4 h-40 w-40 rotate-6 rounded-[26px] border border-white/80 bg-gradient-to-br from-white/85 to-blue-100/70 p-5 shadow-2xl shadow-blue-200/60 backdrop-blur">
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-300">
-                          <UserRound className="h-6 w-6" />
-                        </div>
-                        <div className="space-y-2">
-                          <div className="h-2.5 w-20 rounded-full bg-blue-200/90" />
-                          <div className="h-2.5 w-16 rounded-full bg-slate-200/90" />
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="h-3 w-full rounded-full bg-white" />
-                        <div className="h-3 w-11/12 rounded-full bg-white" />
-                        <div className="h-3 w-4/5 rounded-full bg-white" />
-                      </div>
-                    </div>
-                    <div className="absolute right-0 top-16 flex h-20 w-24 rotate-6 items-end gap-2 rounded-[22px] bg-gradient-to-br from-blue-500 to-violet-500 p-4 shadow-2xl shadow-indigo-200/80">
-                      <BarChart3 className="h-11 w-11 text-white/90" />
-                    </div>
-                    <div className="absolute right-4 top-4 h-2 w-2 rotate-45 bg-indigo-300" />
-                    <div className="absolute right-72 top-20 h-2.5 w-2.5 rotate-45 bg-blue-300" />
-                  </div>
-                </div>
-
-                {/* 上传与新建并列区域 */}
-                <div className="relative mb-6 grid items-stretch gap-6 lg:grid-cols-2">
-                  {/* 上传区域 */}
-                  <section className="flex min-h-[248px] min-w-0">
-                    <Upload embedded showBottomHint={false} onAuthRequired={() => onAuthRequired?.('upload')} />
-                  </section>
-
-                  {/* 新建空白简历 */}
-                  <section className="flex min-h-[248px] min-w-0">
-                    <button
-                      onClick={handleNewResume}
-                      className="group relative flex min-h-[248px] min-w-0 flex-1 overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-6 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] btn-press"
-                    >
-                      <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
-                        {Array.from({ length: 25 }).map((_, index) => (
-                          <span key={index} className="h-1.5 w-1.5 rounded-full bg-violet-300" />
+                      )}
+                    />
+                  ) : (
+                    <>
+                      <div
+                        key={`application-page-${safeApplicationPage}`}
+                        className={`home-page-slide-in grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4 ${applicationPageDirection === 'previous' ? 'home-page-slide-in-reverse' : ''}`}
+                      >
+                        {pagedApplications.map((application) => (
+                          <HomeApplicationCard
+                            key={application.id}
+                            application={application}
+                            resumes={cachedResumes}
+                            onClick={() => navigate(`/applications?applicationId=${application.id}`)}
+                          />
                         ))}
                       </div>
-                      <div className="pointer-events-none absolute -right-4 bottom-3 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/80" />
-                      <div className="pointer-events-none absolute bottom-8 right-10 h-24 w-5 rotate-[34deg] rounded-full bg-gradient-to-b from-violet-200 to-violet-400 shadow-lg shadow-violet-200" />
+                      <HomePager
+                        label="岗位"
+                        page={safeApplicationPage}
+                        pageCount={applicationPageCount}
+                        onPrevious={handlePreviousApplicationPage}
+                        onNext={handleNextApplicationPage}
+                      />
+                    </>
+                  )}
+                </section>
 
-                      <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-6 md:grid-cols-[minmax(128px,170px)_minmax(0,1fr)]">
-                        <div className="flex items-center justify-center">
-                          <div className="relative">
-                            <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
-                            <div className="absolute -bottom-5 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] border border-violet-200 bg-white/45" />
-                            <div className="relative flex h-[76px] w-[76px] items-center justify-center rounded-[24px] bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-xl shadow-violet-300/80 transition-transform duration-300 group-hover:scale-105">
-                              <FilePlus className="h-9 w-9" />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="relative z-[1] min-w-0 text-center md:text-left">
-                          <h2 className="text-xl font-bold text-slate-900">新建空白简历</h2>
-                          <p className="mt-3 text-sm font-medium leading-6 text-slate-500">无需上传文件，直接开始编辑</p>
-                          <span className="mt-6 inline-flex h-11 min-w-36 items-center justify-center rounded-xl border border-violet-400 bg-white/70 px-8 text-sm font-semibold text-violet-600 shadow-sm shadow-violet-100 transition-all duration-300 group-hover:bg-white group-hover:shadow-md">
-                            新建简历
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  </section>
-                </div>
+                <CreateApplicationDropdown
+                  visible={showCreateApplicationDropdown}
+                  buttonRef={createApplicationButtonRef}
+                  onManualCreate={handleManualCreateApplication}
+                  onAICreate={handleAICreateApplication}
+                  onClose={() => setShowCreateApplicationDropdown(false)}
+                  onMouseEnter={handleCreateApplicationDropdownMouseEnter}
+                />
               </>
+            ) : (
+              <UnauthenticatedLanding
+                onCreateBaseResume={handleNewResume}
+                onAuthRequired={onAuthRequired}
+              />
             )}
 
           </div>
@@ -446,18 +642,461 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   )
 }
 
+function HomeSectionActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {children}
+    </div>
+  )
+}
+
+function HomeLoadErrorState({
+  itemName,
+  message,
+  onRetry,
+  compact = false,
+}: {
+  itemName: string
+  message: string
+  onRetry: () => void
+  compact?: boolean
+}) {
+  return (
+    <div className={`flex flex-col items-center justify-center rounded-2xl border border-amber-200 bg-amber-50/70 px-6 text-center ${compact ? 'min-h-36 py-6' : 'min-h-48 py-8'}`} role="alert">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm">
+        <AlertCircle className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-slate-700">{itemName}暂时加载失败</p>
+      <p className="mt-1 text-xs text-slate-500">{message}，已有数据不会受到影响。</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-xs font-semibold text-amber-700 shadow-sm transition-colors hover:bg-amber-100"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        重新加载
+      </button>
+    </div>
+  )
+}
+
+function HomeApplicationCreateActions({
+  onAICreate,
+  onManualCreate,
+  compact = false,
+}: {
+  onAICreate: () => void
+  onManualCreate: () => void
+  compact?: boolean
+}) {
+  return (
+    <HomeSectionActions>
+      <HomeGhostButton
+        onClick={onAICreate}
+        icon={<FileText className="h-4 w-4" />}
+        variant="primary"
+        compact={compact}
+      >
+        图文解析
+      </HomeGhostButton>
+      <HomeGhostButton
+        onClick={onManualCreate}
+        icon={<Pencil className="h-4 w-4" />}
+        compact={compact}
+      >
+        手动填写
+      </HomeGhostButton>
+    </HomeSectionActions>
+  )
+}
+
+function HomeResumeCreateActions({
+  onCreate,
+  onUpload,
+}: {
+  onCreate: () => void
+  onUpload: () => void
+}) {
+  return (
+    <HomeSectionActions>
+      <HomeGhostButton
+        onClick={onCreate}
+        icon={<FilePlus className="h-4 w-4" />}
+        variant="primary"
+      >
+        新建简历
+      </HomeGhostButton>
+      <HomeGhostButton
+        onClick={onUpload}
+        icon={<UploadIcon className="h-4 w-4" />}
+      >
+        上传解析
+      </HomeGhostButton>
+    </HomeSectionActions>
+  )
+}
+
+function HomeGhostButton({
+  children,
+  icon,
+  buttonRef,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+  variant = 'default',
+  compact = false,
+  menuAligned = false,
+  className = '',
+}: {
+  children: ReactNode
+  icon: ReactNode
+  buttonRef?: RefObject<HTMLButtonElement | null>
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
+  onMouseLeave?: () => void
+  variant?: 'default' | 'primary'
+  compact?: boolean
+  menuAligned?: boolean
+  className?: string
+}) {
+  const sizeClass = menuAligned
+    ? 'h-10 justify-start px-3.5 text-sm'
+    : compact
+      ? 'h-9 justify-center px-3.5 text-xs'
+      : 'h-10 justify-center px-4 text-sm'
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className={`inline-flex items-center gap-2 rounded-xl font-semibold transition-all duration-200 hover:-translate-y-0.5 ${sizeClass} ${
+        variant === 'primary'
+          ? 'border border-blue-200 bg-blue-50/80 text-blue-600 shadow-sm shadow-blue-100 hover:border-blue-300 hover:bg-blue-100'
+          : 'border border-slate-200 bg-white/70 text-slate-500 shadow-sm shadow-slate-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
+      } ${className}`}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+}
+
+function HomeEmptyActionState({
+  title,
+  description,
+  primaryLabel,
+  primaryIcon,
+  onPrimary,
+  onPrimaryClick,
+  onPrimaryMouseEnter,
+  onPrimaryMouseLeave,
+  secondaryLabel,
+  onSecondary,
+  actions,
+  compact = false,
+}: {
+  title: string
+  description: string
+  primaryLabel?: string
+  primaryIcon?: ReactNode
+  onPrimary?: () => void
+  onPrimaryClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  onPrimaryMouseEnter?: (event: MouseEvent<HTMLButtonElement>) => void
+  onPrimaryMouseLeave?: () => void
+  secondaryLabel?: string
+  onSecondary?: () => void
+  actions?: ReactNode
+  compact?: boolean
+}) {
+  const handlePrimaryClick = (event: MouseEvent<HTMLButtonElement>) => {
+    if (onPrimaryClick) {
+      onPrimaryClick(event)
+      return
+    }
+    onPrimary?.()
+  }
+
+  return (
+    <div className={`flex flex-col items-center justify-center rounded-[24px] border border-white/80 bg-white/58 px-5 text-center shadow-sm shadow-blue-100/40 backdrop-blur ${compact ? 'min-h-[150px] py-6' : 'min-h-[260px] py-8'}`}>
+      <h3 className="text-base font-bold text-slate-800">{title}</h3>
+      <p className="mt-2 max-w-md text-sm font-medium leading-6 text-slate-500">{description}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        {actions ?? (
+          <>
+            {primaryLabel && (
+              <button
+                type="button"
+                onClick={handlePrimaryClick}
+                onMouseEnter={onPrimaryMouseEnter}
+                onMouseLeave={onPrimaryMouseLeave}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-5 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-600 hover:to-indigo-600"
+              >
+                {primaryIcon}
+                {primaryLabel}
+              </button>
+            )}
+          </>
+        )}
+        {secondaryLabel && onSecondary && (
+          <button
+            type="button"
+            onClick={onSecondary}
+            className="text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700"
+          >
+            {secondaryLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function UnauthenticatedLanding({
+  onCreateBaseResume,
+  onAuthRequired,
+}: {
+  onCreateBaseResume: () => void
+  onAuthRequired?: HomePageProps['onAuthRequired']
+}) {
+  return (
+    <>
+      <section className="relative mb-7 grid items-center gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 pt-2 text-center lg:text-left">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/50 backdrop-blur">
+            <Target className="h-3.5 w-3.5" />
+            JD 定制简历工作台
+          </div>
+          <h1 className="mx-auto max-w-3xl text-[38px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl lg:mx-0 lg:max-w-none lg:whitespace-nowrap">
+            每个 <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">JD</span>，都有一版更匹配的简历
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-8 text-slate-500 lg:mx-0 lg:max-w-none lg:truncate">
+            先建立一份基础简历，再围绕不同岗位复制、调整和分析匹配点，让每次投递都有对应版本。
+          </p>
+        </div>
+
+        <LandingWorkflowMockup />
+      </section>
+
+      <section className="relative mb-7">
+        <div className="mb-4 flex flex-col gap-2 text-center sm:text-left">
+          <p className="text-xs font-semibold text-blue-600">从基础版开始</p>
+          <h2 className="text-2xl font-bold text-slate-900">选择一种方式建立基础版</h2>
+        </div>
+        <div className="grid items-stretch gap-5 lg:grid-cols-2">
+          <section className="flex min-h-[190px] min-w-0">
+            <Upload
+              embedded
+              compact
+              showBottomHint={false}
+              onAuthRequired={() => onAuthRequired?.('upload')}
+              emptyTitle="导入现有简历"
+              emptyActiveTitle="松开即可导入"
+              emptyDescription="上传 PDF、DOCX、TXT，解析成可编辑的基础版。"
+              emptyActionLabel="选择文件导入"
+              emptyBadge="开始入口"
+              emphasizeAction
+            />
+          </section>
+
+          <section className="flex min-h-[190px] min-w-0">
+            <button
+              type="button"
+              onClick={onCreateBaseResume}
+              className="group relative flex min-h-[190px] min-w-0 flex-1 cursor-pointer overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-5 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] ring-1 ring-violet-300/70 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 btn-press"
+            >
+              <div className="absolute left-5 top-5 z-[2] rounded-full border border-violet-200 bg-white/85 px-3 py-1 text-[11px] font-semibold text-violet-600 shadow-sm shadow-violet-100 backdrop-blur">
+                开始入口
+              </div>
+              <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
+                {Array.from({ length: 25 }).map((_, index) => (
+                  <span key={index} className="h-1.5 w-1.5 rounded-full bg-violet-300" />
+                ))}
+              </div>
+              <div className="pointer-events-none absolute -right-8 bottom-0 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/70" />
+
+              <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-5 md:grid-cols-[minmax(104px,140px)_minmax(0,1fr)]">
+                <div className="flex items-center justify-center">
+                  <div className="relative">
+                    <div className="absolute -bottom-4 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
+                    <div className="absolute -bottom-5 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] border border-violet-200 bg-white/45" />
+                    <div className="relative flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-xl shadow-violet-300/80 transition-transform duration-300 group-hover:scale-105">
+                      <FilePlus className="h-8 w-8" />
+                    </div>
+                  </div>
+                </div>
+                <div className="relative z-[1] min-w-0 text-center md:text-left">
+                  <h2 className="text-lg font-bold text-slate-900">创建基础版简历</h2>
+                  <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
+                    从空白开始搭建主简历，之后可复制成不同岗位版本。
+                  </p>
+                  <span className="mt-5 inline-flex h-10 min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-6 text-sm font-semibold text-white shadow-xl shadow-violet-300 ring-4 ring-violet-100/80 transition-all duration-300 group-hover:from-violet-600 group-hover:to-purple-700 group-hover:ring-violet-200/80">
+                    开始创建基础版
+                  </span>
+                </div>
+              </div>
+            </button>
+          </section>
+        </div>
+      </section>
+
+      <LandingFlowStrip />
+    </>
+  )
+}
+
+function LandingWorkflowMockup() {
+  return (
+    <div className="pointer-events-none relative mx-auto w-full max-w-[420px] select-none px-2 py-4">
+      <div className="absolute inset-x-6 top-8 bottom-8 rounded-[36px] bg-[radial-gradient(circle_at_50%_15%,rgba(219,234,254,0.62),rgba(255,255,255,0)_68%)] blur-2xl" />
+      <div className="absolute right-8 top-8 grid grid-cols-5 gap-2 opacity-18">
+        {Array.from({ length: 25 }).map((_, index) => (
+          <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
+        ))}
+      </div>
+      <div className="relative z-[1] space-y-3">
+        <div className="flex items-center gap-3 rounded-[22px] border border-white/70 bg-white/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/92 to-indigo-500/92 text-white shadow-md shadow-blue-200/70">
+            <FilePlus className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">创建简历</p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-400">导入或新建基础版</p>
+          </div>
+        </div>
+
+        <div className="ml-8 h-5 w-px bg-gradient-to-b from-blue-200 to-indigo-200" />
+
+        <div className="flex items-center gap-3 rounded-[22px] border border-blue-100/80 bg-blue-50/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-blue-600 shadow-sm">
+            <Plus className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">添加岗位</p>
+            <p className="mt-1 truncate text-xs font-medium text-blue-500">录入目标岗位 JD</p>
+          </div>
+        </div>
+
+        <div className="ml-8 h-5 w-px bg-gradient-to-b from-indigo-200 to-violet-200" />
+
+        <div className="flex items-center gap-3 rounded-[22px] border border-violet-100/80 bg-violet-50/50 px-4 py-3 shadow-sm shadow-violet-100/50 backdrop-blur">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-violet-600 shadow-sm">
+            <Target className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">JD分析</p>
+            <p className="mt-1 truncate text-xs font-medium text-violet-500">提炼匹配重点，生成多版本</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LandingFlowStrip() {
+  const items = [
+    { icon: <FileText className="h-3.5 w-3.5" />, label: '保留基础版' },
+    { icon: <GitBranch className="h-3.5 w-3.5" />, label: '复制岗位版本' },
+    { icon: <Sparkles className="h-3.5 w-3.5" />, label: '按 JD 优化' },
+  ]
+
+  return (
+    <section className="pb-8">
+      <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200/60 pt-5 text-center sm:flex-row sm:text-left">
+        <p className="text-sm font-medium leading-6 text-slate-500">
+          建立基础版后，可以继续复制成不同岗位版本，再用 JD 分析找到改写重点。
+        </p>
+        <div className="flex shrink-0 flex-wrap justify-center gap-2">
+          {items.map((item) => (
+            <span
+              key={item.label}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-100 bg-white/60 px-3 text-xs font-semibold text-blue-600 shadow-sm shadow-blue-100/40 backdrop-blur"
+            >
+              {item.icon}
+              {item.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function HomeSectionTitle({
   label,
   count,
+  description,
 }: {
   label: string
   count: number
+  description?: string
 }) {
   return (
-    <h2 className="relative inline-flex pb-2 text-lg font-bold text-slate-800">
-      <span>{label}（{count}）</span>
-      <span className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
-    </h2>
+    <div>
+      <h2 className="relative inline-flex pb-2 text-lg font-bold text-slate-800">
+        <span>{label}（{count}）</span>
+        <span className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400" />
+      </h2>
+      {description && (
+        <p className="mt-2 text-sm font-medium text-slate-500">{description}</p>
+      )}
+    </div>
+  )
+}
+
+function HomePager({
+  label,
+  page,
+  pageCount,
+  onPrevious,
+  onNext,
+}: {
+  label: string
+  page: number
+  pageCount: number
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  if (pageCount <= 1) return null
+
+  const isFirstPage = page === 0
+  const isLastPage = page === pageCount - 1
+  const previousActionLabel = isFirstPage ? `${label}返回最后一页` : `${label}上一页`
+  const actionLabel = isLastPage ? `${label}返回第一页` : `${label}下一页`
+
+  return (
+    <div className="mt-4 flex justify-end">
+      <div className="inline-flex h-10 items-center gap-0.5 rounded-full border border-slate-200/90 bg-white/90 px-0.5 py-1 shadow-sm shadow-blue-100/70 backdrop-blur-sm">
+        <button
+          type="button"
+          aria-label={previousActionLabel}
+          title={previousActionLabel}
+          onClick={onPrevious}
+          className="group relative flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none transition-colors duration-200 hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 active:scale-95"
+        >
+          <span className="pointer-events-none absolute h-7 w-7 scale-75 rounded-full bg-blue-50 opacity-0 transition-all duration-200 ease-out group-hover:scale-100 group-hover:opacity-100" />
+          <ChevronLeft className="relative h-4 w-4" strokeWidth={2.5} />
+        </button>
+        <span
+          aria-live="polite"
+          className="min-w-10 text-center text-xs font-bold tabular-nums text-slate-500"
+        >
+          {page + 1} / {pageCount}
+        </span>
+        <button
+          type="button"
+          aria-label={actionLabel}
+          title={actionLabel}
+          onClick={onNext}
+          className="group relative flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none transition-colors duration-200 hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 active:scale-95"
+        >
+          <span className="pointer-events-none absolute h-7 w-7 scale-75 rounded-full bg-blue-50 opacity-0 transition-all duration-200 ease-out group-hover:scale-100 group-hover:opacity-100" />
+          <ChevronRight className="relative h-4 w-4" strokeWidth={2.5} />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -465,14 +1104,6 @@ function HomeLoadingState({ text, compact = false }: { text: string; compact?: b
   return (
     <div className={`flex items-center justify-center text-sm font-medium text-slate-400 ${compact ? 'min-h-[160px]' : 'min-h-[340px]'}`}>
       <Loader2 className="mr-2 h-4 w-4 animate-spin text-blue-500" />
-      {text}
-    </div>
-  )
-}
-
-function HomeEmptyState({ text, compact = false }: { text: string; compact?: boolean }) {
-  return (
-    <div className={`flex items-center justify-center text-sm font-medium text-slate-400 ${compact ? 'min-h-[160px]' : 'min-h-[340px]'}`}>
       {text}
     </div>
   )
@@ -519,21 +1150,19 @@ function HomeResumeCard({
       className={`group relative min-w-0 cursor-pointer text-left outline-none ${isMenuOpen ? 'z-30' : ''}`}
     >
       <div className="relative">
-        <div className="aspect-[210/297] overflow-hidden rounded-[18px] border border-slate-200 bg-white/95 shadow-md shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-xl group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
-          {hasPreview ? (
-            <div className="flex h-full w-full items-center justify-center rounded-[18px] bg-white">
-              <img
-                src={resume.preview_url!}
+        <div className="aspect-[210/297] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-lg group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
+          {hasPreview || hasPdf ? (
+            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white">
+              <ResumeThumbnail
+                resume={resume}
                 alt={title}
-                className="h-full w-full rounded-[18px] object-contain"
-              />
-            </div>
-          ) : hasPdf ? (
-            <div className="flex h-full w-full items-start justify-center rounded-[18px] bg-white">
-              <PdfPreview fileUrl={resume.file_url!} className="h-full w-full rounded-[18px] bg-white" />
+                className="h-full w-full rounded-2xl object-contain"
+              >
+                <div className="h-full w-full rounded-2xl bg-white" />
+              </ResumeThumbnail>
             </div>
           ) : (
-            <div className="h-full overflow-hidden rounded-[18px] bg-white p-4">
+            <div className="h-full overflow-hidden rounded-2xl bg-white p-4">
               <div className="border-b border-slate-100 pb-3 text-center">
                 <h3 className="truncate text-sm font-bold text-slate-800">
                   {content.basic?.name || '未命名'}
@@ -575,7 +1204,7 @@ function HomeResumeCard({
         </div>
 
         <div
-          className={`absolute bottom-3 right-3 z-20 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+          className={`absolute bottom-2.5 right-2.5 z-20 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
@@ -586,7 +1215,7 @@ function HomeResumeCard({
             aria-expanded={isMenuOpen}
             disabled={isLoading}
             onClick={onToggleMenu}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/95 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.18),0_2px_6px_rgba(15,23,42,0.1)] backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-[0_14px_30px_rgba(37,99,235,0.2),0_4px_10px_rgba(15,23,42,0.12)] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -624,11 +1253,11 @@ function HomeResumeCard({
           )}
         </div>
       </div>
-      <div className="mt-4 min-w-0">
-        <p className="truncate text-base font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
+      <div className="mt-3 min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
           {title}
         </p>
-        <p className="mt-1 text-xs font-medium text-slate-400">
+        <p className="mt-1 text-[11px] font-medium text-slate-400">
           {new Date(resume.updated_at).toLocaleDateString('zh-CN')}
         </p>
       </div>
@@ -651,23 +1280,23 @@ function HomeApplicationCard({
   return (
     <button
       onClick={onClick}
-      className="group relative min-h-[140px] min-w-0 rounded-[20px] border border-slate-200 bg-white/95 p-5 text-left shadow-md shadow-slate-200/60 transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-xl hover:shadow-blue-100"
+      className="group relative min-h-[116px] min-w-0 rounded-2xl border border-slate-200 bg-white/95 p-4 text-left shadow-sm shadow-slate-200/60 transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-lg hover:shadow-blue-100"
     >
-      <div className="absolute right-5 top-5">
+      <div className="absolute right-4 top-4">
         <StatusPill status={application.status} />
       </div>
 
       <div className="min-w-0">
         <div className="min-w-0 pr-20">
-          <p className="truncate text-base font-bold text-slate-900">
+          <p className="truncate text-sm font-bold text-slate-900">
             {application.company || '未填写公司'}
           </p>
-          <p className="mt-1.5 truncate text-sm font-medium text-slate-500">
+          <p className="mt-1.5 truncate text-xs font-medium text-slate-500">
             {application.position || '未填写岗位'}
           </p>
         </div>
 
-        <div className="mt-5 flex min-w-0 items-center gap-3 overflow-hidden text-[11px] font-medium text-slate-500">
+        <div className="mt-4 flex min-w-0 items-center gap-2.5 overflow-hidden text-[11px] font-medium text-slate-500">
           {application.location && (
             <p className="flex min-w-0 max-w-[4.75rem] shrink-0 items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -692,10 +1321,10 @@ function StatusPill({ status }: { status: ApplicationStatus }) {
   const statusStyles: Record<ApplicationStatus, string> = {
     interested: 'bg-purple-50 text-purple-600',
     applied: 'bg-blue-50 text-blue-600',
+    assessing: 'bg-cyan-50 text-cyan-600',
     interviewing: 'bg-amber-50 text-amber-600',
     offered: 'bg-emerald-50 text-emerald-600',
     rejected: 'bg-red-50 text-red-600',
-    ghosted: 'bg-slate-100 text-slate-500',
   }
 
   return (
@@ -790,7 +1419,7 @@ function UploadResumeModal({
 
         <div className="p-5">
           <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
-            <div className="min-w-0">
+            <div className="h-full min-w-0">
               <Upload embedded showBottomHint={false} onAuthRequired={onAuthRequired} />
             </div>
 

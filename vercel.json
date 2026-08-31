@@ -1,9 +1,16 @@
 {
   "framework": "vite",
-  "buildCommand": "yarn build",
-  "installCommand": "yarn install",
+  "buildCommand": "npm run build",
+  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci",
   "outputDirectory": "dist",
+  "functions": {
+    "api/render-resume-pdf.js": {
+      "maxDuration": 60,
+      "includeFiles": "{scripts/resume-pdf-renderer.mjs,src/assets/hero.png,node_modules/@sparticuz/chromium/bin/**/*,node_modules/@fontsource/noto-sans-sc/files/**/*,node_modules/@fontsource/noto-serif-sc/files/**/*}"
+    }
+  },
   "rewrites": [
+    { "source": "/render-resume-pdf", "destination": "/api/render-resume-pdf" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

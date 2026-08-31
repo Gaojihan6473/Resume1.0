@@ -6,12 +6,14 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 
 - Upload and parse resume files
 - Rule-based section extraction (basic info, education, internships, projects, summary, skills)
-- Visual editor + A4 preview
-- Save/load local draft
-- Track applications and jump from a saved resume to JD analysis
-- JD analysis can preselect the source resume from the editor
+- Visual editor + live A4 preview from the same HTML used for PDF export
+- Save/load resumes with Supabase
+- Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
+- The signed-in homepage paginates resume cards 5 at a time and job cards 8 at a time with looping previous/next controls and a lightweight slide transition.
+- JD analysis runs inside the resume editor with a viewport-height input panel; the editor column stays fixed while long JD content scrolls inside the text area
+- Resume Agent uses a shared bottom capsule that expands upward to select a base resume and target job, then creates an independently reviewable job-specific version without overwriting the base resume. It is available to authenticated users by default.
 - Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
-- Export to PDF / DOCX
+- Export vector PDF / DOCX
 
 ## Tech Stack
 
@@ -21,19 +23,28 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Vite 8
 - Tailwind CSS 4
 - pdfjs-dist / mammoth (text extraction)
-- html2canvas + jsPDF + docx (export)
+- Playwright PDF rendering + docx (export)
 
 ## Scripts
 
 ```bash
 npm run dev
+npm run pdf:server
 npm run lint
 npm run build
+npm test
+npm run eval:resume-agent
 npm run preview
 npm run check:encoding
 ```
 
 ## Notes
 
-- Draft is stored in `localStorage` under key `resume_draft`.
+- Resume/JD parsing calls are proxied through the `minimax-chat` Supabase Edge Function. Configure `MINIMAX_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
+- JD analysis calls are proxied through the `deepseek-chat` Supabase Edge Function and use `deepseek-v4-flash`. Configure `DEEPSEEK_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
+- Resume Agent uses the separate `resume-agent` Edge Function. The frontend is enabled by default and can be rolled back per environment with `VITE_RESUME_AGENT_ENABLED=false`; keep server-side `RESUME_AGENT_ENABLED=true` after deploying the function. The default Eval command validates 20 synthetic fixtures locally; add `-- --live` only for an explicit local DeepSeek run.
+- Login uses the `auth-sign-in` Supabase Edge Function: it verifies an `sk-...` key against `public.valid_keys`, then exchanges a server-generated magic-link token for a Supabase Auth session. Configure `SUPABASE_SERVICE_ROLE_KEY` for auth and AI Edge Functions.
+- The `resumes` storage bucket is private. The frontend stores object paths in `file_url` / `preview_url` and resolves them to signed URLs when rendering.
+- The editor preview renders the same A4 HTML document that is sent to Playwright for PDF export. In local `npm run dev`, Vite serves `/render-resume-pdf` directly. On Vercel, `/render-resume-pdf` is rewritten to the Node Function in `api/render-resume-pdf.js`. For a separate render service, set `VITE_PDF_RENDER_URL`.
+- For production, set `ALLOWED_ORIGINS` on auth Edge Functions to a comma-separated list of trusted browser origins.
 - Production build uses code splitting for parser/export modules.

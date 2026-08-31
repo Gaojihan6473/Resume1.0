@@ -15,10 +15,10 @@ export interface ChannelCount {
 export interface WeeklyTrendItem {
   week: string
   applied: number
+  assessing: number
   interviewing: number
   offered: number
   rejected: number
-  ghosted: number
   interested: number
 }
 
@@ -79,7 +79,16 @@ export interface SuggestionItem {
   targetText?: string
   problemText?: string
   problem?: string
+  problemDetails?: {
+    jdGap: string
+    resumeStatus: string
+  }
+  problemReason?: string
   suggestion: string
+  rewriteDraft?: {
+    originalText: string
+    revisedText: string
+  }
   rewriteExample?: string
   reason: string
 }

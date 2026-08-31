@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Document, Page, pdfjs } from 'react-pdf'
+import { Document, Page } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
-
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+import '../../lib/pdfWorker'
 
 interface Props {
   fileUrl: string
@@ -38,11 +37,7 @@ export function PdfPreview({ fileUrl, className = '' }: Props) {
         file={fileUrl}
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={onDocumentLoadError}
-        loading={
-          <div className="flex items-center justify-center h-full">
-            <span className="text-xs text-slate-400">加载中...</span>
-          </div>
-        }
+        loading={<div className="h-full w-full bg-white" />}
       >
         {numPages && numPages > 0 && (
           <Page
