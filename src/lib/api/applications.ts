@@ -189,3 +189,22 @@ export async function deleteApplication(id: string): Promise<void> {
     throw new Error('删除投递记录失败')
   }
 }
+
+/** Compare-and-set prevents concurrently created resume versions from replacing each other. */
+export async function linkResumeAgentApplication(
+  userId: string, applicationId: string, expectedResumeId: string | null, resumeId: string,
+): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session || session.user.id !== userId) throw new Error('登录状态已变化，请重新打开任务')
+  let query = supabase.from('applications').update({ resume_id: resumeId })
+    .eq('id', applicationId).eq('user_id', userId)
+  query = expectedResumeId === null ? query.is('resume_id', null) : query.eq('resume_id', expectedResumeId)
+  const { data, error } = await query.select('id').maybeSingle()
+  if (error) throw new Error('岗位关联失败，可重试')
+  if (data) return true
+  // A lost network response after a successful write is safe to retry.
+  const existing = await supabase.from('applications').select('resume_id')
+    .eq('id', applicationId).eq('user_id', userId).maybeSingle()
+  if (existing.error) throw new Error('无法确认岗位关联，请稍后重试')
+  return existing.data?.resume_id === resumeId
+}

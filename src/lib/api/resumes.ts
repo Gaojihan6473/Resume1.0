@@ -61,11 +61,12 @@ export async function createResume(
   content: Record<string, unknown> = {},
   source: string = 'blank',
   fileUrl: string | null = null,
-  previewUrl: string | null = null
+  previewUrl: string | null = null,
+  expectedUserId?: string
 ): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
+    if (!session || (expectedUserId && session.user.id !== expectedUserId)) {
       return { success: false, error: '未登录' }
     }
 

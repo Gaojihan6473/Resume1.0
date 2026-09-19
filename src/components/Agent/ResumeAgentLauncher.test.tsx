@@ -16,7 +16,7 @@ vi.mock('../../lib/api', () => ({
 import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentLauncherStore } from '../../store/resumeAgentLauncherStore'
-import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
+import { useResumeAgentSessionStore, useResumeAgentTasks } from '../../store/resumeAgentSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { Resume } from '../../lib/api'
 import { createDefaultResumeData } from '../../types/resume'
@@ -98,6 +98,7 @@ function LocationProbe() {
 }
 
 afterEach(() => {
+  useResumeAgentTasks.setState({ tasks: {}, selectedByResume: {}, launcherResumeId: null })
   cleanup()
   useAuthStore.setState({ isAuthenticated: false, user: null })
   useApplicationStore.setState({ applications: [], isLoading: false, error: null })
@@ -156,34 +157,37 @@ describe('ResumeAgentLauncher', () => {
     })
   })
 
-  it('shows semantic status badges, including capped review counts', () => {
+  it('shows semantic status badges without counting individual patches as tasks', () => {
     seedStores()
+    const syncTask = () => useResumeAgentTasks.setState({ tasks: { task: { ...useResumeAgentSessionStore.getState(), runId: 'run' } } })
     const { container } = render(
       <MemoryRouter initialEntries={['/']}>
         <ResumeAgentGlobalLauncher />
       </MemoryRouter>,
     )
 
-    act(() => useResumeAgentSessionStore.setState({ status: 'running' }))
+    act(() => { useResumeAgentSessionStore.setState({ status: 'running' }); syncTask() })
     expect(container.querySelector('[data-agent-status="progress"]')).toBeInTheDocument()
 
     act(() => useResumeAgentSessionStore.setState({
       status: 'review',
       proposal: { patches: reviewPatches(101) } as never,
     }))
-    expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('99+')
+    act(syncTask)
+    expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('1')
 
     act(() => useResumeAgentSessionStore.setState({
       proposal: { patches: reviewPatches(7) } as never,
       acceptedPatchKeys: ['patch-1'],
       rejectedPatchKeys: ['patch-2'],
     }))
-    expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('5')
+    act(syncTask)
+    expect(container.querySelector('[data-agent-status="review"]')).toHaveTextContent('1')
 
-    act(() => useResumeAgentSessionStore.setState({ status: 'completed' }))
+    act(() => { useResumeAgentSessionStore.setState({ status: 'completed' }); syncTask() })
     expect(container.querySelector('[data-agent-status="success"]')).toBeInTheDocument()
 
-    act(() => useResumeAgentSessionStore.setState({ status: 'failed' }))
+    act(() => { useResumeAgentSessionStore.setState({ status: 'failed' }); syncTask() })
     expect(container.querySelector('[data-agent-status="warning"]')).toBeInTheDocument()
   })
 

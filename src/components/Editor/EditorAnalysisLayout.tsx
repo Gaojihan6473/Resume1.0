@@ -24,10 +24,10 @@ import { useAuthStore } from '../../store/authStore'
 import { useJDAnalysisHistoryStore } from '../../store/jdAnalysisHistoryStore'
 import { useJDAnalysisSessionStore, type JDAnalysisNotice } from '../../store/jdAnalysisSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
+import { useResumeAgentValidity } from '../Agent/useResumeAgentValidity'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { RESUME_AGENT_ENABLED } from '../../lib/resumeAgent'
 import { createAnalysisHash, normalizeAnalysisText } from '../../utils/analysisHash'
-import { createResumeAgentHash } from '../../utils/resumeAgentHash'
 import { createSectionAnchorKey, createStableResumeAnchorKey, resolveSuggestionTarget } from '../../utils/analysisAnchors'
 import { sanitizeRichHtml } from '../../utils/richText'
 import { toast } from '../Toast'
@@ -102,7 +102,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     collapsed: true,
   })
   const [resumeHash, setResumeHash] = useState('')
-  const [agentResumeHash, setAgentResumeHash] = useState('')
   const [applicationJdHashes, setApplicationJdHashes] = useState<Map<string, string>>(new Map())
 
   const {
@@ -116,6 +115,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   const { applications, isLoading, fetchApplications } = useApplicationStore()
   const { isAuthenticated } = useAuthStore()
   const agent = useResumeAgentSessionStore()
+  const agentInputsValid = useResumeAgentValidity(agent, resumeData, isDirty)
   const {
     records: historyRecords,
     isLoading: isLoadingHistory,
@@ -276,13 +276,6 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     }
   }, [resumeText])
 
-  useEffect(() => {
-    let isActive = true
-    createResumeAgentHash(resumeData)
-      .then((hash) => { if (isActive) setAgentResumeHash(hash) })
-      .catch(() => { if (isActive) setAgentResumeHash('') })
-    return () => { isActive = false }
-  }, [resumeData])
 
   useEffect(() => {
     let isActive = true
@@ -376,8 +369,12 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [isDirty, setSession, visibleNotice?.message])
 
   const activeTarget = useMemo(
-    () => isSessionForCurrentResume ? flashTarget ?? hoverTarget ?? lockedTarget : null,
-    [flashTarget, hoverTarget, isSessionForCurrentResume, lockedTarget]
+    () => {
+      const target = isSessionForCurrentResume ? flashTarget ?? hoverTarget ?? lockedTarget : null
+      if (target?.key.startsWith('agent:') && !target.key.startsWith(`agent:${currentResumeId}:${agent.runId}:`)) return null
+      return target
+    },
+    [flashTarget, hoverTarget, isSessionForCurrentResume, lockedTarget, currentResumeId, agent.runId]
   )
   const activeSuggestionKey = activeTarget?.key ?? null
   const analysisFocus: ResumeAnalysisFocus | null = useMemo(
@@ -401,8 +398,8 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     ? 'grid-cols-[45%_minmax(0,1fr)_0]'
     : 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
 
-  const isAgentDraftVisible = isAgentMode && agent.previewMode === 'draft' && Boolean(agent.agentDraftResumeData)
-  const isAgentStale = Boolean(agent.resumeHash && agentResumeHash && agent.resumeHash !== agentResumeHash)
+  const isAgentDraftVisible = isAgentMode && agentInputsValid && agent.resumeId === currentResumeId && agent.previewMode === 'draft' && Boolean(agent.agentDraftResumeData)
+  const isAgentStale = !agentInputsValid
   const agentHeaderNotices = useMemo(() => {
     if (!agent.proposal || !['review', 'creating'].includes(agent.status) || agent.completionStatus === 'no_changes') return []
 
@@ -954,7 +951,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
       ? patch.revisedText
       : patch.revisedValue || patch.originalValue || ''
     handleSuggestionClick({
-      key: `agent:${patch.key}`,
+      key: `agent:${currentResumeId}:${agent.runId}:${patch.key}`,
       section: patch.section,
       itemId,
       itemKey: createStableResumeAnchorKey(patch.section, itemId),
@@ -966,7 +963,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         reason: patch.reason,
       },
     })
-  }, [handleSuggestionClick])
+  }, [handleSuggestionClick, currentResumeId, agent.runId])
 
   const getTargetContent = useCallback((target: SuggestionInteractionTarget): string | null => {
     if (target.section === 'internships') {
@@ -1127,7 +1124,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             <div className="flex h-full min-h-0 flex-col">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
                 {isAgentMode && RESUME_AGENT_ENABLED ? (
-                  <ResumeAgentConfigPanel applications={applicationsWithJD} historyRecords={historyRecords} currentResumeId={currentResumeId} resumeData={resumeData} isDirty={isDirty} />
+                  <ResumeAgentConfigPanel key={`${currentResumeId}:${agent.applicationId}:${agent.runId}`} applications={applicationsWithJD} historyRecords={historyRecords} currentResumeId={currentResumeId} resumeData={resumeData} isDirty={isDirty} />
                 ) : (
                   <JDInputPanel
                     applications={applicationsWithJD}
@@ -1170,7 +1167,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           }}
         />
 
-        {isAgentMode && agent.agentDraftResumeData && (
+        {isAgentMode && agentInputsValid && agent.agentDraftResumeData && (
           <div
             role="group"
             aria-label="简历预览版本"
@@ -1229,7 +1226,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
               ) : null}
               <button type="button" onClick={() => agent.setRightPanelCollapsed(true)} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 hover:bg-white hover:text-slate-700"><PanelRightClose className="h-3.5 w-3.5" />收起</button>
             </div>
-            <ResumeAgentTaskPanel baseData={resumeData} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
+            <ResumeAgentTaskPanel key={`${currentResumeId}:${agent.applicationId}:${agent.runId}`} baseData={resumeData} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
           </div>
         ) : (
           <div

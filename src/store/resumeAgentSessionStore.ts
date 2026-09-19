@@ -1,501 +1,208 @@
-import { create } from 'zustand'
-import { streamResumeAgent } from '../lib/resumeAgent'
-import type {
-  ResumeAgentHistoryResult,
-  ResumeAgentPatch,
-  ResumeAgentRequest,
-  ResumeAgentSessionState,
-  ResumeAgentStreamEvent,
-} from '../types/resumeAgent'
-import type { ResumeData } from '../types/resume'
-import { applyPatchesToResumeData, validateResumeAgentPatch } from '../utils/resumeAgentPatches'
+import { useEffect } from 'react'
+import { create, useStore } from 'zustand'
+import type { StoreApi } from 'zustand/vanilla'
+import { useResumeStore } from './resumeStore'
+import { createResumeAgentTaskStore, DEFAULT_AGENT_STATE, type ResumeAgentStore } from './resumeAgentTaskStore'
+import { fetchJDAnalysisRecords } from '../lib/api/jdAnalysisRecords'
+import { fetchResumes } from '../lib/api/resumes'
+import { isResumeAgentHistoryResult } from '../types/resumeAgent'
+import { findResumeCreatedForRun } from '../utils/resumeAgentDelivery'
 import { normalizeResumeData } from '../utils/resumeData'
 
-const SESSION_KEY = 'resume-agent-p0-session-v1'
-
-interface PersistedAgentState {
-  version: 1
+export type { ResumeAgentStore } from './resumeAgentTaskStore'
+const SESSION_KEY = 'resume-agent-sessions-v2'
+type TaskStore = StoreApi<ResumeAgentStore>
+interface TaskRegistry {
   userId: string | null
-  runId: string | null
-  status: ResumeAgentSessionState['status']
-  completionStatus: ResumeAgentSessionState['completionStatus']
-  resumeId: string | null
-  applicationId: string | null
-  jobSource: ResumeAgentSessionState['jobSource']
-  resumeHash: string
-  jdHash: string
-  acceptedPatchKeys: string[]
-  rejectedPatchKeys: string[]
-  recordId: string | null
-  historyPersisted: boolean
-  versionTitle: string
-  createdResumeId: string | null
-  applicationLinkStatus: ResumeAgentSessionState['applicationLinkStatus']
+  tasks: Record<string, ResumeAgentStore>
+  selectedByResume: Record<string, string>
+  launcherResumeId: string | null
+  storageError: string | null
 }
-
-interface ResumeAgentActions {
-  bindUser: (userId: string | null) => void
-  configure: (data: Partial<Pick<ResumeAgentSessionState,
-    'resumeId' | 'applicationId' | 'jobSource' | 'jdText' | 'company' | 'position' |
-    'goal' | 'targetPages' | 'mustKeep' | 'resumeHash' | 'jdHash' | 'versionTitle'
-  >>) => void
-  beginConfirmation: () => void
-  returnToConfiguration: () => void
-  startRun: (baseData: ResumeData) => Promise<void>
-  cancelRun: () => void
-  clearTaskForRetry: () => void
-  retryHistoryPersistence: () => Promise<void>
-  restoreFromHistory: (result: ResumeAgentHistoryResult, baseData: ResumeData, recordId: string) => boolean
-  acceptPatch: (baseData: ResumeData, patchKey: string, mediumConfirmed?: boolean) => { success: boolean; error?: string }
-  rejectPatch: (baseData: ResumeData, patchKey: string) => void
-  resetPatchDecision: (baseData: ResumeData, patchKey: string) => void
-  acceptAllLowRisk: (baseData: ResumeData) => { success: boolean; error?: string }
-  setPreviewMode: (mode: 'base' | 'draft') => void
-  setRightPanelCollapsed: (collapsed: boolean) => void
-  setVersionTitle: (title: string) => void
-  beginCreating: () => void
-  creationFailed: (message: string) => void
-  creationCompleted: (data: {
-    resumeId: string
-    resumeData: ResumeData
-    applicationLinkStatus: ResumeAgentSessionState['applicationLinkStatus']
-  }) => void
-  setApplicationLinkStatus: (status: ResumeAgentSessionState['applicationLinkStatus']) => void
-  reset: () => void
-}
-
-export type ResumeAgentStore = ResumeAgentSessionState & ResumeAgentActions
-
-let activeController: AbortController | null = null
-
-const DEFAULT_STATE: ResumeAgentSessionState = {
-  runId: null,
-  userId: null,
-  status: 'idle',
-  completionStatus: null,
-  stage: null,
-  stageSummaries: {},
-  resumeId: null,
-  applicationId: null,
-  jobSource: 'manual',
-  jdText: '',
-  company: '',
-  position: '',
-  goal: '',
-  targetPages: 'keep',
-  mustKeep: '',
-  resumeHash: '',
-  jdHash: '',
-  plan: null,
-  proposal: null,
-  acceptedPatchKeys: [],
-  rejectedPatchKeys: [],
-  agentDraftResumeData: null,
-  recordId: null,
-  historyPersisted: false,
-  versionTitle: '',
-  createdResumeId: null,
-  createdResumeData: null,
-  applicationLinkStatus: 'idle',
-  error: null,
-  errorCode: null,
-  isRightPanelCollapsed: true,
-  previewMode: 'base',
-}
-
-function loadPersistedState(): Partial<ResumeAgentSessionState> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_KEY)
-    if (!raw) return {}
-    const value = JSON.parse(raw) as PersistedAgentState
-    if (value.version !== 1) return {}
-    const status = value.status === 'running' ? 'interrupted' : value.status
-    return {
-      userId: value.userId,
-      runId: value.runId,
-      status,
-      completionStatus: value.completionStatus,
-      resumeId: value.resumeId,
-      applicationId: value.applicationId,
-      jobSource: value.jobSource,
-      resumeHash: value.resumeHash,
-      jdHash: value.jdHash,
-      acceptedPatchKeys: value.acceptedPatchKeys || [],
-      rejectedPatchKeys: value.rejectedPatchKeys || [],
-      recordId: value.recordId,
-      historyPersisted: value.historyPersisted,
-      versionTitle: value.versionTitle,
-      createdResumeId: value.createdResumeId,
-      applicationLinkStatus: value.applicationLinkStatus,
-      error: value.status === 'running' ? '任务因页面刷新中断，可安全重试' : null,
-    }
-  } catch {
-    return {}
-  }
-}
-
-function getSelectedPatches(state: ResumeAgentSessionState, keys: string[]): ResumeAgentPatch[] {
-  if (!state.proposal) return []
-  const selected = new Set(keys)
-  return state.proposal.patches.filter((patch) => selected.has(patch.key))
-}
-
-function rebuildDraft(state: ResumeAgentSessionState, baseData: ResumeData, keys: string[]) {
-  return applyPatchesToResumeData(baseData, getSelectedPatches(state, keys))
-}
-
-function defaultVersionTitle(company: string, position: string): string {
-  const prefix = [company.trim(), position.trim()].filter(Boolean).join('-') || '手工JD-岗位专属版本'
-  return `${prefix}-v1`
-}
-
-function telemetry(event: string, details: Record<string, unknown> = {}) {
-  console.info(`[ResumeAgent] ${event} ${JSON.stringify(details)}`)
-}
-
-export const useResumeAgentSessionStore = create<ResumeAgentStore>((set, get) => ({
-  ...DEFAULT_STATE,
-  ...loadPersistedState(),
-
-  bindUser: (userId) => {
-    const current = get()
-    if (!userId || (current.userId && current.userId !== userId)) {
-      activeController?.abort()
-      activeController = null
-      try { window.sessionStorage.removeItem(SESSION_KEY) } catch { /* no-op */ }
-      set({ ...DEFAULT_STATE, userId })
-      return
-    }
-    set({ userId })
-  },
-
-  configure: (data) => set((state) => {
-    if (['running', 'review', 'creating', 'completed'].includes(state.status)) return state
-    const jobContextChanged = (
-      (data.applicationId !== undefined && data.applicationId !== state.applicationId)
-      || (data.jobSource !== undefined && data.jobSource !== state.jobSource)
-      || (data.company !== undefined && data.company !== state.company)
-      || (data.position !== undefined && data.position !== state.position)
-    )
-    return {
-      ...data,
-      ...(jobContextChanged && data.versionTitle === undefined ? { versionTitle: '' } : {}),
-      status: state.status === 'idle' ? 'configuring' : state.status,
-      error: null,
-      errorCode: null,
-    }
-  }),
-
-  beginConfirmation: () => set({ status: 'confirming', error: null, errorCode: null }),
-  returnToConfiguration: () => set({ status: 'configuring', error: null, errorCode: null }),
-
-  startRun: async (baseData) => {
-    const state = get()
-    if (!state.userId || !state.resumeId || !state.resumeHash || !state.jdHash || !state.jdText.trim()) {
-      set({ error: '基础简历、目标岗位或校验信息不完整', errorCode: 'INVALID_CONFIGURATION' })
-      return
-    }
-    if (activeController) activeController.abort()
-    const controller = new AbortController()
-    activeController = controller
-    const runId = crypto.randomUUID()
-    const request: ResumeAgentRequest = {
-      schemaVersion: 1,
-      runId,
-      resumeId: state.resumeId,
-      expectedResumeHash: state.resumeHash,
-      job: state.jobSource === 'application' && state.applicationId
-        ? { source: 'application', applicationId: state.applicationId, expectedJdHash: state.jdHash }
-        : {
-            source: 'manual',
-            jdText: state.jdText,
-            company: state.company || undefined,
-            position: state.position || undefined,
-            expectedJdHash: state.jdHash,
-          },
-      goal: state.goal.trim() || '根据目标岗位优化当前简历，生成有证据、可审核的岗位专属版本',
-      constraints: {
-        targetPages: state.targetPages,
-        mustKeep: state.mustKeep.trim() || undefined,
-      },
-    }
-
-    set({
-      runId,
-      status: 'running',
-      completionStatus: null,
-      stage: 'understand_job',
-      stageSummaries: {},
-      plan: null,
-      proposal: null,
-      acceptedPatchKeys: [],
-      rejectedPatchKeys: [],
-      agentDraftResumeData: normalizeResumeData(baseData),
-      recordId: null,
-      historyPersisted: false,
-      createdResumeId: null,
-      createdResumeData: null,
-      applicationLinkStatus: 'idle',
-      error: null,
-      errorCode: null,
-      versionTitle: defaultVersionTitle(state.company, state.position),
-      isRightPanelCollapsed: false,
-      previewMode: 'draft',
-    })
-    telemetry('agent_run_started', { runId })
-
-    const handleEvent = (event: ResumeAgentStreamEvent) => {
-      if (get().runId !== runId) return
-      if (event.type === 'stage') {
-        set((current) => ({
-          stage: event.stage,
-          stageSummaries: { ...current.stageSummaries, [event.stage]: event.summary },
-        }))
-      } else if (event.type === 'plan') {
-        set({ plan: event.plan })
-      } else if (event.type === 'proposal') {
-        const proposal = event.proposal as unknown as Record<string, unknown>
-        const rawPatches = proposal.patches
-        const rawMissingEvidence = proposal.missingEvidence
-        telemetry('agent_proposal_received', {
-          completionStatus: event.completionStatus,
-          proposalKeys: Object.keys(proposal).sort(),
-          patchesFieldType: Array.isArray(rawPatches) ? 'array' : rawPatches === undefined ? 'missing' : typeof rawPatches,
-          patchCount: Array.isArray(rawPatches) ? rawPatches.length : 0,
-          missingEvidenceFieldType: Array.isArray(rawMissingEvidence) ? 'array' : rawMissingEvidence === undefined ? 'missing' : typeof rawMissingEvidence,
-          missingEvidenceCount: Array.isArray(rawMissingEvidence) ? rawMissingEvidence.length : 0,
-        })
-        set({
-          status: 'review',
-          completionStatus: event.completionStatus,
-          proposal: event.proposal,
-          agentDraftResumeData: normalizeResumeData(baseData),
-          recordId: event.recordId,
-          historyPersisted: event.historyPersisted,
-          previewMode: 'draft',
-        })
-        telemetry('agent_run_succeeded', { runId, completionStatus: event.completionStatus })
-      } else if (event.type === 'warning') {
-        set({ error: event.message, errorCode: event.code })
-      } else if (event.type === 'error') {
-        set({ status: 'failed', error: event.message, errorCode: event.code })
-        telemetry('agent_run_failed', { runId, code: event.code })
-      }
-    }
-
-    try {
-      await streamResumeAgent(request, handleEvent, controller.signal)
-    } catch (error) {
-      if (controller.signal.aborted) {
-        if (get().status === 'running') set({ status: 'cancelled', error: null, errorCode: null })
-      } else if (get().status === 'running') {
-        set({
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Agent 任务失败',
-          errorCode: 'STREAM_FAILED',
-        })
-      }
-    } finally {
-      if (activeController === controller) activeController = null
-    }
-  },
-
-  cancelRun: () => {
-    activeController?.abort()
-    activeController = null
-    telemetry('agent_run_cancelled', { runId: get().runId })
-    set({ status: 'cancelled', error: null, errorCode: null })
-  },
-
-  clearTaskForRetry: () => {
-    const state = get()
-    activeController?.abort()
-    activeController = null
-    telemetry('agent_task_cleared_for_retry', { runId: state.runId, previousStatus: state.status })
-    set({
-      ...DEFAULT_STATE,
-      userId: state.userId,
-      status: 'configuring',
-      resumeId: state.resumeId,
-      applicationId: state.applicationId,
-      jobSource: state.jobSource,
-      jdText: state.jdText,
-      company: state.company,
-      position: state.position,
-      goal: state.goal,
-      targetPages: state.targetPages,
-      mustKeep: state.mustKeep,
-      resumeHash: state.resumeHash,
-      jdHash: state.jdHash,
-      versionTitle: '',
-      isRightPanelCollapsed: true,
-    })
-  },
-
-  retryHistoryPersistence: async () => {
-    const state = get()
-    if (!state.runId || !state.resumeId || !state.resumeHash || !state.jdHash || !state.proposal) return
-    const request: ResumeAgentRequest = {
-      schemaVersion: 1,
-      action: 'persist_result',
-      runId: state.runId,
-      resumeId: state.resumeId,
-      expectedResumeHash: state.resumeHash,
-      job: state.jobSource === 'application' && state.applicationId
-        ? { source: 'application', applicationId: state.applicationId, expectedJdHash: state.jdHash }
-        : { source: 'manual', jdText: state.jdText, company: state.company || undefined, position: state.position || undefined, expectedJdHash: state.jdHash },
-      goal: state.goal,
-      constraints: { targetPages: state.targetPages, mustKeep: state.mustKeep || undefined },
-      proposal: state.proposal,
-    }
-    try {
-      await streamResumeAgent(request, (event) => {
-        if (event.type === 'proposal') set({ recordId: event.recordId, historyPersisted: event.historyPersisted, error: null, errorCode: null })
-      })
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : '历史记录保存失败', errorCode: 'HISTORY_WRITE_FAILED' })
-    }
-  },
-
-  restoreFromHistory: (result, baseData, recordId) => {
-    const state = get()
-    if (!result.proposal || result.source.resumeHash !== state.resumeHash) return false
-    const validAcceptedKeys = state.acceptedPatchKeys.filter((key) => result.proposal?.patches.some((patch) => patch.key === key))
-    const nextState: ResumeAgentSessionState = {
-      ...state,
-      runId: result.runId,
-      status: 'review',
-      completionStatus: result.completionStatus === 'failed' ? null : result.completionStatus,
-      plan: result.plan,
-      proposal: result.proposal,
-      recordId,
-      historyPersisted: true,
-      company: result.source.company,
-      position: result.source.position,
-      versionTitle: defaultVersionTitle(result.source.company, result.source.position),
-      acceptedPatchKeys: validAcceptedKeys,
-      rejectedPatchKeys: state.rejectedPatchKeys.filter((key) => result.proposal?.patches.some((patch) => patch.key === key)),
-      agentDraftResumeData: normalizeResumeData(baseData),
-      previewMode: 'draft',
-      error: null,
-      errorCode: null,
-    }
-    const rebuilt = rebuildDraft(nextState, baseData, validAcceptedKeys)
-    set({ ...nextState, agentDraftResumeData: rebuilt.success ? rebuilt.data : normalizeResumeData(baseData) })
-    return true
-  },
-
-  acceptPatch: (baseData, patchKey, mediumConfirmed = false) => {
-    const state = get()
-    const patch = state.proposal?.patches.find((item) => item.key === patchKey)
-    if (!patch) return { success: false, error: '找不到该修改' }
-    if (patch.risk === 'high' && !mediumConfirmed) return { success: false, error: 'HIGH_CONFIRM_REQUIRED' }
-    if (patch.risk === 'medium' && !mediumConfirmed) return { success: false, error: 'MEDIUM_CONFIRM_REQUIRED' }
-    const validation = validateResumeAgentPatch(baseData, patch)
-    if (!validation.valid) return { success: false, error: validation.reason || '修改位置已失效' }
-    const keys = [...new Set([...state.acceptedPatchKeys, patchKey])]
-    const rebuilt = rebuildDraft(state, baseData, keys)
-    if (!rebuilt.success) return { success: false, error: rebuilt.error || '无法应用修改' }
-    set({
-      acceptedPatchKeys: keys,
-      rejectedPatchKeys: state.rejectedPatchKeys.filter((key) => key !== patchKey),
-      agentDraftResumeData: rebuilt.data,
-    })
-    telemetry('agent_patch_accepted', { runId: state.runId, patchKey })
-    return { success: true }
-  },
-
-  rejectPatch: (baseData, patchKey) => {
-    const state = get()
-    const accepted = state.acceptedPatchKeys.filter((key) => key !== patchKey)
-    const rebuilt = rebuildDraft(state, baseData, accepted)
-    set({
-      acceptedPatchKeys: accepted,
-      rejectedPatchKeys: [...new Set([...state.rejectedPatchKeys, patchKey])],
-      agentDraftResumeData: rebuilt.success ? rebuilt.data : normalizeResumeData(baseData),
-    })
-    telemetry('agent_patch_rejected', { runId: state.runId, patchKey })
-  },
-
-  resetPatchDecision: (baseData, patchKey) => {
-    const state = get()
-    const accepted = state.acceptedPatchKeys.filter((key) => key !== patchKey)
-    const rebuilt = rebuildDraft(state, baseData, accepted)
-    set({
-      acceptedPatchKeys: accepted,
-      rejectedPatchKeys: state.rejectedPatchKeys.filter((key) => key !== patchKey),
-      agentDraftResumeData: rebuilt.success ? rebuilt.data : normalizeResumeData(baseData),
-    })
-    telemetry('agent_patch_undone', { runId: state.runId, patchKey })
-  },
-
-  acceptAllLowRisk: (baseData) => {
-    const state = get()
-    const lowRiskKeys = state.proposal?.patches
-      .filter((patch) => patch.risk === 'low' && patch.anchorStatus === 'valid')
-      .map((patch) => patch.key) || []
-    const keys = [...new Set([...state.acceptedPatchKeys, ...lowRiskKeys])]
-    const rebuilt = rebuildDraft(state, baseData, keys)
-    if (!rebuilt.success) return { success: false, error: rebuilt.error || '批量修改校验失败' }
-    set({
-      acceptedPatchKeys: keys,
-      rejectedPatchKeys: state.rejectedPatchKeys.filter((key) => !lowRiskKeys.includes(key)),
-      agentDraftResumeData: rebuilt.data,
-    })
-    return { success: true }
-  },
-
-  setPreviewMode: (previewMode) => set({ previewMode }),
-  setRightPanelCollapsed: (isRightPanelCollapsed) => set({ isRightPanelCollapsed }),
-  setVersionTitle: (versionTitle) => set({ versionTitle }),
-  beginCreating: () => set({ status: 'creating', error: null, errorCode: null }),
-  creationFailed: (error) => set({ status: 'review', error, errorCode: 'CREATE_FAILED' }),
-  creationCompleted: ({ resumeId, resumeData, applicationLinkStatus }) => set({
-    status: 'completed',
-    createdResumeId: resumeId,
-    createdResumeData: normalizeResumeData(resumeData),
-    applicationLinkStatus,
-    error: applicationLinkStatus === 'failed' ? '岗位专属版本已创建，但岗位关联失败' : null,
-    errorCode: applicationLinkStatus === 'failed' ? 'APPLICATION_LINK_FAILED' : null,
-  }),
-  setApplicationLinkStatus: (applicationLinkStatus) => set({ applicationLinkStatus }),
-  reset: () => {
-    activeController?.abort()
-    activeController = null
-    const userId = get().userId
-    set({ ...DEFAULT_STATE, userId })
-  },
+export const useResumeAgentTasks = create<TaskRegistry>(() => ({
+  userId: null, tasks: {}, selectedByResume: {}, launcherResumeId: null, storageError: null,
 }))
+const stores = new Map<string, TaskStore>()
+const recovering = new WeakSet<TaskStore>()
+// Empty state before authentication; authenticated callers always resolve their resume scope.
+const emptyStore = createResumeAgentTaskStore()
+let saveTimer: ReturnType<typeof setTimeout> | undefined
 
-useResumeAgentSessionStore.subscribe((state) => {
-  if (typeof window === 'undefined') return
-  if (!state.userId) {
-    try { window.sessionStorage.removeItem(SESSION_KEY) } catch { /* no-op */ }
-    return
-  }
-  const persisted: PersistedAgentState = {
-    version: 1,
-    userId: state.userId,
-    runId: state.runId,
-    status: state.status,
-    completionStatus: state.completionStatus,
-    resumeId: state.resumeId,
-    applicationId: state.applicationId,
-    jobSource: state.jobSource,
-    resumeHash: state.resumeHash,
-    jdHash: state.jdHash,
-    acceptedPatchKeys: state.acceptedPatchKeys,
-    rejectedPatchKeys: state.rejectedPatchKeys,
-    recordId: state.recordId,
-    historyPersisted: state.historyPersisted,
-    versionTitle: state.versionTitle,
-    createdResumeId: state.createdResumeId,
-    applicationLinkStatus: state.applicationLinkStatus,
-  }
-  try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(persisted))
-  } catch {
-    // The in-memory task remains usable when storage is unavailable.
-  }
+// JSON tuples are collision-free, stable content keys, including for manually entered jobs.
+export function resumeAgentTaskKey(state: Pick<ResumeAgentStore, 'userId' | 'resumeId' | 'jobSource' | 'applicationId' | 'jdText' | 'company' | 'position'>): string {
+  return JSON.stringify([state.userId, state.resumeId, state.jobSource === 'application'
+    ? ['application', state.applicationId]
+    : ['manual', state.company.trim(), state.position.trim(), state.jdText.trim()]])
+}
+
+function remember(key: string, state: ResumeAgentStore) {
+  useResumeAgentTasks.setState((registry) => ({ tasks: { ...registry.tasks, [key]: state } }))
+}
+function select(key: string, resumeId: string | null) {
+  if (!resumeId) return
+  useResumeAgentTasks.setState((registry) => ({
+    selectedByResume: { ...registry.selectedByResume, [resumeId]: key },
+    launcherResumeId: resumeId,
+  }))
+}
+
+function makeStore(initial: Partial<ResumeAgentStore>): TaskStore {
+  const seed = { ...DEFAULT_AGENT_STATE, ...initial }
+  const key = resumeAgentTaskKey(seed)
+  const existing = stores.get(key)
+  if (existing) return existing
+  const store = createResumeAgentTaskStore(seed, {
+    isSelected: () => useResumeAgentTasks.getState().userId === seed.userId
+      && (useResumeAgentTasks.getState().selectedByResume[seed.resumeId || ''] || key) === key,
+    configure: (state, data) => {
+      if (useResumeAgentTasks.getState().userId !== state.userId) return state
+      const differentResume = data.resumeId !== undefined && data.resumeId !== state.resumeId
+      if (differentResume && data.resumeId) {
+        const remembered = getResumeAgentTask(data.resumeId)
+        select(resumeAgentTaskKey(remembered.getState()), data.resumeId)
+        return remembered.getState().configure({ ...data, resumeId: data.resumeId })
+      }
+      const next = { ...state, ...data }
+      const nextKey = resumeAgentTaskKey(next)
+      if (nextKey === key) return undefined
+      const target = makeStore({
+        ...DEFAULT_AGENT_STATE, userId: state.userId, resumeId: next.resumeId,
+        jobSource: next.jobSource, applicationId: next.applicationId,
+        jdText: next.jdText, company: next.company, position: next.position,
+        goal: state.goal, targetPages: state.targetPages, mustKeep: state.mustKeep,
+        ...data, status: 'configuring',
+      })
+      // Unsaved manual input is a single draft, not one task for each keystroke.
+      if (!state.runId && state.jobSource === 'manual') {
+        stores.delete(key)
+        useResumeAgentTasks.setState((registry) => {
+          const tasks = { ...registry.tasks }; delete tasks[key]; return { tasks }
+        })
+        state.dispose()
+      }
+      remember(nextKey, target.getState())
+      select(nextKey, next.resumeId)
+      return target.getState()
+    },
+  })
+  stores.set(key, store)
+  store.subscribe((state) => {
+    if (useResumeAgentTasks.getState().userId !== state.userId || stores.get(key) !== store) return
+    remember(key, state)
+  })
+  return store
+}
+
+export function getResumeAgentTask(resumeId: string | null): TaskStore {
+  const registry = useResumeAgentTasks.getState()
+  if (!registry.userId) return emptyStore
+  const selected = registry.selectedByResume[resumeId || '']
+  if (selected && stores.has(selected)) return stores.get(selected)!
+  return makeStore({ userId: registry.userId, resumeId })
+}
+export function selectResumeAgentTask(key: string): ResumeAgentStore | null {
+  const store = stores.get(key)
+  if (!store || store.getState().userId !== useResumeAgentTasks.getState().userId) return null
+  select(key, store.getState().resumeId)
+  return store.getState()
+}
+export function selectAgentLauncherResume(resumeId: string | null) {
+  useResumeAgentTasks.setState({ launcherResumeId: resumeId })
+}
+
+function useScopedTask<T = ResumeAgentStore>(selector: (state: ResumeAgentStore) => T, launcher: boolean): T {
+  const currentResumeId = useResumeStore((state) => state.currentResumeId)
+  const launcherResumeId = useResumeAgentTasks((state) => launcher ? state.launcherResumeId : null)
+  const resumeId = launcher ? launcherResumeId ?? currentResumeId : currentResumeId
+  const userId = useResumeAgentTasks((state) => state.userId)
+  const selectedKey = useResumeAgentTasks((state) => state.selectedByResume[resumeId || ''])
+  const store = getResumeAgentTask(resumeId)
+  useEffect(() => { if (userId) void recoverResumeAgentTask(store) }, [store, userId, selectedKey])
+  return useStore(store, selector)
+}
+const identity = (state: ResumeAgentStore) => state
+function useAgentSession<T = ResumeAgentStore>(selector: (state: ResumeAgentStore) => T = identity as (state: ResumeAgentStore) => T): T {
+  return useScopedTask(selector, false)
+}
+export function useResumeAgentLauncherSession() { return useScopedTask(identity, true) }
+export const useResumeAgentSessionStore = Object.assign(useAgentSession, {
+  getState: () => getResumeAgentTask(useResumeStore.getState().currentResumeId).getState(),
+  setState: (patch: Partial<ResumeAgentStore> | ((state: ResumeAgentStore) => Partial<ResumeAgentStore>)) =>
+    getResumeAgentTask(useResumeStore.getState().currentResumeId).setState(patch),
 })
+
+export async function recoverResumeAgentTask(store: TaskStore): Promise<void> {
+  const state = store.getState()
+  if (recovering.has(store) || !state.resumeId || (state.proposal && !state.needsCreationRecovery) || (!state.recordId && !state.needsCreationRecovery && !state.createdResumeId)) return
+  recovering.add(store)
+  const current = () => state.isCurrent(state.runId) && store.getState().recordId === state.recordId
+  try {
+    const [records, resumes] = await Promise.all([fetchJDAnalysisRecords(state.resumeId), fetchResumes()])
+    if (!current()) return
+    const created = state.runId ? findResumeCreatedForRun(resumes.resumes || [], state.runId) : null
+    if (created) store.getState().creationCompleted({ resumeId: created.id, resumeData: normalizeResumeData(created.content, created.title), applicationLinkStatus: state.applicationId && state.applicationLinkStatus === 'idle' ? 'failed' : state.applicationLinkStatus })
+    if (!state.recordId) { if (!created) store.setState({ needsCreationRecovery: false }); return }
+    const record = records.find((item) => item.id === state.recordId && item.user_id === state.userId && item.resume_id === state.resumeId && item.application_id === state.applicationId)
+    if (!record || !isResumeAgentHistoryResult(record.analysis_result) || record.analysis_result.runId !== state.runId) throw new Error('找不到匹配的分析记录，请从历史重新打开或重试')
+    const resume = resumes.resumes?.find((item) => item.id === state.resumeId)
+    const base = state.baseResumeData || (resume ? normalizeResumeData(resume.content, resume.title) : null)
+    if (!base || !state.restoreFromHistory(record.analysis_result, base, record.id, record)) throw new Error('无法恢复这次分析，请从历史重新打开')
+    if (created && current()) store.getState().creationCompleted({ resumeId: created.id, resumeData: normalizeResumeData(created.content, created.title), applicationLinkStatus: state.applicationId && state.applicationLinkStatus === 'idle' ? 'failed' : state.applicationLinkStatus })
+    if (current()) store.setState({ needsCreationRecovery: false })
+  } catch (error) {
+    if (current()) store.setState({ recoveryError: error instanceof Error ? error.message : '恢复分析失败' })
+  } finally { recovering.delete(store) }
+}
+
+export function flushResumeAgentCache() {
+  clearTimeout(saveTimer)
+  const registry = useResumeAgentTasks.getState()
+  if (typeof window === 'undefined' || !registry.userId) return
+  try {
+    const tasks = Object.fromEntries(Object.entries(registry.tasks).map(([key, state]) => [key, {
+      ...state, proposal: undefined, plan: undefined, agentDraftResumeData: undefined, createdResumeData: undefined,
+      inputsValid: false, validatedBase: null, validatedJdText: null,
+    }]))
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify({ version: 2, userId: registry.userId, tasks, selectedByResume: registry.selectedByResume }))
+    if (registry.storageError) useResumeAgentTasks.setState({ storageError: null })
+  } catch {
+    const message = '浏览器未能保存任务状态，刷新后请从分析历史恢复；审核决定可能无法恢复。'
+    if (registry.storageError !== message) useResumeAgentTasks.setState({ storageError: message })
+  }
+}
+useResumeAgentTasks.subscribe(() => {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(flushResumeAgentCache, 150)
+})
+if (typeof window !== 'undefined') window.addEventListener('pagehide', flushResumeAgentCache)
+
+export function bindResumeAgentUser(userId: string | null) {
+  if (userId && useResumeAgentTasks.getState().userId === userId) return
+  const previousUser = useResumeAgentTasks.getState().userId
+  for (const store of stores.values()) store.getState().dispose()
+  stores.clear()
+  clearTimeout(saveTimer)
+  useResumeAgentTasks.setState({ userId, tasks: {}, selectedByResume: {}, launcherResumeId: null, storageError: null })
+  try {
+    window.sessionStorage.removeItem('resume-agent-p0-session-v1') // v1 lacks the job snapshot needed to prove ownership.
+    if (!userId || (previousUser && previousUser !== userId)) { window.sessionStorage.removeItem(SESSION_KEY); return }
+    const raw = window.sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return
+    const cache = JSON.parse(raw)
+    if (cache.version !== 2 || cache.userId !== userId || !cache.tasks || typeof cache.tasks !== 'object') { window.sessionStorage.removeItem(SESSION_KEY); return }
+    const restored: Record<string, ResumeAgentStore> = {}
+    for (const [key, value] of Object.entries(cache.tasks)) {
+      const state = value as ResumeAgentStore
+      if (!state || state.userId !== userId || !state.resumeId || typeof state.jdText !== 'string' || typeof state.company !== 'string' || typeof state.position !== 'string' || !Array.isArray(state.acceptedPatchKeys) || !Array.isArray(state.rejectedPatchKeys) || resumeAgentTaskKey(state) !== key) continue
+      const interrupted = state.status === 'running' || Boolean(state.runId && !state.recordId)
+      const store = makeStore({ ...state, proposal: null, agentDraftResumeData: null, createdResumeData: null, inputsValid: false,
+        needsCreationRecovery: state.status === 'creating' || Boolean(state.createdResumeId),
+        status: interrupted ? 'interrupted' : state.status === 'creating' ? 'review' : state.status,
+        error: interrupted ? '任务因页面刷新中断，可安全重试' : null,
+      })
+      restored[key] = store.getState()
+    }
+    const selectedByResume = Object.fromEntries(Object.entries(cache.selectedByResume || {}).filter(([resumeId, key]) => typeof key === 'string' && restored[key]?.resumeId === resumeId)) as Record<string, string>
+    useResumeAgentTasks.setState({ tasks: restored, selectedByResume })
+  } catch { /* A malformed cache never becomes a task for another user. */ }
+}

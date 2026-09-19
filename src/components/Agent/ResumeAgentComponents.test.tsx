@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 vi.mock('../../utils/saveResume', () => ({ scheduleResumePdfRefresh: vi.fn() }))
 import { createDefaultResumeData } from '../../types/resume'
 import type { ResumeAgentProposal } from '../../types/resumeAgent'
+import { useResumeStore } from '../../store/resumeStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { ResumeAgentConfigPanel } from './ResumeAgentConfigPanel'
 import { ResumeAgentHeaderNotice } from './ResumeAgentHeaderNotice'
@@ -39,10 +40,11 @@ describe('resume agent components', () => {
       userId: 'user-1', status: 'configuring', resumeId: 'resume-1', jobSource: 'manual',
       jdText: '负责产品规划、用户研究和跨团队交付。', company: '示例科技', position: '产品经理',
     })
+    useResumeStore.setState({ currentResumeId: 'resume-1', resumeData: baseData, isDirty: false })
     render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
     await user.click(screen.getByRole('button', { name: '继续确认' }))
     expect(await screen.findByRole('dialog', { name: '确认后开始生成岗位专属方案' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '确认并开始' })).toBeEnabled()
 
     await user.click(screen.getByRole('button', { name: '返回修改' }))
@@ -51,17 +53,18 @@ describe('resume agent components', () => {
     expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeEnabled()
   })
 
-  it('returns from the locked review state to the previous configuration', async () => {
+  it('keeps job switching available while reviewing and clears only the current task', async () => {
     const user = userEvent.setup()
     useResumeAgentSessionStore.setState({
       userId: 'user-1', status: 'review', runId: 'run-1', resumeId: 'resume-1',
       jobSource: 'manual', jdText: '负责产品规划与跨团队交付', company: '示例科技', position: '产品经理',
       resumeHash: 'resume-hash', jdHash: 'jd-hash', proposal: proposal('low'),
     })
+    useResumeStore.setState({ currentResumeId: 'resume-1', resumeData: baseData, isDirty: false })
     render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
 
     expect(screen.getByText('方案已生成，等待审核')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '目标岗位' })).toBeEnabled()
 
     await user.click(screen.getByRole('button', { name: '清空任务' }))
 
@@ -74,12 +77,32 @@ describe('resume agent components', () => {
     expect(screen.queryByText('生成可审核的岗位专属版本')).not.toBeInTheDocument()
   })
 
+  it('keeps the analyzed JD snapshot until retry, then uses the updated job description', async () => {
+    const user = userEvent.setup()
+    useResumeAgentSessionStore.setState({
+      userId: 'user-1', status: 'review', runId: 'run-1', resumeId: 'resume-1',
+      jobSource: 'application', applicationId: 'job-1', jdText: '旧岗位要求',
+      company: '示例科技', position: '产品经理', proposal: proposal('low'),
+    })
+    useResumeStore.setState({ currentResumeId: 'resume-1', resumeData: baseData, isDirty: false })
+    render(<ResumeAgentConfigPanel applications={[{
+      id: 'job-1', user_id: 'user-1', resume_id: null, company: '示例科技', position: '产品经理',
+      jobDescription: '更新后的岗位要求', location: '', salaryRange: '', channel: '官网', status: 'interested',
+      appliedAt: null, created_at: '', updated_at: '',
+    }]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
+    expect(useResumeAgentSessionStore.getState().jdText).toBe('旧岗位要求')
+    await user.click(screen.getByRole('button', { name: '清空任务' }))
+    expect(useResumeAgentSessionStore.getState().jdText).toBe('更新后的岗位要求')
+    expect(useResumeAgentSessionStore.getState().jdHash).toBe('')
+  })
+
   it('keeps advanced requirements collapsed until requested', async () => {
     const user = userEvent.setup()
     useResumeAgentSessionStore.setState({
       userId: 'user-1', status: 'configuring', resumeId: 'resume-1', jobSource: 'manual',
       jdText: '负责产品规划、用户研究和跨团队交付。',
     })
+    useResumeStore.setState({ currentResumeId: 'resume-1', resumeData: baseData, isDirty: false })
     render(<ResumeAgentConfigPanel applications={[]} historyRecords={[]} currentResumeId="resume-1" resumeData={baseData} isDirty={false} />)
 
     const toggle = screen.getByRole('button', { name: '更多要求' })

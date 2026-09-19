@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { signIn as apiSignIn, signOut as apiSignOut } from '../lib/api'
 import type { User } from '../lib/supabase'
 import { useResumeStore } from './resumeStore'
-import { useResumeAgentSessionStore } from './resumeAgentSessionStore'
+import { bindJDAnalysisHistoryUser } from './jdAnalysisHistoryStore'
+import { bindResumeAgentUser } from './resumeAgentSessionStore'
 
 const AUTHENTICATED_HINT_KEY = 'resume-authenticated'
 
@@ -67,7 +68,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
         error: null,
       })
-      useResumeAgentSessionStore.getState().bindUser(result.user.id)
+      bindResumeAgentUser(result.user.id)
+      bindJDAnalysisHistoryUser(result.user.id)
       return true
     }
 
@@ -80,10 +82,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     set({ isLoading: true })
+    bindResumeAgentUser(null)
+    bindJDAnalysisHistoryUser(null)
     await apiSignOut()
     setAuthenticatedHint(false)
     useResumeStore.getState().resetAll()
-    useResumeAgentSessionStore.getState().bindUser(null)
+    bindResumeAgentUser(null)
+    bindJDAnalysisHistoryUser(null)
     set({
       user: null,
       isAuthenticated: false,
@@ -100,6 +105,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (error) {
         if (error.status === 400 || error.status === 401) {
+          bindResumeAgentUser(null)
+          bindJDAnalysisHistoryUser(null)
           setAuthenticatedHint(false)
           set({
             user: null,
@@ -126,12 +133,14 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           authInitializing: false,
         })
-        useResumeAgentSessionStore.getState().bindUser(session.user.id)
+        bindResumeAgentUser(session.user.id)
+        bindJDAnalysisHistoryUser(session.user.id)
         return
       }
 
       setAuthenticatedHint(false)
-      useResumeAgentSessionStore.getState().bindUser(null)
+      bindResumeAgentUser(null)
+      bindJDAnalysisHistoryUser(null)
       set({
         user: null,
         isAuthenticated: false,

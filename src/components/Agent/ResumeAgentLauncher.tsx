@@ -17,7 +17,7 @@ import { RESUME_AGENT_ENABLED } from '../../lib/resumeAgent'
 import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentLauncherStore } from '../../store/resumeAgentLauncherStore'
-import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
+import { useResumeAgentLauncherSession, useResumeAgentTasks, selectAgentLauncherResume, selectResumeAgentTask, resumeAgentTaskKey, type ResumeAgentStore } from '../../store/resumeAgentSessionStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { Application } from '../../types/application'
 import type { ResumeAgentStatus } from '../../types/resumeAgent'
@@ -56,7 +56,7 @@ export function ResumeAgentLauncherPanel({
   const isDirty = useResumeStore((state) => state.isDirty)
   const applications = useApplicationStore((state) => state.applications)
   const fetchApplications = useApplicationStore((state) => state.fetchApplications)
-  const agent = useResumeAgentSessionStore()
+  const agent = useResumeAgentLauncherSession()
   const setOverlayOpen = useResumeAgentLauncherStore((state) => state.setOverlayOpen)
   const [loading, setLoading] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -83,24 +83,24 @@ export function ResumeAgentLauncherPanel({
     }
   }, [fetchApplications, isAuthenticated, setCachedResumes])
 
+  const configuredLocationRef = useRef('')
   const explicitApplicationId = useMemo(
     () => new URLSearchParams(location.search).get('applicationId'),
     [location.search],
   )
 
   useEffect(() => {
-    if (activeTask) return
-    if (location.pathname === '/' && parseStatus === 'success' && currentResumeId && currentResumeId !== agent.resumeId) {
-      agent.configure({ resumeId: currentResumeId, resumeHash: '' })
-    }
-  }, [activeTask, agent, currentResumeId, location.pathname, parseStatus])
+    if (location.pathname === '/') selectAgentLauncherResume(parseStatus === 'success' ? currentResumeId : null)
+  }, [currentResumeId, location.pathname, parseStatus])
 
   useEffect(() => {
-    if (activeTask || !explicitApplicationId || agent.applicationId === explicitApplicationId) return
+    const context = `${location.pathname}:${explicitApplicationId}`
+    if (!explicitApplicationId || configuredLocationRef.current === context) return
     const application = applications.find((item) => item.id === explicitApplicationId)
     if (!application) return
-    configureAgentApplication(application)
-  }, [activeTask, agent.applicationId, applications, explicitApplicationId])
+    configuredLocationRef.current = context
+    configureAgentApplication(agent, application)
+  }, [agent, applications, explicitApplicationId, location.pathname])
 
   useEffect(() => {
     if (!autoFocus) return
@@ -196,8 +196,8 @@ export function ResumeAgentLauncherPanel({
         createResumeAgentHash(baseData),
         createAnalysisHash(selectedApplication.jobDescription),
       ])
-      const store = useResumeAgentSessionStore.getState()
-      store.configure({
+      if (!agent.isSelected() || !agent.isConfigurationCurrent(agent) || (useResumeAgentTasks.getState().userId && useResumeAgentTasks.getState().launcherResumeId !== selectedResume.id)) return
+      const task = agent.configure({
         resumeId: selectedResume.id,
         resumeHash,
         jobSource: 'application',
@@ -207,7 +207,7 @@ export function ResumeAgentLauncherPanel({
         position: selectedApplication.position,
         jdHash,
       })
-      await useResumeAgentSessionStore.getState().startRun(baseData)
+      void task.startRun(baseData)
       closePanel()
     } finally {
       setLoading(false)
@@ -216,7 +216,7 @@ export function ResumeAgentLauncherPanel({
 
   const handlePrimary = async () => {
     if (model.primaryAction === 'open_task') {
-      await openAgentTask(navigate)
+      await openAgentTask(navigate, agent)
       closePanel()
       return
     }
@@ -256,6 +256,10 @@ export function ResumeAgentLauncherPanel({
         ) : null}
       </div>
 
+      {activeTask && <div className="grid grid-cols-2 gap-2 pb-3">
+        <CustomSelect value={agent.resumeId || ''} ariaLabel="基础简历" options={resumeOptions.filter((option) => !option.value.startsWith('__'))} onChange={(value) => { agent.configure({ resumeId: value, resumeHash: '' }); selectAgentLauncherResume(value) }} placeholder="选择基础简历" />
+        <CustomSelect value={agent.applicationId || ''} ariaLabel="目标岗位" options={applicationOptions.filter((option) => !option.value.startsWith('__'))} onChange={(value) => { const application = applications.find((item) => item.id === value); if (application) configureAgentApplication(agent, application) }} placeholder="选择目标岗位" />
+      </div>}
       {activeTask ? (
         <div className="agent-intent-active-row">
           <span className="agent-intent-context-text">
@@ -284,7 +288,7 @@ export function ResumeAgentLauncherPanel({
                 onChange={(value) => {
                   if (value === '__new_resume__') goToCreateResume('new')
                   else if (value === '__import_resume__') goToCreateResume('upload')
-                  else agent.configure({ resumeId: value, resumeHash: '' })
+                  else { agent.configure({ resumeId: value, resumeHash: '' }); selectAgentLauncherResume(value) }
                 }}
                 options={resumeOptions}
                 placeholder={loading ? '正在加载简历…' : '选择已有简历'}
@@ -300,7 +304,7 @@ export function ResumeAgentLauncherPanel({
                   if (value === '__new_job__') goToJob()
                   else {
                     const application = applications.find((item) => item.id === value)
-                    if (application) configureAgentApplication(application)
+                    if (application) configureAgentApplication(agent, application)
                   }
                 }}
                 options={applicationOptions}
@@ -355,8 +359,16 @@ export function ResumeAgentLauncherPanel({
 
 export function ResumeAgentGlobalLauncher() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const tasks = useResumeAgentTasks((state) => state.tasks)
+  const storageError = useResumeAgentTasks((state) => state.storageError)
+  const resumes = useResumeStore((state) => state.cachedResumes)
+  const entries = Object.entries(tasks).filter(([, task]) => task.runId)
+  const runningCount = entries.filter(([, task]) => task.status === 'running' || task.status === 'creating').length
+  const reviewCount = entries.filter(([, task]) => task.status === 'review').length
+  const summary = entries.length ? `${runningCount} 项运行中，${reviewCount} 项待审核` : '选择简历与岗位，开始分析'
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  const agent = useResumeAgentSessionStore()
+  const agent = useResumeAgentLauncherSession()
   const overlayOpen = useResumeAgentLauncherStore((state) => state.overlayOpen)
   const setOverlayOpen = useResumeAgentLauncherStore((state) => state.setOverlayOpen)
   const [overlayMounted, setOverlayMounted] = useState(overlayOpen)
@@ -448,6 +460,14 @@ export function ResumeAgentGlobalLauncher() {
         >
           <div ref={overlayRef} className="agent-global-overlay-panel">
             <ResumeAgentLauncherPanel onCollapse={() => closeOverlay()} autoFocus />
+            {storageError && <p role="alert" className="px-4 py-2 text-xs text-amber-700">{storageError}</p>}
+            {entries.length > 0 && <div className="max-h-64 overflow-y-auto border-t border-slate-100 p-3" aria-label="全部 Agent 任务">
+              <p className="mb-2 text-xs text-slate-500">{summary}</p>
+              {entries.map(([key, task]) => <button key={key} type="button" onClick={() => { void openAgentTask(navigate, task).then((opened) => { if (opened) closeOverlay(false) }) }} className="mb-1 block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-cyan-50">
+                <span className="block truncate font-medium">{resumes.find((resume) => resume.id === task.resumeId)?.title || task.baseResumeData?.resumeTitle || '未命名简历'} → {[task.company, task.position].filter(Boolean).join(' · ') || '手工 JD'}</span>
+                <span className="text-xs text-slate-500">{task.status === 'running' ? '正在分析' : task.status === 'creating' ? '正在创建岗位版' : task.status === 'review' ? '待审核' : task.status === 'completed' ? '已创建岗位版' : task.status === 'cancelled' ? '已取消' : '需重试'}</span>
+              </button>)}
+            </div>}
           </div>
         </div>
       ) : null}
@@ -455,20 +475,22 @@ export function ResumeAgentGlobalLauncher() {
         <div className="agent-corner-launcher-wrap" data-avoid-bottom-nav={avoidBottomNavigation ? 'true' : undefined}>
           <button
             ref={launcherRef}
-            key={`${agent.status}-${model.summary}`}
+            key={`${runningCount}-${reviewCount}`}
             type="button"
             onClick={handleLauncherClick}
             className="agent-corner-launcher"
+            data-has-tasks={entries.length > 0 ? 'true' : undefined}
             data-tone={model.tone}
             aria-haspopup="dialog"
-            aria-label={`打开小鱼 Agent：${model.summary}`}
+            aria-label={`打开小鱼 Agent：${summary}`}
             title={`小鱼 Agent：${model.summary}`}
           >
             <FishLogo className="agent-corner-launcher-icon" />
+            {entries.length > 0 && <span className="px-1 text-xs">{runningCount} 运行 · {reviewCount} 待审核</span>}
             <AgentLauncherStatusBadge
-              status={agent.status}
-              tone={model.tone}
-              patchCount={pendingPatchCount}
+              status={runningCount ? 'running' : reviewCount ? 'review' : agent.status}
+              tone={runningCount ? 'progress' : reviewCount ? 'success' : model.tone}
+              patchCount={reviewCount}
             />
           </button>
         </div>
@@ -521,11 +543,10 @@ function AgentLauncherStatusBadge({
   return null
 }
 
-async function openAgentTask(navigate: ReturnType<typeof useNavigate>) {
-  const agent = useResumeAgentSessionStore.getState()
+async function openAgentTask(navigate: ReturnType<typeof useNavigate>, agent: ResumeAgentStore) {
   if (!agent.resumeId) {
     navigate('/?tab=jd&agent=task')
-    return
+    return false
   }
   const resumeStore = useResumeStore.getState()
   if (resumeStore.isDirty) {
@@ -535,10 +556,12 @@ async function openAgentTask(navigate: ReturnType<typeof useNavigate>) {
   }
   const cached = resumeStore.cachedResumes.find((resume) => resume.id === agent.resumeId)
   const resume = cached || (await fetchResumes()).resumes?.find((item) => item.id === agent.resumeId)
+  if (!agent.isCurrent(agent.runId)) return false
   if (!resume) {
     toast('找不到 Agent 任务对应的基础简历', 'error')
     return
   }
+  selectResumeAgentTask(resumeAgentTaskKey(agent))
   const data = normalizeResumeData(resume.content, resume.title)
   resumeStore.setResumeData(data, resume.title)
   resumeStore.setCurrentResumeId(resume.id)
@@ -548,6 +571,7 @@ async function openAgentTask(navigate: ReturnType<typeof useNavigate>) {
   resumeStore.setParseStatus('success')
   agent.setRightPanelCollapsed(false)
   navigate('/?tab=jd&agent=task')
+  return true
 }
 
 function resumeSourceBadge(resume: Resume): { badge?: string; badgeTone?: 'blue' | 'violet' } {
@@ -556,8 +580,8 @@ function resumeSourceBadge(resume: Resume): { badge?: string; badgeTone?: 'blue'
   return {}
 }
 
-function configureAgentApplication(application: Application) {
-  useResumeAgentSessionStore.getState().configure({
+function configureAgentApplication(agent: ResumeAgentStore, application: Application) {
+  agent.configure({
     jobSource: 'application',
     applicationId: application.id,
     jdText: application.jobDescription,

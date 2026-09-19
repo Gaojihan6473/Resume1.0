@@ -207,7 +207,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   } = useResumeStore()
   useAuthStore()
   const agentPreviewMode = useResumeAgentSessionStore((state) => state.previewMode)
-  const hasAgentDraft = useResumeAgentSessionStore((state) => Boolean(state.agentDraftResumeData))
+  const hasAgentDraft = useResumeAgentSessionStore((state) => Boolean(state.agentDraftResumeData) && state.inputsValid && state.validatedBase === resumeData)
   const isAgentDraftVisible = agentPreviewMode === 'draft' && hasAgentDraft
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingWord, setIsExportingWord] = useState(false)

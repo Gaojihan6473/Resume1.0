@@ -13,6 +13,7 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react'
+import { linkResumeAgentApplication } from '../../lib/api/applications'
 import { createResume, fetchResumes } from '../../lib/api'
 import { useApplicationStore } from '../../store/applicationStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
@@ -52,7 +53,6 @@ export function ResumeAgentTaskPanel({
 }: ResumeAgentTaskPanelProps) {
   const navigate = useNavigate()
   const agent = useResumeAgentSessionStore()
-  const updateApplication = useApplicationStore((state) => state.updateApplication)
   const [riskConfirmationKey, setRiskConfirmationKey] = useState<string | null>(null)
   const [pendingCreationConfirmation, setPendingCreationConfirmation] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -86,6 +86,7 @@ export function ResumeAgentTaskPanel({
   const acceptedCount = patches.filter((patch) => accepted.has(patch.key)).length
   const pendingCount = countPendingResumeAgentPatches(patches, agent.acceptedPatchKeys, agent.rejectedPatchKeys)
   const acceptPatch = (patch: ResumeAgentPatch, confirmed = false) => {
+    if (isStale) return
     const result = agent.acceptPatch(baseData, patch.key, confirmed)
     if (!result.success) {
       if (result.error === 'MEDIUM_CONFIRM_REQUIRED' || result.error === 'HIGH_CONFIRM_REQUIRED') setRiskConfirmationKey(patch.key)
@@ -106,10 +107,13 @@ export function ResumeAgentTaskPanel({
       return
     }
 
-    agent.beginCreating()
+    const expectedResumeId = useApplicationStore.getState().applications.find((item) => item.id === agent.applicationId)?.resume_id || null
+    if (!agent.beginCreating(expectedResumeId)) return
+    const isCurrent = () => agent.isCurrent(agent.runId)
     const source = createResumeAgentSource(agent.runId)
     try {
       const listResult = await fetchResumes()
+      if (!isCurrent()) return
       if (!listResult.success) throw new Error(listResult.error || '检查创建结果失败')
       const resumes = listResult.resumes || []
       let createdResume = findResumeCreatedForRun(resumes, agent.runId)
@@ -120,7 +124,8 @@ export function ResumeAgentTaskPanel({
       } else {
         const versionTitle = resolveResumeAgentVersionTitle(agent.versionTitle, resumes)
         createdData = normalizeResumeData({ ...agent.agentDraftResumeData, resumeTitle: versionTitle })
-        const created = await createResume(versionTitle, resumeDataToRecord(createdData), source)
+        const created = await createResume(versionTitle, resumeDataToRecord(createdData), source, null, null, agent.userId || undefined)
+        if (!isCurrent()) return
         if (!created.success || !created.resume) throw new Error(created.error || '创建岗位专属版本失败')
         createdResume = created.resume
         const resumeStore = useResumeStore.getState()
@@ -128,19 +133,21 @@ export function ResumeAgentTaskPanel({
         scheduleResumePdfRefresh(createdResume.id, createdData)
       }
 
-      let linkStatus: 'linked' | 'failed' | 'not_applicable' = 'not_applicable'
+      let linkStatus: 'linked' | 'failed' | 'conflict' | 'not_applicable' = 'not_applicable'
       if (agent.applicationId) {
         try {
-          await updateApplication(agent.applicationId, { resume_id: createdResume.id })
-          linkStatus = 'linked'
+          const linked = await linkResumeAgentApplication(agent.userId!, agent.applicationId, expectedResumeId, createdResume.id)
+          linkStatus = linked ? 'linked' : 'conflict'
         } catch {
           linkStatus = 'failed'
         }
       }
+      if (!isCurrent()) return
       agent.creationCompleted({ resumeId: createdResume.id, resumeData: createdData, applicationLinkStatus: linkStatus })
       setPendingCreationConfirmation(false)
       toast('岗位专属版本已创建', 'success')
     } catch (error) {
+      if (!isCurrent()) return
       agent.creationFailed(error instanceof Error ? error.message : '创建岗位专属版本失败')
     }
   }
@@ -149,10 +156,12 @@ export function ResumeAgentTaskPanel({
     if (!agent.applicationId || !agent.createdResumeId) return
     agent.setApplicationLinkStatus('idle')
     try {
-      await updateApplication(agent.applicationId, { resume_id: agent.createdResumeId })
-      agent.setApplicationLinkStatus('linked')
-      toast('目标岗位关联已更新', 'success')
+      const linked = await linkResumeAgentApplication(agent.userId!, agent.applicationId, agent.applicationLinkExpectedResumeId, agent.createdResumeId)
+      if (!agent.isCurrent(agent.runId)) return
+      agent.setApplicationLinkStatus(linked ? 'linked' : 'conflict')
+      toast(linked ? '目标岗位关联已更新' : '岗位关联已变化，请前往岗位页手动选择', linked ? 'success' : 'error')
     } catch {
+      if (!agent.isCurrent(agent.runId)) return
       agent.setApplicationLinkStatus('failed')
       toast('目标岗位关联仍未成功，请稍后重试', 'error')
     }
@@ -161,6 +170,7 @@ export function ResumeAgentTaskPanel({
   const openCreatedVersion = () => {
     if (!agent.createdResumeId || !agent.createdResumeData) return
     const resumeStore = useResumeStore.getState()
+    if (resumeStore.isDirty && !window.confirm('当前简历有未保存修改。打开岗位专属版本将放弃这些修改，是否继续？')) return
     resumeStore.setResumeData(agent.createdResumeData, agent.createdResumeData.resumeTitle)
     resumeStore.setCurrentResumeId(agent.createdResumeId)
     resumeStore.markCurrentResumeSaved(agent.createdResumeData)
@@ -218,6 +228,7 @@ export function ResumeAgentTaskPanel({
           <h3 className="mt-2 text-base font-semibold text-emerald-900">岗位专属版本已创建</h3>
           <p className="mt-1 text-xs text-emerald-700">基础简历保持不变，新版本可以继续编辑或直接导出。</p>
         </div>
+        {agent.applicationLinkStatus === 'conflict' && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">岗位版已保存；目标岗位已关联其他版本，未覆盖原关联。<button type="button" onClick={() => navigate(`/applications?applicationId=${encodeURIComponent(agent.applicationId || '')}`)} className="ml-1 underline">前往岗位手动选择</button></div>}
         {agent.applicationLinkStatus === 'failed' && <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">新版本已安全保存，但目标岗位关联未更新。<button type="button" onClick={() => void retryApplicationLink()} className="ml-1 font-medium underline">重试关联</button></div>}
         <div className="mt-4 space-y-2">
           <button type="button" onClick={openCreatedVersion} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-medium text-white"><ExternalLink className="h-4 w-4" />打开岗位专属版本</button>
@@ -228,7 +239,7 @@ export function ResumeAgentTaskPanel({
   }
 
   if (!agent.proposal) {
-    return <TaskFailure message={agent.error || '任务尚未生成可审核结果'} onRetry={agent.clearTaskForRetry} />
+    return <TaskFailure message={agent.recoveryError || agent.error || (agent.recordId ? '正在恢复已保存的分析…' : '任务尚未生成可审核结果')} onRetry={agent.clearTaskForRetry} />
   }
 
   if (agent.completionStatus === 'no_changes') {
@@ -247,11 +258,11 @@ export function ResumeAgentTaskPanel({
     <div className="min-h-full p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div><h3 className="text-sm font-semibold text-slate-900">审核修改建议</h3><p className="mt-1 text-xs text-slate-500">已接受 {acceptedCount} 项，待处理 {pendingCount} 项</p></div>
-        <button type="button" disabled={agent.status === 'creating'} onClick={() => { const result = agent.acceptAllLowRisk(baseData); if (!result.success) toast(result.error || '批量应用失败', 'error') }} className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">接受全部低风险</button>
+        <button type="button" disabled={agent.status === 'creating' || isStale} onClick={() => { const result = agent.acceptAllLowRisk(baseData); if (!result.success) toast(result.error || '批量应用失败', 'error') }} className="shrink-0 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">接受全部低风险</button>
       </div>
 
       {!agent.historyPersisted && <div className="mb-3 flex gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>当前结果可继续审核，但刷新后可能无法恢复。<button type="button" onClick={() => void agent.retryHistoryPersistence()} className="ml-1 font-medium underline">重新校验并保存</button></span></div>}
-      {isStale && <div className="mb-3 flex gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />基础简历已变化，修改建议已失效，请重新运行 Agent。</div>}
+      {isStale && <div className="mb-3 flex gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />正在校验或简历、岗位 JD 已变化；旧分析仅供查看，校验通过或重新分析后才能应用。</div>}
 
       <div className="space-y-3">
         {patches.map((patch) => {

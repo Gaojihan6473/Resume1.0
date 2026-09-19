@@ -5,10 +5,9 @@ import { fetchResumes, type Resume } from '../../lib/api'
 import { RESUME_AGENT_ENABLED } from '../../lib/resumeAgent'
 import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
-import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
+import { useResumeAgentLauncherSession } from '../../store/resumeAgentSessionStore'
 import { FishLogo } from '../Brand/FishLogo'
 import { useResumeStore } from '../../store/resumeStore'
-import { createAnalysisHash } from '../../utils/analysisHash'
 import { createResumeAgentHash } from '../../utils/resumeAgentHash'
 import { countPendingResumeAgentPatches } from '../../utils/resumeAgentReview'
 import { normalizeResumeData } from '../../utils/resumeData'
@@ -30,7 +29,7 @@ export function ResumeAgentDock() {
   const { applications, fetchApplications } = useApplicationStore()
   const currentResumeId = useResumeStore((state) => state.currentResumeId)
   const isDirty = useResumeStore((state) => state.isDirty)
-  const agent = useResumeAgentSessionStore()
+  const agent = useResumeAgentLauncherSession()
   const pendingPatchCount = countPendingResumeAgentPatches(
     agent.proposal?.patches || [],
     agent.acceptedPatchKeys,
@@ -108,8 +107,9 @@ export function ResumeAgentDock() {
     const resume = resumes.find((item) => item.id === resumeId)
     if (!resume) return
     const resumeData = normalizeResumeData(resume.content, resume.title)
+    const task = agent.configure({ resumeId, resumeHash: '' })
     const hash = await createResumeAgentHash(resumeData)
-    agent.configure({ resumeId, resumeHash: hash })
+    if (task.isSelected() && task.isCurrent(task.runId)) task.configure({ resumeHash: hash })
   }
 
   const handleApplicationChange = async (value: string) => {
@@ -126,14 +126,13 @@ export function ResumeAgentDock() {
     }
     const application = applications.find((item) => item.id === value)
     if (!application) return
-    const jdHash = await createAnalysisHash(application.jobDescription)
     agent.configure({
       jobSource: 'application',
       applicationId: application.id,
       jdText: application.jobDescription,
       company: application.company,
       position: application.position,
-      jdHash,
+      jdHash: '',
     })
   }
 
@@ -159,6 +158,7 @@ export function ResumeAgentDock() {
       const result = await fetchResumes()
       resume = result.resumes?.find((item) => item.id === agent.resumeId) || null
     }
+    if (!agent.isSelected() || !agent.isConfigurationCurrent(agent)) return
     if (!resume) {
       toast('请先选择基础简历', 'error')
       return

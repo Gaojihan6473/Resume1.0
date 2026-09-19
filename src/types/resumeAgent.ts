@@ -211,7 +211,7 @@ export interface ResumeAgentSessionState {
   versionTitle: string
   createdResumeId: string | null
   createdResumeData: ResumeData | null
-  applicationLinkStatus: 'idle' | 'linked' | 'failed' | 'not_applicable'
+  applicationLinkStatus: 'idle' | 'linked' | 'failed' | 'conflict' | 'not_applicable'
   error: string | null
   errorCode: string | null
   isRightPanelCollapsed: boolean

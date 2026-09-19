@@ -5,6 +5,7 @@ import type { Application } from '../../types/application'
 import type { JDAnalysisRecord } from '../../types/jdAnalysisHistory'
 import type { ResumeData } from '../../types/resume'
 import { isResumeAgentHistoryResult } from '../../types/resumeAgent'
+import { useResumeStore } from '../../store/resumeStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { createAnalysisHash } from '../../utils/analysisHash'
 import { createResumeAgentHash } from '../../utils/resumeAgentHash'
@@ -35,20 +36,24 @@ export function ResumeAgentConfigPanel({
     [agent.applicationId, applications]
   )
   const agentHistory = useMemo(
-    () => historyRecords.filter((record) => isResumeAgentHistoryResult(record.analysis_result)),
-    [historyRecords]
+    () => historyRecords.filter((record) => record.resume_id === currentResumeId && record.user_id === agent.userId && isResumeAgentHistoryResult(record.analysis_result)),
+    [historyRecords, currentResumeId, agent.userId]
   )
   const isActiveTask = ['running', 'review', 'creating', 'completed'].includes(agent.status)
   const isConfigLocked = isActiveTask || agent.status === 'confirming'
 
   useEffect(() => {
-    if (agent.status !== 'review' || agent.proposal || !agent.recordId) return
-    const record = agentHistory.find((item) => item.id === agent.recordId)
-    if (!record || !isResumeAgentHistoryResult(record.analysis_result)) return
-    agent.restoreFromHistory(record.analysis_result, resumeData, record.id)
-  }, [agent, agentHistory, resumeData])
+    if (isConfigLocked || !selectedApplication) return
+    if (agent.jdText === selectedApplication.jobDescription && agent.company === selectedApplication.company && agent.position === selectedApplication.position) return
+    agent.configure({
+      jdText: selectedApplication.jobDescription,
+      company: selectedApplication.company,
+      position: selectedApplication.position,
+      jdHash: '',
+    })
+  }, [agent, isConfigLocked, selectedApplication])
 
-  const selectApplication = async (applicationId: string) => {
+  const selectApplication = (applicationId: string) => {
     if (!applicationId) {
       agent.configure({
         jobSource: 'manual',
@@ -68,7 +73,7 @@ export function ResumeAgentConfigPanel({
       jdText: application.jobDescription,
       company: application.company,
       position: application.position,
-      jdHash: await createAnalysisHash(application.jobDescription),
+      jdHash: '',
     })
   }
 
@@ -91,8 +96,8 @@ export function ResumeAgentConfigPanel({
         createResumeAgentHash(resumeData),
         createAnalysisHash(agent.jdText),
       ])
-      agent.configure({ resumeId: currentResumeId, resumeHash, jdHash })
-      agent.beginConfirmation()
+      if (!agent.isSelected() || !agent.isConfigurationCurrent(agent) || useResumeStore.getState().currentResumeId !== currentResumeId || useResumeStore.getState().resumeData !== resumeData || useResumeStore.getState().isDirty) return
+      agent.configure({ resumeId: currentResumeId, resumeHash, jdHash }).beginConfirmation()
     } finally {
       setPreparing(false)
     }
@@ -105,7 +110,8 @@ export function ResumeAgentConfigPanel({
       return
     }
     const currentHash = await createResumeAgentHash(resumeData)
-    agent.configure({
+    if (!agent.isSelected() || !agent.isConfigurationCurrent(agent) || useResumeStore.getState().currentResumeId !== currentResumeId) return
+    const target = agent.configure({
       resumeId: currentResumeId,
       resumeHash: currentHash,
       jdHash: record.jd_hash,
@@ -115,7 +121,7 @@ export function ResumeAgentConfigPanel({
       company: record.company_snapshot,
       position: record.position_snapshot,
     })
-    const restored = agent.restoreFromHistory(record.analysis_result, resumeData, record.id)
+    const restored = target.restoreFromHistory(record.analysis_result, resumeData, record.id, record)
     if (!restored) toast('基础简历已变化，不能恢复这次审核', 'error')
   }
 
@@ -128,6 +134,7 @@ export function ResumeAgentConfigPanel({
         </div>
       )}
 
+      {agent.recoveryError && <p role="alert" className="text-sm text-amber-700">{agent.recoveryError}</p>}
       {isActiveTask && (
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 p-3.5">
           <div className="flex items-start gap-3">
@@ -141,13 +148,12 @@ export function ResumeAgentConfigPanel({
               <p className="mt-0.5 text-sm font-semibold text-slate-800">
                 {agent.status === 'running' ? '正在生成岗位专属方案' : agent.status === 'review' ? '方案已生成，等待审核' : agent.status === 'creating' ? '正在创建岗位专属版本' : '岗位专属版本已创建'}
               </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">下方岗位与 JD 已锁定，任务详情和审核结果统一在右侧查看。</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">任务详情和审核结果在右侧查看；切换岗位可查看或开始另一项任务。</p>
             </div>
           </div>
         </div>
       )}
 
-      <fieldset disabled={isConfigLocked} className={`min-w-0 space-y-4 border-0 p-0 transition-opacity ${isConfigLocked ? 'opacity-70' : ''}`}>
         <div className="block">
           <span className="mb-1.5 block text-xs font-medium text-slate-600">目标岗位</span>
           <CustomSelect
@@ -162,6 +168,7 @@ export function ResumeAgentConfigPanel({
           />
         </div>
 
+      <fieldset disabled={isConfigLocked} className={`min-w-0 space-y-4 border-0 p-0 transition-opacity ${isConfigLocked ? 'opacity-70' : ''}`}>
         {agent.jobSource === 'manual' && (
           <div className="grid grid-cols-2 gap-2">
             <input value={agent.company} maxLength={80} onChange={(event) => agent.configure({ company: event.target.value })} placeholder="公司（可选）" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-300" />
@@ -221,7 +228,7 @@ export function ResumeAgentConfigPanel({
         <div className="flex gap-2">
           <button type="button" onClick={() => agent.setRightPanelCollapsed(false)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-cyan-50 px-3 py-2.5 text-sm font-medium text-cyan-700 ring-1 ring-cyan-100 hover:bg-cyan-100">查看任务详情</button>
           {(agent.status === 'running' || agent.status === 'review') && <button type="button" onClick={agent.clearTaskForRetry} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"><RotateCcw className="h-4 w-4" />清空任务</button>}
-          {agent.status === 'completed' && <button type="button" onClick={() => { agent.reset(); agent.configure({ resumeId: currentResumeId }) }} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50"><RotateCcw className="h-4 w-4" />开始新任务</button>}
+          {agent.status === 'completed' && <button type="button" onClick={agent.clearTaskForRetry} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50"><RotateCcw className="h-4 w-4" />开始新任务</button>}
         </div>
       ) : (
         <button type="button" disabled={preparing || agent.status === 'confirming' || !currentResumeId || isDirty || !agent.jdText.trim()} onClick={() => void prepareConfirmation()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
@@ -229,7 +236,7 @@ export function ResumeAgentConfigPanel({
         </button>
       )}
 
-      {!isActiveTask && agentHistory.length > 0 && (
+      {agentHistory.length > 0 && agent.status !== 'running' && agent.status !== 'creating' && (
         <div className="border-t border-slate-100 pt-4">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500"><Clock3 className="h-3.5 w-3.5" />最近的 Agent 任务</div>
           <div className="space-y-2">
