@@ -146,7 +146,7 @@ async function preflight(req: Request): Promise<RequestContext> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(runId) || !resumeId) {
     throw new HttpError(400, 'INVALID_REQUEST', '任务标识或简历标识无效')
   }
-  const { data: resume, error: resumeError } = await admin.from('resumes').select('id,title,content').eq('id', resumeId).eq('user_id', userId).maybeSingle()
+  const { data: resume, error: resumeError } = await admin.from('resumes').select('id,title,content,batch_id').eq('id', resumeId).eq('user_id', userId).maybeSingle()
   if (resumeError || !resume || !isRecord(resume.content)) throw new HttpError(404, 'RESUME_NOT_FOUND', '基础简历不存在或无权访问')
   const resumeData = resume.content as JsonRecord
   const resumeText = resumeToText(resumeData)
@@ -161,8 +161,9 @@ async function preflight(req: Request): Promise<RequestContext> {
   let applicationId: string | null = null
   if (job.source === 'application') {
     applicationId = asString(job.applicationId)
-    const { data: application } = await admin.from('applications').select('id,company,position,job_description').eq('id', applicationId).eq('user_id', userId).maybeSingle()
+    const { data: application } = await admin.from('applications').select('id,company,position,job_description,batch_id').eq('id', applicationId).eq('user_id', userId).maybeSingle()
     if (!application) throw new HttpError(404, 'APPLICATION_NOT_FOUND', '目标岗位不存在或无权访问')
+    if (!resume.batch_id || application.batch_id !== resume.batch_id) throw new HttpError(409, 'BATCH_MISMATCH', '基础简历与目标岗位必须属于同一批次')
     jdText = asString(application.job_description)
     company = asString(application.company)
     position = asString(application.position)

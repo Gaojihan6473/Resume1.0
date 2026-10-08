@@ -1,9 +1,11 @@
 import { supabase } from '../supabase'
 import { getResumeAssetPath, resolveResumeAssetUrls, resolveResumesAssetUrls } from './storage'
+import { assertBatch, selectBatchForCreation } from './batches'
 
 export interface Resume {
   id: string
   user_id: string
+  batch_id?: string
   title: string
   content: Record<string, unknown>
   source: string
@@ -22,14 +24,17 @@ export interface ResumesResponse {
 
 let fetchResumesRequest: Promise<ResumesResponse> | null = null
 
+export function clearResumesRequest() { fetchResumesRequest = null }
+
 export async function fetchResumes(): Promise<ResumesResponse> {
   if (fetchResumesRequest) return fetchResumesRequest
 
-  fetchResumesRequest = fetchResumesOnce()
+  const request = fetchResumesOnce()
+  fetchResumesRequest = request
   try {
     return await fetchResumesRequest
   } finally {
-    fetchResumesRequest = null
+    if (fetchResumesRequest === request) fetchResumesRequest = null
   }
 }
 
@@ -50,7 +55,10 @@ async function fetchResumesOnce(): Promise<ResumesResponse> {
       return { success: false, error: '获取简历列表失败' }
     }
 
-    return { success: true, resumes: await resolveResumesAssetUrls(resumes || []) }
+    const resolved = await resolveResumesAssetUrls(resumes || [])
+    const { data: { session: latest } } = await supabase.auth.getSession()
+    if (latest?.user.id !== session.user.id) return { success: false, error: '登录状态已变化' }
+    return { success: true, resumes: resolved }
   } catch {
     return { success: false, error: '网络异常' }
   }
@@ -62,7 +70,8 @@ export async function createResume(
   source: string = 'blank',
   fileUrl: string | null = null,
   previewUrl: string | null = null,
-  expectedUserId?: string
+  expectedUserId?: string,
+  batchId?: string
 ): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -70,10 +79,13 @@ export async function createResume(
       return { success: false, error: '未登录' }
     }
 
+    const selectedBatch = await assertBatch(batchId || await selectBatchForCreation(), session.user.id)
+
     const { data: resume, error } = await supabase
       .from('resumes')
       .insert({
         user_id: session.user.id,
+        batch_id: selectedBatch,
         title,
         content,
         source,
@@ -89,8 +101,8 @@ export async function createResume(
     }
 
     return { success: true, resume: await resolveResumeAssetUrls(resume) }
-  } catch {
-    return { success: false, error: '网络异常' }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : '网络异常' }
   }
 }
 
@@ -214,11 +226,7 @@ export async function deleteResume(id: string): Promise<ResumesResponse> {
       return { success: false, error: '未登录' }
     }
 
-    const { error } = await supabase
-      .from('resumes')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', session.user.id)
+    const { error } = await supabase.rpc('delete_resume_with_links', { p_resume: id })
 
     if (error) {
       return { success: false, error: '删除简历失败' }

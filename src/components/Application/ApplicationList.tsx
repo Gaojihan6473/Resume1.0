@@ -196,7 +196,7 @@ export function ApplicationList({
             ) : null}
           </div>
         ) : (
-          <div className="grid grid-cols-2 items-start gap-3">
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
             {sortedApplications.map((application) => (
               <ApplicationCard
                 key={application.id}

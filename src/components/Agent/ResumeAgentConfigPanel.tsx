@@ -97,7 +97,7 @@ export function ResumeAgentConfigPanel({
         createAnalysisHash(agent.jdText),
       ])
       if (!agent.isSelected() || !agent.isConfigurationCurrent(agent) || useResumeStore.getState().currentResumeId !== currentResumeId || useResumeStore.getState().resumeData !== resumeData || useResumeStore.getState().isDirty) return
-      agent.configure({ resumeId: currentResumeId, resumeHash, jdHash }).beginConfirmation()
+      agent.configure({ resumeId: currentResumeId, batchId: useResumeStore.getState().cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || null, resumeHash, jdHash }).beginConfirmation()
     } finally {
       setPreparing(false)
     }

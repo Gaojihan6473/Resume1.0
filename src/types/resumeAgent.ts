@@ -184,6 +184,7 @@ export interface ResumeAgentHistoryResult {
 }
 
 export interface ResumeAgentSessionState {
+  batchId?: string | null
   runId: string | null
   userId: string | null
   status: ResumeAgentStatus

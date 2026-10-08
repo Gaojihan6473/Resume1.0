@@ -18,7 +18,7 @@ import { normalizeResumeData } from '../utils/resumeData'
 interface ResumeAgentActions {
   bindUser: (userId: string | null) => void
   configure: (data: Partial<Pick<ResumeAgentSessionState,
-    'resumeId' | 'applicationId' | 'jobSource' | 'jdText' | 'company' | 'position' |
+    'batchId' | 'resumeId' | 'applicationId' | 'jobSource' | 'jdText' | 'company' | 'position' |
     'goal' | 'targetPages' | 'mustKeep' | 'resumeHash' | 'jdHash' | 'versionTitle'
   >>) => ResumeAgentStore
   beginConfirmation: () => void
@@ -67,6 +67,7 @@ interface TaskOptions {
 }
 
 export const DEFAULT_AGENT_STATE = {
+  batchId: null as string | null,
   applicationLinkExpectedResumeId: null as string | null,
   needsCreationRecovery: false,
   baseResumeData: null as ResumeData | null,
@@ -140,7 +141,7 @@ export function createResumeAgentTaskStore(initial: Partial<ResumeAgentStore> = 
       ...DEFAULT_AGENT_STATE,
       ...initial,
       isCurrent: (runId) => !disposed && get().runId === runId,
-      isConfigurationCurrent: (snapshot) => !disposed && get().runId === snapshot.runId && (['resumeId', 'applicationId', 'jobSource', 'jdText', 'company', 'position', 'goal', 'targetPages', 'mustKeep', 'resumeHash', 'jdHash'] as const).every((key) => get()[key] === snapshot[key]),
+      isConfigurationCurrent: (snapshot) => !disposed && get().runId === snapshot.runId && (['batchId', 'resumeId', 'applicationId', 'jobSource', 'jdText', 'company', 'position', 'goal', 'targetPages', 'mustKeep', 'resumeHash', 'jdHash'] as const).every((key) => get()[key] === snapshot[key]),
       isSelected: () => !disposed && (options.isSelected?.() ?? true),
       dispose: () => { disposed = true; validationGeneration++; activeController?.abort(); persistController?.abort() },
       validateInputs: async (base, jdText) => {

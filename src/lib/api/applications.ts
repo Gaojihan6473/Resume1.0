@@ -1,9 +1,11 @@
 import { supabase } from '../supabase'
+import { assertBatch, selectBatchForCreation } from './batches'
 import type { ApplicationChannel, ApplicationStatus } from '../../types/application'
 
 export interface Application {
   id: string
   user_id: string
+  batch_id?: string
   resume_id: string | null
   company: string
   position: string
@@ -18,6 +20,7 @@ export interface Application {
 }
 
 export interface CreateApplicationInput {
+  batch_id?: string
   resume_id?: string | null
   company: string
   position: string
@@ -34,6 +37,7 @@ export type UpdateApplicationInput = Partial<CreateApplicationInput>
 interface ApplicationRow {
   id: string
   user_id: string
+  batch_id?: string
   resume_id: string | null
   company: string
   position: string
@@ -56,6 +60,7 @@ function normalizeApplication(row: ApplicationRow): Application {
   return {
     id: row.id,
     user_id: row.user_id,
+    batch_id: row.batch_id,
     resume_id: row.resume_id,
     company: row.company,
     position: row.position,
@@ -70,14 +75,17 @@ function normalizeApplication(row: ApplicationRow): Application {
   }
 }
 
+export function clearApplicationsRequest() { fetchApplicationsRequest = null }
+
 export async function fetchApplications(): Promise<Application[]> {
   if (fetchApplicationsRequest) return fetchApplicationsRequest
 
-  fetchApplicationsRequest = fetchApplicationsOnce()
+  const request = fetchApplicationsOnce()
+  fetchApplicationsRequest = request
   try {
     return await fetchApplicationsRequest
   } finally {
-    fetchApplicationsRequest = null
+    if (fetchApplicationsRequest === request) fetchApplicationsRequest = null
   }
 }
 
@@ -97,6 +105,8 @@ async function fetchApplicationsOnce(): Promise<Application[]> {
     throw new Error('获取投递记录失败')
   }
 
+  const { data: { session: latest } } = await supabase.auth.getSession()
+  if (latest?.user.id !== session.user.id) throw new Error('登录状态已变化')
   return ((data || []) as ApplicationRow[]).map(normalizeApplication)
 }
 
@@ -108,10 +118,18 @@ export async function createApplication(
     throw new Error('未登录')
   }
 
+  let batchId = input.batch_id
+  if (!batchId && input.resume_id) {
+    const { data } = await supabase.from('resumes').select('batch_id').eq('id', input.resume_id).eq('user_id', session.user.id).single()
+    batchId = data?.batch_id
+  }
+  batchId = await assertBatch(batchId || await selectBatchForCreation(), session.user.id)
+
   const { data, error } = await supabase
     .from('applications')
     .insert({
       user_id: session.user.id,
+      batch_id: batchId,
       resume_id: input.resume_id || null,
       company: input.company,
       position: input.position,
@@ -192,19 +210,22 @@ export async function deleteApplication(id: string): Promise<void> {
 
 /** Compare-and-set prevents concurrently created resume versions from replacing each other. */
 export async function linkResumeAgentApplication(
-  userId: string, applicationId: string, expectedResumeId: string | null, resumeId: string,
+  userId: string, applicationId: string, expectedResumeId: string | null, resumeId: string, expectedBatchId?: string,
 ): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session || session.user.id !== userId) throw new Error('登录状态已变化，请重新打开任务')
   let query = supabase.from('applications').update({ resume_id: resumeId })
     .eq('id', applicationId).eq('user_id', userId)
+  if (expectedBatchId) query = query.eq('batch_id', expectedBatchId)
   query = expectedResumeId === null ? query.is('resume_id', null) : query.eq('resume_id', expectedResumeId)
   const { data, error } = await query.select('id').maybeSingle()
   if (error) throw new Error('岗位关联失败，可重试')
   if (data) return true
   // A lost network response after a successful write is safe to retry.
-  const existing = await supabase.from('applications').select('resume_id')
-    .eq('id', applicationId).eq('user_id', userId).maybeSingle()
+  let existingQuery = supabase.from('applications').select('resume_id')
+    .eq('id', applicationId).eq('user_id', userId)
+  if (expectedBatchId) existingQuery = existingQuery.eq('batch_id', expectedBatchId)
+  const existing = await existingQuery.maybeSingle()
   if (existing.error) throw new Error('无法确认岗位关联，请稍后重试')
   return existing.data?.resume_id === resumeId
 }

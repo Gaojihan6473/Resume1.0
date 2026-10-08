@@ -22,6 +22,7 @@ interface Props {
   placeholder?: string
   className?: string
   invalid?: boolean
+  disabled?: boolean
   ariaLabel?: string
   variant?: 'default' | 'pill'
 }
@@ -33,6 +34,7 @@ export function CustomSelect({
   placeholder = '请选择',
   className = '',
   invalid = false,
+  disabled = false,
   ariaLabel,
   variant = 'default',
 }: Props) {
@@ -108,12 +110,13 @@ export function CustomSelect({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
+      event.stopPropagation()
       setIsOpen(false)
       triggerRef.current?.focus()
     }
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [isOpen])
 
   useLayoutEffect(() => {
@@ -129,6 +132,7 @@ export function CustomSelect({
   }, [isOpen, updatePanelPosition])
 
   const togglePanel = () => {
+    if (disabled) return
     if (!isOpen) updatePanelPosition()
     setIsOpen((open) => !open)
   }
@@ -143,8 +147,9 @@ export function CustomSelect({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-invalid={invalid}
+        disabled={disabled}
         onClick={togglePanel}
-        className={`w-full overflow-hidden pr-8 text-left text-sm outline-none transition ${
+        className={`w-full overflow-hidden pr-8 text-left text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
           variant === 'pill'
             ? `h-11 rounded-full border border-transparent bg-slate-100/80 px-4 hover:bg-slate-100 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100/60 ${invalid ? 'border-rose-200 bg-rose-50' : ''}`
             : `rounded-xl border bg-white px-3.5 py-2.5 ${
@@ -163,7 +168,7 @@ export function CustomSelect({
       </button>
       <ChevronDown className={`w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
 
-      {isOpen && typeof document !== 'undefined' && createPortal(
+      {isOpen && !disabled && typeof document !== 'undefined' && createPortal(
         <div
           ref={panelRef}
           role="listbox"
@@ -180,6 +185,7 @@ export function CustomSelect({
               onClick={() => {
                 onChange(option.value)
                 setIsOpen(false)
+                triggerRef.current?.focus()
               }}
               className={`${option.actionPosition ? 'inline-flex w-1/2 justify-center' : 'flex w-full justify-between'} px-3 py-2 text-sm text-left hover:bg-slate-50 items-center gap-3 transition-colors ${
                 option.separatorBefore ? 'mt-1 border-t border-slate-100 pt-2.5' : ''

@@ -7,6 +7,7 @@ import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentLauncherSession } from '../../store/resumeAgentSessionStore'
 import { FishLogo } from '../Brand/FishLogo'
+import { batchPath } from '../../utils/batchWorkspace'
 import { useResumeStore } from '../../store/resumeStore'
 import { createResumeAgentHash } from '../../utils/resumeAgentHash'
 import { countPendingResumeAgentPatches } from '../../utils/resumeAgentReview'
@@ -107,7 +108,7 @@ export function ResumeAgentDock() {
     const resume = resumes.find((item) => item.id === resumeId)
     if (!resume) return
     const resumeData = normalizeResumeData(resume.content, resume.title)
-    const task = agent.configure({ resumeId, resumeHash: '' })
+    const task = agent.configure({ resumeId, batchId: resume.batch_id || null, resumeHash: '' })
     const hash = await createResumeAgentHash(resumeData)
     if (task.isSelected() && task.isCurrent(task.runId)) task.configure({ resumeHash: hash })
   }
@@ -125,7 +126,7 @@ export function ResumeAgentDock() {
       return
     }
     const application = applications.find((item) => item.id === value)
-    if (!application) return
+    if (!application || application.batch_id !== selectedResume?.batch_id) return
     agent.configure({
       jobSource: 'application',
       applicationId: application.id,
@@ -166,7 +167,7 @@ export function ResumeAgentDock() {
     if (!loadResumeIntoEditor(resume)) return
 
     if (agent.jobSource === 'manual' && !agent.jdText.trim()) {
-      navigate('/?tab=jd&agent=configure')
+      navigate(batchPath(`/editor?resumeId=${agent.resumeId}&tab=jd&agent=configure`, selectedResume?.batch_id))
       closeDock()
       return
     }
@@ -175,12 +176,12 @@ export function ResumeAgentDock() {
       return
     }
     agent.beginConfirmation()
-    navigate('/?tab=jd&agent=confirm')
+    navigate(batchPath(`/editor?resumeId=${agent.resumeId}&tab=jd&agent=confirm`, selectedResume?.batch_id))
     closeDock()
   }
 
   const goToTask = () => {
-    navigate('/?tab=jd&agent=task')
+    navigate(batchPath(`/editor?resumeId=${agent.resumeId}&tab=jd&agent=task`, selectedResume?.batch_id))
     agent.setRightPanelCollapsed(false)
   }
 
@@ -270,7 +271,7 @@ export function ResumeAgentDock() {
                 value={agent.jobSource === 'manual' ? 'manual' : agent.applicationId || ''}
                 onChange={(value) => void handleApplicationChange(value)}
                 options={[
-                  ...applications.filter((application) => application.jobDescription.trim()).map((application) => ({ value: application.id, label: `${application.company} · ${application.position}` })),
+                  ...applications.filter((application) => application.jobDescription.trim() && application.batch_id === selectedResume?.batch_id).map((application) => ({ value: application.id, label: `${application.company} · ${application.position}` })),
                   { value: 'manual', label: '添加新 JD' },
                 ]}
                 placeholder="选择目标岗位"

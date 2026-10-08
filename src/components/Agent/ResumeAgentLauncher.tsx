@@ -18,6 +18,8 @@ import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentLauncherStore } from '../../store/resumeAgentLauncherStore'
 import { useResumeAgentLauncherSession, useResumeAgentTasks, selectAgentLauncherResume, selectResumeAgentTask, resumeAgentTaskKey, type ResumeAgentStore } from '../../store/resumeAgentSessionStore'
+import { batchPath } from '../../utils/batchWorkspace'
+import { useBatchStore } from '../../store/batchStore'
 import { useResumeStore } from '../../store/resumeStore'
 import type { Application } from '../../types/application'
 import type { ResumeAgentStatus } from '../../types/resumeAgent'
@@ -90,7 +92,7 @@ export function ResumeAgentLauncherPanel({
   )
 
   useEffect(() => {
-    if (location.pathname === '/') selectAgentLauncherResume(parseStatus === 'success' ? currentResumeId : null)
+    if (location.pathname === '/editor') selectAgentLauncherResume(parseStatus === 'success' ? currentResumeId : null)
   }, [currentResumeId, location.pathname, parseStatus])
 
   useEffect(() => {
@@ -116,8 +118,8 @@ export function ResumeAgentLauncherPanel({
     [agent.resumeId, cachedResumes],
   )
   const selectedApplication = useMemo(
-    () => applications.find((application) => application.id === agent.applicationId) || null,
-    [agent.applicationId, applications],
+    () => applications.find((application) => application.id === agent.applicationId && (!selectedResume?.batch_id || application.batch_id === selectedResume.batch_id)) || null,
+    [agent.applicationId, applications, selectedResume],
   )
   const resumeOptions = useMemo(
     () => [
@@ -132,13 +134,13 @@ export function ResumeAgentLauncherPanel({
     [cachedResumes],
   )
   const applicationOptions = useMemo(() => [
-    ...applications.map((application) => ({
+    ...applications.filter((application) => !selectedResume?.batch_id || application.batch_id === selectedResume.batch_id).map((application) => ({
       value: application.id,
       label: `${application.company} · ${application.position}`,
       ...(application.jobDescription.trim() ? {} : { badge: '待补 JD', badgeTone: 'amber' as const }),
     })),
     { value: '__new_job__', label: '+ 添加目标岗位', separatorBefore: true },
-  ], [applications])
+  ], [applications, selectedResume])
 
   const model = deriveResumeAgentLauncherModel({
     status: agent.status,
@@ -171,6 +173,7 @@ export function ResumeAgentLauncherPanel({
       return
     }
     useResumeStore.getState().resetAll()
+    useBatchStore.getState().setDraftBatchId(selectedResume?.batch_id || new URLSearchParams(location.search).get('batch'))
     navigate(`/?agentAction=${mode}`)
     closePanel()
   }
@@ -179,7 +182,7 @@ export function ResumeAgentLauncherPanel({
     const query = application
       ? `?applicationId=${encodeURIComponent(application.id)}`
       : '?create=ai'
-    navigate(`/applications${query}`)
+    navigate(batchPath(`/applications${query}`, application?.batch_id || selectedResume?.batch_id || new URLSearchParams(location.search).get('batch')))
     closePanel()
   }
 
@@ -199,6 +202,7 @@ export function ResumeAgentLauncherPanel({
       if (!agent.isSelected() || !agent.isConfigurationCurrent(agent) || (useResumeAgentTasks.getState().userId && useResumeAgentTasks.getState().launcherResumeId !== selectedResume.id)) return
       const task = agent.configure({
         resumeId: selectedResume.id,
+        batchId: selectedResume.batch_id || null,
         resumeHash,
         jobSource: 'application',
         applicationId: selectedApplication.id,
@@ -288,7 +292,7 @@ export function ResumeAgentLauncherPanel({
                 onChange={(value) => {
                   if (value === '__new_resume__') goToCreateResume('new')
                   else if (value === '__import_resume__') goToCreateResume('upload')
-                  else { agent.configure({ resumeId: value, resumeHash: '' }); selectAgentLauncherResume(value) }
+                  else { agent.configure({ resumeId: value, batchId: cachedResumes.find((item) => item.id === value)?.batch_id || null, resumeHash: '' }); selectAgentLauncherResume(value) }
                 }}
                 options={resumeOptions}
                 placeholder={loading ? '正在加载简历…' : '选择已有简历'}
@@ -461,11 +465,11 @@ export function ResumeAgentGlobalLauncher() {
           <div ref={overlayRef} className="agent-global-overlay-panel">
             <ResumeAgentLauncherPanel onCollapse={() => closeOverlay()} autoFocus />
             {storageError && <p role="alert" className="px-4 py-2 text-xs text-amber-700">{storageError}</p>}
-            {entries.length > 0 && <div className="max-h-64 overflow-y-auto border-t border-slate-100 p-3" aria-label="全部 Agent 任务">
-              <p className="mb-2 text-xs text-slate-500">{summary}</p>
-              {entries.map(([key, task]) => <button key={key} type="button" onClick={() => { void openAgentTask(navigate, task).then((opened) => { if (opened) closeOverlay(false) }) }} className="mb-1 block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-cyan-50">
-                <span className="block truncate font-medium">{resumes.find((resume) => resume.id === task.resumeId)?.title || task.baseResumeData?.resumeTitle || '未命名简历'} → {[task.company, task.position].filter(Boolean).join(' · ') || '手工 JD'}</span>
-                <span className="text-xs text-slate-500">{task.status === 'running' ? '正在分析' : task.status === 'creating' ? '正在创建岗位版' : task.status === 'review' ? '待审核' : task.status === 'completed' ? '已创建岗位版' : task.status === 'cancelled' ? '已取消' : '需重试'}</span>
+            {entries.length > 0 && <div className="max-h-48 overflow-y-auto border-t border-slate-100 px-4 py-2" aria-label="全部 Agent 任务">
+              <p className="mb-1 px-2 text-[11px] leading-5 text-slate-400">{summary}</p>
+              {entries.map(([key, task]) => <button key={key} type="button" onClick={() => { void openAgentTask(navigate, task).then((opened) => { if (opened) closeOverlay(false) }) }} className="flex min-h-9 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-500">
+                <span className="min-w-0 flex-1 truncate text-xs font-medium leading-5 text-slate-700">{resumes.find((resume) => resume.id === task.resumeId)?.title || task.baseResumeData?.resumeTitle || '未命名简历'} → {[task.company, task.position].filter(Boolean).join(' · ') || '手工 JD'}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium leading-4 ${task.status === 'running' || task.status === 'creating' ? 'bg-blue-50 text-blue-600' : task.status === 'review' || task.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : task.status === 'cancelled' ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-700'}`}>{task.status === 'running' ? '正在分析' : task.status === 'creating' ? '正在创建岗位版' : task.status === 'review' ? '待审核' : task.status === 'completed' ? '已创建岗位版' : task.status === 'cancelled' ? '已取消' : '需重试'}</span>
               </button>)}
             </div>}
           </div>
@@ -545,7 +549,7 @@ function AgentLauncherStatusBadge({
 
 async function openAgentTask(navigate: ReturnType<typeof useNavigate>, agent: ResumeAgentStore) {
   if (!agent.resumeId) {
-    navigate('/?tab=jd&agent=task')
+    navigate(batchPath(`/editor?tab=jd&agent=task${agent.resumeId ? `&resumeId=${agent.resumeId}` : ''}`, useResumeStore.getState().cachedResumes.find((item) => item.id === agent.resumeId)?.batch_id))
     return false
   }
   const resumeStore = useResumeStore.getState()
@@ -570,7 +574,7 @@ async function openAgentTask(navigate: ReturnType<typeof useNavigate>, agent: Re
   resumeStore.setParseError(null)
   resumeStore.setParseStatus('success')
   agent.setRightPanelCollapsed(false)
-  navigate('/?tab=jd&agent=task')
+  navigate(batchPath(`/editor?tab=jd&agent=task${agent.resumeId ? `&resumeId=${agent.resumeId}` : ''}`, useResumeStore.getState().cachedResumes.find((item) => item.id === agent.resumeId)?.batch_id))
   return true
 }
 

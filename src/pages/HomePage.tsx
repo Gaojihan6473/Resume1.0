@@ -6,17 +6,11 @@ import {
   Sparkles,
   Upload as UploadIcon,
   X,
-  MapPin,
-  Calendar,
-  Building2,
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
   GitBranch,
   Loader2,
-  MoreHorizontal,
-  Copy,
-  Trash2,
   Plus,
   Target,
   Pencil,
@@ -24,7 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { FishLogo } from '../components/Brand/FishLogo'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
@@ -33,17 +27,17 @@ import { Sidebar } from '../components/Sidebar/Sidebar'
 import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { createResume, deleteResume, fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useApplicationStore } from '../store/applicationStore'
-import {
-  APPLICATION_CHANNEL_LABELS,
-  APPLICATION_STATUS_LABELS,
-  type Application,
-  type ApplicationStatus,
-} from '../types/application'
 import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
-import { ResumeThumbnail } from '../components/Application/ResumeThumbnail'
+import { HomeResumeCard, HomeApplicationCard } from '../components/Home/HomeContentCards'
 import { toast } from '../components/Toast'
+import { useBatchStore } from '../store/batchStore'
+import { BatchManager } from '../components/Batch/BatchManager'
+import { WorkspaceHeader } from '../components/Batch/WorkspaceHeader'
+import { CustomSelect } from '../components/Application/CustomSelect'
+import { BATCH_COLORS } from '../types/batch'
+import { batchPath } from '../utils/batchWorkspace'
 
-interface HomePageProps {
+export interface HomePageProps {
   sidebarOpen: boolean
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
   sidebarRef: RefObject<HTMLDivElement | null>
@@ -72,10 +66,16 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     error: applicationsError,
     fetchApplications,
   } = useApplicationStore()
+  const { batchId } = useParams()
+  const { batches, fetch: fetchBatches, loaded: batchesLoaded, error: batchError } = useBatchStore()
+  const batch = batches.find((item) => item.id === batchId)
+  const [showBatchManager, setShowBatchManager] = useState(false)
+  const parseStatus = useResumeStore((state) => state.parseStatus)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const [recentResumes, setRecentResumes] = useState<Resume[]>([])
+  const [allResumes, setAllResumes] = useState<Resume[]>([])
+  const recentResumes = batchId ? allResumes.filter((item) => item.batch_id === batchId) : allResumes
   const [isLoadingResumes, setIsLoadingResumes] = useState(false)
   const [resumeLoadError, setResumeLoadError] = useState<string | null>(null)
   const [resumeRetryToken, setResumeRetryToken] = useState(0)
@@ -94,6 +94,12 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const consumedPostLoginActionRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setShowBatchManager(false)
+    setResumePage(0); setApplicationPage(0); setOpenResumeMenuId(null)
+    setShowCreateApplicationDropdown(false); setDeleteResumeId(null)
+  }, [batchId])
 
   useLayoutEffect(() => {
     const element = homeContentRef.current
@@ -133,7 +139,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       setResumeLoadError(null)
       // 优先使用缓存
       if (cachedResumes.length > 0) {
-        setRecentResumes(cachedResumes)
+        setAllResumes(cachedResumes)
         setIsLoadingResumes(false)
       } else {
         setIsLoadingResumes(true)
@@ -156,10 +162,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
             })
 
           if (hasChanges) {
-            setRecentResumes(result.resumes)
+            setAllResumes(result.resumes)
             setCachedResumes(result.resumes, Date.now())
           } else if (cachedResumes.length === 0) {
-            setRecentResumes(result.resumes)
+            setAllResumes(result.resumes)
           }
         } else {
           setResumeLoadError(result.error || '简历加载失败')
@@ -171,7 +177,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
         cancelled = true
       }
     } else {
-      setRecentResumes([])
+      setAllResumes([])
       setResumeLoadError(null)
       setIsLoadingResumes(false)
     }
@@ -185,9 +191,9 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
   const sortedApplications = useMemo(
     () =>
-      [...applications]
+      applications.filter((item) => !batchId || item.batch_id === batchId)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [applications]
+    [applications, batchId]
   )
 
   const resumePageCount = Math.max(1, Math.ceil(recentResumes.length / resumePageSize))
@@ -289,33 +295,43 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     }
   }, [])
 
+  useEffect(() => { if (batchId) void fetchBatches() }, [batchId, fetchBatches])
+  useEffect(() => {
+    if (showUploadModal && parseStatus === 'success') {
+      setShowUploadModal(false)
+      navigate(batchPath('/editor', batchId))
+    }
+  }, [showUploadModal, parseStatus, batchId, navigate])
+
   const handleManualCreateApplication = useCallback(() => {
-    navigate('/applications?create=manual')
-  }, [navigate])
+    navigate(batchPath('/applications?create=manual', batchId))
+  }, [navigate, batchId])
 
   const handleAICreateApplication = useCallback(() => {
-    navigate('/applications?create=ai')
-  }, [navigate])
+    navigate(batchPath('/applications?create=ai', batchId))
+  }, [navigate, batchId])
 
   const syncResumeList = (resumes: Resume[], fetchedAt: number) => {
-    setRecentResumes(resumes)
+    setAllResumes(resumes)
     setCachedResumes(resumes, fetchedAt)
   }
 
-  const getResumeListForAction = () => cachedResumes.length > 0 ? cachedResumes : recentResumes
+  const getResumeListForAction = () => cachedResumes.length > 0 ? cachedResumes : allResumes
 
   const handleNewResume = useCallback(() => {
     if (!isAuthenticated) {
       onAuthRequired?.('new')
       return
     }
+    useBatchStore.getState().setDraftBatchId(batchId || null)
     setResumeData(createDefaultResumeData())
     setCurrentResumeId(null)
     setIsDirty(false)
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-  }, [clearCurrentFile, isAuthenticated, onAuthRequired, setCurrentResumeId, setIsDirty, setParseError, setParseStatus, setResumeData])
+    navigate(batchPath('/editor', batchId))
+  }, [clearCurrentFile, isAuthenticated, onAuthRequired, setCurrentResumeId, setIsDirty, setParseError, setParseStatus, setResumeData, navigate, batchId])
 
   const handleSelectResume = (resume: Resume, options?: { tab?: 'jd' }) => {
     setResumeData(resume.content as unknown as ResumeData, resume.title)
@@ -324,7 +340,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate(options?.tab === 'jd' ? '/?tab=jd' : '/')
+    navigate(batchPath(`/editor?resumeId=${resume.id}${options?.tab === 'jd' ? '&tab=jd' : ''}`, resume.batch_id))
   }
 
   const handleOpenUpload = useCallback(() => {
@@ -332,8 +348,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       onAuthRequired?.('upload')
       return
     }
+    useResumeStore.getState().resetAll()
+    useBatchStore.getState().setDraftBatchId(batchId || null)
     setShowUploadModal(true)
-  }, [isAuthenticated, onAuthRequired])
+  }, [isAuthenticated, onAuthRequired, batchId])
 
   useEffect(() => {
     const postLoginAction = searchParams.get('postLoginAction')
@@ -362,6 +380,16 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     else handleOpenUpload()
   }, [handleNewResume, handleOpenUpload, searchParams, setSearchParams])
 
+  useEffect(() => {
+    if (!batchId || !batch) return
+    const action = searchParams.get('action')
+    if (action !== 'new' && action !== 'upload') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('action')
+    setSearchParams(next, { replace: true })
+    if (action === 'new') handleNewResume(); else handleOpenUpload()
+  }, [batchId, batch, searchParams, setSearchParams, handleNewResume, handleOpenUpload])
+
   const handleDuplicateResume = async (resume: Resume) => {
     if (resumeActionLoadingId) return
 
@@ -377,9 +405,11 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     const result = await createResume(
       duplicateTitle,
       duplicateContent,
-      resume.source,
+      `copy:${resume.id}`,
       resume.file_url,
-      resume.preview_url
+      resume.preview_url,
+      undefined,
+      resume.batch_id
     )
 
     if (result.success && result.resume) {
@@ -445,7 +475,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           onMouseLeave={onScheduleCloseSidebar}
           topOffset={0}
           backdropTop={0}
-          onGoHome={onCloseSidebar}
+          onGoHome={() => { onCloseSidebar(); navigate('/') }}
           onNavigateToMe={() => {
             if (isAuthenticated) {
               navigate('/me')
@@ -453,8 +483,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
               onAuthRequired?.('me')
             }
           }}
-          onNavigateToApplications={() => navigate('/applications')}
-          onNavigateToAnalytics={() => navigate('/analytics')}
+          onNavigateToApplications={() => navigate(batchPath('/applications', batchId))}
+          onNavigateToAnalytics={() => navigate(batchPath('/analytics', batchId))}
           onNavigateToLogin={() => navigate('/login')}
         />
 
@@ -469,6 +499,49 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           <div ref={homeContentRef} className="relative mx-auto w-full max-w-[1180px]">
             {isAuthenticated ? (
               <>
+                {batchId && (
+                  <>
+                  <WorkspaceHeader
+                    accent={batch ? BATCH_COLORS[batch.color].value : undefined}
+                    actions={batch && <>
+                      <CustomSelect ariaLabel="切换批次" value={batch.id} onChange={(id) => navigate(`/batches/${id}`)} options={batches.map((item) => ({ value: item.id, label: item.name }))} className="min-w-0 flex-1 sm:w-44 sm:flex-none" />
+                      <button type="button" onClick={() => setShowBatchManager(true)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:border-blue-200 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100/70">管理批次</button>
+                    </>}
+                  >
+                      <nav aria-label="批次导航">
+                        <ol className="flex min-w-0 items-center gap-3">
+                          <li className="shrink-0">
+                            <Link
+                              to="/"
+                              title="返回求职空间"
+                              className="inline-flex rounded-lg text-base font-medium leading-7 text-slate-500 transition-colors duration-200 hover:text-blue-600 active:text-blue-700 focus-visible:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 motion-reduce:transition-none sm:text-lg sm:leading-7"
+                            >
+                              求职空间
+                            </Link>
+                          </li>
+                          {batch && (
+                            <>
+                              <li aria-hidden="true" className="flex shrink-0 items-center text-slate-300">
+                                <ChevronRight className="h-5 w-5" />
+                              </li>
+                              <li aria-current="page" className="min-w-0">
+                                <h1 title={batch.name} className="truncate text-lg font-semibold text-slate-800 sm:text-xl">{batch.name}</h1>
+                              </li>
+                            </>
+                          )}
+                        </ol>
+                      </nav>
+                  </WorkspaceHeader>
+                      {batchError ? (
+                        <p role="alert" className="-mt-4 mb-7 text-sm text-rose-600">{batchError}<button onClick={() => void fetchBatches()} className="ml-2 underline">重试</button></p>
+                      ) : !batch ? (
+                        <p className="-mt-4 mb-7 text-sm text-slate-500">{batchesLoaded ? '批次已不存在，请返回首页' : '批次加载中…'}</p>
+                      ) : batch.description && (
+                        <p className="-mt-4 mb-7 whitespace-pre-wrap text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">{batch.description}</p>
+                      )}
+                  </>
+                )}
+                <div className={batchId && !batch ? 'hidden' : ''}>
                 <section>
                   <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <HomeSectionTitle
@@ -592,7 +665,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                             key={application.id}
                             application={application}
                             resumes={cachedResumes}
-                            onClick={() => navigate(`/applications?applicationId=${application.id}`)}
+                            onClick={() => navigate(batchPath(`/applications?applicationId=${application.id}`, batchId))}
                           />
                         ))}
                       </div>
@@ -615,6 +688,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                   onClose={() => setShowCreateApplicationDropdown(false)}
                   onMouseEnter={handleCreateApplicationDropdownMouseEnter}
                 />
+                </div>
               </>
             ) : (
               <UnauthenticatedLanding
@@ -632,6 +706,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
         onClose={() => setShowUploadModal(false)}
         onAuthRequired={() => onAuthRequired?.('upload')}
       />
+      {showBatchManager && batch && <BatchManager key={batch.id} batch={batch} onClose={() => setShowBatchManager(false)} onDeleted={() => navigate('/')} />}
       <DeleteResumeConfirmModal
         open={Boolean(deleteResumeId)}
         isLoading={Boolean(deleteResumeId && resumeActionLoadingId === deleteResumeId)}
@@ -1109,231 +1184,6 @@ function HomeLoadingState({ text, compact = false }: { text: string; compact?: b
   )
 }
 
-function HomeResumeCard({
-  resume,
-  onClick,
-  isMenuOpen,
-  isLoading,
-  onToggleMenu,
-  onDuplicate,
-  onRequestDelete,
-}: {
-  resume: Resume
-  onClick: () => void
-  isMenuOpen: boolean
-  isLoading: boolean
-  onToggleMenu: () => void
-  onDuplicate: () => void
-  onRequestDelete: () => void
-}) {
-  const content = resume.content as Partial<ResumeData>
-  const education = Array.isArray(content.education) ? content.education : []
-  const internships = Array.isArray(content.internships) ? content.internships : []
-  const skills = content.skills?.technical ?? []
-  const hasPreview = Boolean(resume.preview_url)
-  const hasPdf = Boolean(resume.file_url)
-  const title = resume.title || '未命名简历'
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={`打开简历：${title}`}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.currentTarget !== event.target) return
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onClick()
-        }
-      }}
-      className={`group relative min-w-0 cursor-pointer text-left outline-none ${isMenuOpen ? 'z-30' : ''}`}
-    >
-      <div className="relative">
-        <div className="aspect-[210/297] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/50 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-blue-200 group-hover:bg-white group-hover:shadow-lg group-hover:shadow-blue-100 group-focus-visible:border-blue-300 group-focus-visible:ring-2 group-focus-visible:ring-blue-200">
-          {hasPreview || hasPdf ? (
-            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white">
-              <ResumeThumbnail
-                resume={resume}
-                alt={title}
-                className="h-full w-full rounded-2xl object-contain"
-              >
-                <div className="h-full w-full rounded-2xl bg-white" />
-              </ResumeThumbnail>
-            </div>
-          ) : (
-            <div className="h-full overflow-hidden rounded-2xl bg-white p-4">
-              <div className="border-b border-slate-100 pb-3 text-center">
-                <h3 className="truncate text-sm font-bold text-slate-800">
-                  {content.basic?.name || '未命名'}
-                </h3>
-                {content.basic?.targetTitle && (
-                  <p className="mt-1 truncate text-[11px] font-medium text-blue-600">
-                    {content.basic.targetTitle}
-                  </p>
-                )}
-              </div>
-              <div className="mt-4 space-y-3 text-[10px] text-slate-500">
-                {education[0] && (
-                  <div>
-                    <p className="mb-1 font-semibold text-slate-700">教育经历</p>
-                    <p className="truncate">{education[0].school} · {education[0].major}</p>
-                  </div>
-                )}
-                {internships[0] && (
-                  <div>
-                    <p className="mb-1 font-semibold text-slate-700">实习经历</p>
-                    <p className="truncate">{internships[0].company} · {internships[0].position}</p>
-                  </div>
-                )}
-                {skills.length > 0 && (
-                  <div>
-                    <p className="mb-1 font-semibold text-slate-700">专业技能</p>
-                    <p className="line-clamp-3">{skills.slice(0, 8).join('、')}</p>
-                  </div>
-                )}
-                {!education[0] && !internships[0] && skills.length === 0 && (
-                  <div className="flex h-36 flex-col items-center justify-center rounded-xl bg-slate-50 text-slate-400">
-                    <FileText className="mb-2 h-7 w-7" />
-                    <span>暂无预览</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          className={`absolute bottom-2.5 right-2.5 z-20 transition-opacity duration-200 ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            aria-label="简历操作"
-            aria-haspopup="menu"
-            aria-expanded={isMenuOpen}
-            disabled={isLoading}
-            onClick={onToggleMenu}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.18),0_2px_6px_rgba(15,23,42,0.1)] backdrop-blur transition-all hover:-translate-y-0.5 hover:text-blue-600 hover:shadow-[0_14px_30px_rgba(37,99,235,0.2),0_4px_10px_rgba(15,23,42,0.12)] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <MoreHorizontal className="h-4 w-4" />
-            )}
-          </button>
-
-          {isMenuOpen && (
-            <div
-              role="menu"
-              className="dropdown-fade-in absolute bottom-12 right-0 w-36 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 shadow-xl shadow-slate-900/10"
-            >
-              <button
-                type="button"
-                role="menuitem"
-                disabled={isLoading}
-                onClick={onDuplicate}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Copy className="h-4 w-4" />
-                复制简历
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={isLoading}
-                onClick={onRequestDelete}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Trash2 className="h-4 w-4" />
-                删除简历
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="mt-3 min-w-0">
-        <p className="truncate text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
-          {title}
-        </p>
-        <p className="mt-1 text-[11px] font-medium text-slate-400">
-          {new Date(resume.updated_at).toLocaleDateString('zh-CN')}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function HomeApplicationCard({
-  application,
-  resumes,
-  onClick,
-}: {
-  application: Application
-  resumes: Resume[]
-  onClick: () => void
-}) {
-  const linkedResume = resumes.find((resume) => resume.id === application.resume_id)
-  const channelLabel = APPLICATION_CHANNEL_LABELS[application.channel] ?? application.channel
-
-  return (
-    <button
-      onClick={onClick}
-      className="group relative min-h-[116px] min-w-0 rounded-2xl border border-slate-200 bg-white/95 p-4 text-left shadow-sm shadow-slate-200/60 transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-lg hover:shadow-blue-100"
-    >
-      <div className="absolute right-4 top-4">
-        <StatusPill status={application.status} />
-      </div>
-
-      <div className="min-w-0">
-        <div className="min-w-0 pr-20">
-          <p className="truncate text-sm font-bold text-slate-900">
-            {application.company || '未填写公司'}
-          </p>
-          <p className="mt-1.5 truncate text-xs font-medium text-slate-500">
-            {application.position || '未填写岗位'}
-          </p>
-        </div>
-
-        <div className="mt-4 flex min-w-0 items-center gap-2.5 overflow-hidden text-[11px] font-medium text-slate-500">
-          {application.location && (
-            <p className="flex min-w-0 max-w-[4.75rem] shrink-0 items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span className="truncate">{application.location}</span>
-            </p>
-          )}
-          <p className="flex min-w-0 flex-1 items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="truncate">{linkedResume?.title || channelLabel || '未关联简历'}</span>
-          </p>
-          <p className="flex shrink-0 items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span>{formatDate(application.appliedAt) || formatDate(application.created_at)}</span>
-          </p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function StatusPill({ status }: { status: ApplicationStatus }) {
-  const statusStyles: Record<ApplicationStatus, string> = {
-    interested: 'bg-purple-50 text-purple-600',
-    applied: 'bg-blue-50 text-blue-600',
-    assessing: 'bg-cyan-50 text-cyan-600',
-    interviewing: 'bg-amber-50 text-amber-600',
-    offered: 'bg-emerald-50 text-emerald-600',
-    rejected: 'bg-red-50 text-red-600',
-  }
-
-  return (
-    <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${statusStyles[status]}`}>
-      {APPLICATION_STATUS_LABELS[status]}
-    </span>
-  )
-}
-
 function DeleteResumeConfirmModal({
   open,
   isLoading,
@@ -1463,9 +1313,3 @@ function UploadResumeModal({
   )
 }
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return null
-  const date = new Date(dateStr)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toLocaleDateString('zh-CN')
-}

@@ -12,6 +12,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:batches": "node --test scripts/batch-migration.check.mjs",
+    "test:workspace": "node scripts/batch-workspace.check.mjs",
     "eval:resume-agent": "node scripts/resume-agent-eval.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -48,6 +50,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",

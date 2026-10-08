@@ -17,6 +17,7 @@ export type ApplicationChannel =
 export interface Application {
   id: string
   user_id: string
+  batch_id?: string
   resume_id: string | null
 
   company: string

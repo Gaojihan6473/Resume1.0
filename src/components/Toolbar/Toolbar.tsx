@@ -1,6 +1,7 @@
-﻿import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { batchPath } from '../../utils/batchWorkspace'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
@@ -290,7 +291,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
   const handleGoToApplications = () => {
     if (!currentResumeId || isDirty || isSaving) return
-    navigate(`/applications?resumeId=${currentResumeId}`)
+    navigate(batchPath(`/applications?resumeId=${currentResumeId}`, useResumeStore.getState().cachedResumes.find((item) => item.id === currentResumeId)?.batch_id))
   }
 
   return (

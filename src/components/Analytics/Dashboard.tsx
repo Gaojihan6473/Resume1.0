@@ -97,6 +97,7 @@ export function Dashboard({
 }: DashboardProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const searchKey = searchParams.toString()
+  const batchId = searchParams.get('batch')
   const setCachedResumes = useResumeStore((state) => state.setCachedResumes)
   const [resumes, setResumes] = useState<Resume[]>([])
   const [isResumesLoading, setIsResumesLoading] = useState(true)
@@ -220,7 +221,7 @@ export function Dashboard({
 
   const resumeTitleMap = useMemo(() => {
     const map = new Map<string, string>()
-    resumes.forEach((resume) => map.set(resume.id, resume.title))
+    resumes.filter((resume) => !batchId || resume.batch_id === batchId).forEach((resume) => map.set(resume.id, resume.title))
     applications.forEach((application) => {
       if (application.resume_id && !map.has(application.resume_id)) {
         map.set(
@@ -230,7 +231,7 @@ export function Dashboard({
       }
     })
     return map
-  }, [applications, resumes])
+  }, [applications, resumes, batchId])
 
   const resumeOptions = useMemo(() => {
     const options = Array.from(resumeTitleMap.entries()).map(([id, title]) => ({ id, title }))
@@ -325,12 +326,12 @@ export function Dashboard({
   }, [applications, selectedResumeId, timeRange])
 
   const stats = useMemo(() => {
-    const submittedApplications = applications.filter(
+    const submittedApplications = filteredApplications.filter(
       (application) => application.status !== 'interested',
     )
     const statusCounts = STATUS_ORDER.map((status) => ({
       status,
-      count: applications.filter((application) => application.status === status).length,
+      count: filteredApplications.filter((application) => application.status === status).length,
     }))
     const offerCount = statusCounts.find((item) => item.status === 'offered')?.count || 0
     const rejectCount = statusCounts.find((item) => item.status === 'rejected')?.count || 0
@@ -349,7 +350,7 @@ export function Dashboard({
       passRate,
       topChannel,
     }
-  }, [applications])
+  }, [filteredApplications])
 
   const sortedApplications = useMemo(() => {
     const result = [...filteredApplications]
@@ -739,7 +740,7 @@ export function Dashboard({
             >
               <ResumeJobGraph
                 applications={filteredApplications}
-                resumes={resumes}
+                resumes={resumes.filter((resume) => !batchId || resume.batch_id === batchId)}
                 selectedResumeId={selectedResumeId}
                 resumeTitleMap={resumeTitleMap}
                 active={activeView === 'graph'}

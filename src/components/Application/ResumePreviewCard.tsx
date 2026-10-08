@@ -1,7 +1,7 @@
 import { FileSearch2, FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, Wrench, SquarePen } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { Resume } from '../../lib/api'
-import type { ResumeData } from '../../types/resume'
+import { normalizeResumeData } from '../../utils/resumeData'
 import { ResumeThumbnail } from './ResumeThumbnail'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, onEdit, onAnalyze }: Props) {
-  const content = resume.content as unknown as ResumeData
+  const content = useMemo(() => normalizeResumeData(resume.content, resume.title), [resume.content, resume.title])
   const { basic, education, internships, skills } = content
   const hasPreview = !!resume.preview_url
   const hasPdf = !!resume.file_url

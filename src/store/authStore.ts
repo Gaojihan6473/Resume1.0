@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { signIn as apiSignIn, signOut as apiSignOut } from '../lib/api'
 import type { User } from '../lib/supabase'
+import { useBatchStore } from './batchStore'
 import { useResumeStore } from './resumeStore'
 import { bindJDAnalysisHistoryUser } from './jdAnalysisHistoryStore'
 import { bindResumeAgentUser } from './resumeAgentSessionStore'
@@ -43,7 +44,7 @@ interface AuthState {
 
 const authenticatedHint = hasAuthenticatedHint()
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: authenticatedHint,
   authInitializing: true,
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const result = await apiSignIn(key)
 
     if (result.success && result.user) {
+      if (get().user?.id !== result.user.id) { useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
       setAuthenticatedHint(true)
       set({
         user: result.user,
@@ -84,6 +86,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     bindResumeAgentUser(null)
     bindJDAnalysisHistoryUser(null)
+    useBatchStore.getState().reset()
     await apiSignOut()
     setAuthenticatedHint(false)
     useResumeStore.getState().resetAll()
@@ -107,6 +110,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (error.status === 400 || error.status === 401) {
           bindResumeAgentUser(null)
           bindJDAnalysisHistoryUser(null)
+          useBatchStore.getState().reset()
           setAuthenticatedHint(false)
           set({
             user: null,
@@ -123,6 +127,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       if (session) {
+        if (get().user?.id !== session.user.id) { useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
         setAuthenticatedHint(true)
         set({
           user: {
@@ -138,6 +143,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         return
       }
 
+      useBatchStore.getState().reset()
       setAuthenticatedHint(false)
       bindResumeAgentUser(null)
       bindJDAnalysisHistoryUser(null)

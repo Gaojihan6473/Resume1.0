@@ -9,6 +9,7 @@ import {
   type Resume,
 } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
+import { useBatchStore } from '../store/batchStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
@@ -122,7 +123,7 @@ export function MePage() {
       setParseError(null)
       setParseStatus('success')
       toast('新建简历成功', 'success')
-      navigate('/')
+      navigate(`/editor?resumeId=${result.resume.id}`)
     } else {
       setSyncStatus('error')
       setError(result.error || '创建失败')
@@ -157,7 +158,7 @@ export function MePage() {
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate('/')
+    navigate(`/editor?resumeId=${resume.id}`)
   }
 
   const handleSyncToCloud = async () => {
@@ -205,7 +206,7 @@ export function MePage() {
       const result = await createResume(
         '我的简历',
         resumeData as unknown as Record<string, unknown>,
-        'cloud'
+        'cloud', null, null, undefined, useBatchStore.getState().draftBatchId || undefined
       )
 
       if (result.success && result.resume) {
@@ -235,9 +236,11 @@ export function MePage() {
     const result = await createResume(
       duplicateTitle,
       duplicateContent,
-      resume.source,
+      `copy:${resume.id}`,
       resume.file_url,
-      resume.preview_url
+      resume.preview_url,
+      undefined,
+      resume.batch_id
     )
 
     if (result.success && result.resume) {

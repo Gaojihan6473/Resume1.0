@@ -12,6 +12,7 @@ const DIRTY_NAVIGATION_PATHS: Record<Exclude<DirtyNavigationTarget, 'home' | 'me
 }
 
 interface DirtyConfirmModalProps {
+  navigationPath?: string
   isOpen: boolean
   onClose: () => void
   navigationTarget: DirtyNavigationTarget | null
@@ -24,6 +25,7 @@ interface DirtyConfirmModalProps {
 }
 
 export function DirtyConfirmModal({
+  navigationPath,
   isOpen,
   onClose,
   navigationTarget,
@@ -56,7 +58,9 @@ export function DirtyConfirmModal({
       setIsSaving(false)
       toast('保存成功', 'success')
 
-      if (navigationTarget === 'home') {
+      if (navigationPath) {
+        onSaveAndNavigateToPath(navigationPath)
+      } else if (navigationTarget === 'home') {
         onSaveAndNavigateHome()
       } else if (navigationTarget === 'me') {
         onSaveAndNavigateToMe()
@@ -73,7 +77,9 @@ export function DirtyConfirmModal({
 
   const handleDiscard = () => {
     if (isSaving) return
-    if (navigationTarget === 'home') {
+    if (navigationPath) {
+      onDiscardAndNavigateToPath(navigationPath)
+    } else if (navigationTarget === 'home') {
       onDiscardAndNavigateHome()
     } else if (navigationTarget === 'me') {
       onDiscardAndNavigateToMe()

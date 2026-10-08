@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronsRight } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { useResumeStore } from '../store/resumeStore'
@@ -7,10 +7,14 @@ import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
 import { FishLogo } from '../components/Brand/FishLogo'
+import { BatchScopeSelector } from '../components/Batch/BatchControls'
+import { batchPath } from '../utils/batchWorkspace'
 import { Dashboard } from '../components/Analytics/Dashboard'
 
 export function AnalyticsPage() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const batchId = params.get('batch')
   const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const { applications, fetchApplications, isLoading, error } = useApplicationStore()
 
@@ -18,7 +22,7 @@ export function AnalyticsPage() {
     fetchApplications()
   }, [fetchApplications])
 
-  const handleNavigateToApplications = () => navigate('/applications')
+  const handleNavigateToApplications = () => navigate(batchPath('/applications', batchId))
   const handleNavigateToMe = () => navigate('/me')
   const handleGoHome = () => {
     useResumeStore.getState().resetAll()
@@ -42,6 +46,7 @@ export function AnalyticsPage() {
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
         <SidebarTriggerHint triggerRef={triggerRef} />
+        <div className="ml-auto"><BatchScopeSelector /></div>
       </header>
 
       {/* 主体内容 */}
@@ -58,13 +63,13 @@ export function AnalyticsPage() {
           onGoHome={handleGoHome}
           onNavigateToMe={handleNavigateToMe}
           onNavigateToApplications={handleNavigateToApplications}
-          onNavigateToAnalytics={() => navigate('/analytics')}
+          onNavigateToAnalytics={() => navigate(batchPath('/analytics', batchId))}
         />
 
         {/* 内容区 */}
         <main className="relative flex-1 isolate overflow-y-auto home-login-bg">
           <Dashboard
-            applications={applications}
+            applications={applications.filter((item) => !batchId || item.batch_id === batchId)}
             isLoading={isLoading}
             error={error}
             onRetry={fetchApplications}

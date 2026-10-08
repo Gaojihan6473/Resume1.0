@@ -212,7 +212,7 @@ describe('ResumeAgentLauncher', () => {
     })
     await user.click(screen.getByRole('button', { name: '继续审核' }))
     await waitFor(() => {
-      expect(screen.getByTestId('location-probe')).toHaveTextContent('/?tab=jd&agent=task')
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/editor?tab=jd&agent=task&resumeId=resume-1')
     })
   })
 

@@ -116,6 +116,12 @@ export function ResumeAgentTaskPanel({
       if (!isCurrent()) return
       if (!listResult.success) throw new Error(listResult.error || '检查创建结果失败')
       const resumes = listResult.resumes || []
+      const baseResume = resumes.find((item) => item.id === agent.resumeId)
+      if (!baseResume?.batch_id) throw new Error('基础简历批次已变化或不存在，请重新打开任务')
+      const originalBatchId = agent.batchId || useResumeStore.getState().cachedResumes.find((item) => item.id === agent.resumeId)?.batch_id
+      if (originalBatchId && originalBatchId !== baseResume.batch_id) throw new Error('基础简历已移动，请刷新后重新运行任务')
+      const targetApplication = useApplicationStore.getState().applications.find((item) => item.id === agent.applicationId)
+      if (targetApplication && targetApplication.batch_id !== baseResume.batch_id) throw new Error('岗位已移动到其他批次，请重新选择')
       let createdResume = findResumeCreatedForRun(resumes, agent.runId)
       let createdData: ResumeData
 
@@ -124,7 +130,7 @@ export function ResumeAgentTaskPanel({
       } else {
         const versionTitle = resolveResumeAgentVersionTitle(agent.versionTitle, resumes)
         createdData = normalizeResumeData({ ...agent.agentDraftResumeData, resumeTitle: versionTitle })
-        const created = await createResume(versionTitle, resumeDataToRecord(createdData), source, null, null, agent.userId || undefined)
+        const created = await createResume(versionTitle, resumeDataToRecord(createdData), source, null, null, agent.userId || undefined, baseResume.batch_id)
         if (!isCurrent()) return
         if (!created.success || !created.resume) throw new Error(created.error || '创建岗位专属版本失败')
         createdResume = created.resume
@@ -136,7 +142,7 @@ export function ResumeAgentTaskPanel({
       let linkStatus: 'linked' | 'failed' | 'conflict' | 'not_applicable' = 'not_applicable'
       if (agent.applicationId) {
         try {
-          const linked = await linkResumeAgentApplication(agent.userId!, agent.applicationId, expectedResumeId, createdResume.id)
+          const linked = await linkResumeAgentApplication(agent.userId!, agent.applicationId, expectedResumeId, createdResume.id, baseResume.batch_id)
           linkStatus = linked ? 'linked' : 'conflict'
         } catch {
           linkStatus = 'failed'
@@ -177,7 +183,7 @@ export function ResumeAgentTaskPanel({
     resumeStore.clearCurrentFile()
     resumeStore.setParseStatus('success')
     agent.setPreviewMode('base')
-    navigate('/')
+    navigate(`/editor?resumeId=${agent.createdResumeId}`)
   }
 
   const exportCreatedPdf = async () => {

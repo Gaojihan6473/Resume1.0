@@ -9,6 +9,8 @@ import {
   type Resume,
 } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
+import { useAuthStore } from '../store/authStore'
+import { useBatchStore } from '../store/batchStore'
 import { normalizeResumeData, resumeDataToRecord } from './resumeData'
 import { createResumePdfSignature, getResumePdfBlob, getResumePdfTitle } from './resumePdf'
 import { generatePdfThumbnail } from './pdfThumbnail'
@@ -22,6 +24,7 @@ interface SaveCurrentResumeResult {
 const pdfRefreshRuns = new Map<string, number>()
 
 function upsertCachedResume(resume: Resume) {
+  if (useAuthStore.getState().user?.id !== resume.user_id) return
   const { cachedResumes, setCachedResumes } = useResumeStore.getState()
   const index = cachedResumes.findIndex((item) => item.id === resume.id)
 
@@ -38,11 +41,12 @@ function upsertCachedResume(resume: Resume) {
 async function refreshGeneratedPdf(
   resumeId: string,
   data: ReturnType<typeof normalizeResumeData>,
-  runId: number
+  runId: number,
+  accountId: string
 ): Promise<void> {
   try {
     const pdfBlob = await getResumePdfBlob(data, getResumePdfTitle(data))
-    if (pdfRefreshRuns.get(resumeId) !== runId) return
+    if (pdfRefreshRuns.get(resumeId) !== runId || useAuthStore.getState().user?.id !== accountId) return
 
     const uploadResult = await uploadGeneratedResumePdf(pdfBlob, resumeId)
     if (!uploadResult.success || !uploadResult.fileUrl) {
@@ -50,7 +54,7 @@ async function refreshGeneratedPdf(
       return
     }
 
-    if (pdfRefreshRuns.get(resumeId) !== runId) return
+    if (pdfRefreshRuns.get(resumeId) !== runId || useAuthStore.getState().user?.id !== accountId) return
 
     const result = await updateResumeFileUrl(resumeId, uploadResult.fileUrl, {
       touchUpdatedAt: false,
@@ -62,12 +66,12 @@ async function refreshGeneratedPdf(
 
     let latestResume = result.resume
     const thumbnailBlob = await generatePdfThumbnail(pdfBlob)
-    if (pdfRefreshRuns.get(resumeId) !== runId) return
+    if (pdfRefreshRuns.get(resumeId) !== runId || useAuthStore.getState().user?.id !== accountId) return
 
     if (thumbnailBlob) {
       const previewUploadResult = await uploadResumePreview(thumbnailBlob, resumeId)
       if (previewUploadResult.success && previewUploadResult.previewUrl) {
-        if (pdfRefreshRuns.get(resumeId) !== runId) return
+        if (pdfRefreshRuns.get(resumeId) !== runId || useAuthStore.getState().user?.id !== accountId) return
 
         const previewResult = await updateResumePreviewUrl(resumeId, previewUploadResult.previewUrl, {
           touchUpdatedAt: false,
@@ -82,7 +86,7 @@ async function refreshGeneratedPdf(
       }
     }
 
-    if (pdfRefreshRuns.get(resumeId) !== runId) return
+    if (pdfRefreshRuns.get(resumeId) !== runId || useAuthStore.getState().user?.id !== accountId) return
     upsertCachedResume(latestResume)
   } catch (error) {
     console.warn('[PDF] Background generate/upload failed:', error)
@@ -93,12 +97,14 @@ export function scheduleResumePdfRefresh(
   resumeId: string,
   data: ReturnType<typeof normalizeResumeData>
 ): void {
+  const accountId = useAuthStore.getState().user?.id
+  if (!accountId) return
   const normalized = normalizeResumeData(data)
   const signature = createResumePdfSignature(normalized, getResumePdfTitle(normalized))
   const runId = (pdfRefreshRuns.get(resumeId) || 0) + 1
   pdfRefreshRuns.set(resumeId, runId)
 
-  void refreshGeneratedPdf(resumeId, normalized, runId).finally(() => {
+  void refreshGeneratedPdf(resumeId, normalized, runId, accountId).finally(() => {
     if (pdfRefreshRuns.get(resumeId) === runId) {
       pdfRefreshRuns.delete(resumeId)
     }
@@ -108,6 +114,8 @@ export function scheduleResumePdfRefresh(
 }
 
 export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResult> {
+  const accountId = useAuthStore.getState().user?.id
+  if (!accountId) return { success: false, error: '未登录' }
   const {
     resumeData,
     currentResumeId,
@@ -123,6 +131,7 @@ export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResul
 
   if (resumeId) {
     const result = await updateResume(resumeId, title, resumeDataToRecord(normalizedResumeData))
+    if (useAuthStore.getState().user?.id !== accountId) return { success: false, error: '登录状态已变化' }
     if (!result.success) {
       return { success: false, error: result.error || '保存失败' }
     }
@@ -138,7 +147,8 @@ export async function saveCurrentResumeToCloud(): Promise<SaveCurrentResumeResul
       }
     }
 
-    const result = await createResume(title, resumeDataToRecord(normalizedResumeData), 'cloud', fileUrl)
+    const result = await createResume(title, resumeDataToRecord(normalizedResumeData), 'cloud', fileUrl, null, accountId, useBatchStore.getState().draftBatchId || undefined)
+    if (useAuthStore.getState().user?.id !== accountId) return { success: false, error: '登录状态已变化' }
     if (!result.success || !result.resume) {
       return { success: false, error: result.error || '保存失败' }
     }

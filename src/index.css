@@ -6,6 +6,9 @@
   --font-mono: ui-monospace, Consolas, monospace;
 }
 
+.batch-card:hover { border-color: color-mix(in srgb, var(--batch-accent) 45%, white); }
+@media (prefers-reduced-motion: reduce) { .batch-card { transition: none; transform: none !important; } }
+
 * {
   box-sizing: border-box;
 }
@@ -2326,6 +2329,11 @@ body {
     radial-gradient(72rem 52rem at 101% 50%, rgba(255, 255, 255, 0) 47.4%, rgba(255, 255, 255, 0.56) 47.6%, rgba(255, 255, 255, 0) 48.1%),
     linear-gradient(158deg, rgba(255, 255, 255, 0) 45%, rgba(255, 255, 255, 0.58) 57%, rgba(214, 225, 255, 0.26) 63%, rgba(255, 255, 255, 0) 74%);
   opacity: 0.78;
+}
+
+/* Keep the workspace decoration within its scrolling viewport. */
+.workspace-home.home-login-bg::before {
+  inset: 0;
 }
 
 .home-login-bg::after {

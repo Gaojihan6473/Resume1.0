@@ -23,6 +23,7 @@ import { useApplicationStore } from '../../store/applicationStore'
 import { useAuthStore } from '../../store/authStore'
 import { useJDAnalysisHistoryStore } from '../../store/jdAnalysisHistoryStore'
 import { useJDAnalysisSessionStore, type JDAnalysisNotice } from '../../store/jdAnalysisSessionStore'
+import { useBatchStore } from '../../store/batchStore'
 import { useResumeStore } from '../../store/resumeStore'
 import { useResumeAgentValidity } from '../Agent/useResumeAgentValidity'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
@@ -112,7 +113,11 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     updateProject,
     updateSummary,
   } = useResumeStore()
-  const { applications, isLoading, fetchApplications } = useApplicationStore()
+  const { applications: allApplications, isLoading, fetchApplications } = useApplicationStore()
+  const cachedResumes = useResumeStore((state) => state.cachedResumes)
+  const draftBatchId = useBatchStore((state) => state.draftBatchId)
+  const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || draftBatchId
+  const applications = useMemo(() => allApplications.filter((item) => item.batch_id === batchId), [allApplications, batchId])
   const { isAuthenticated } = useAuthStore()
   const agent = useResumeAgentSessionStore()
   const agentInputsValid = useResumeAgentValidity(agent, resumeData, isDirty)

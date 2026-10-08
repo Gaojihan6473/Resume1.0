@@ -3,7 +3,6 @@ import type { ReactNode, RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { useResumeStore } from '../../store/resumeStore'
 
 interface SidebarProps {
   open: boolean
@@ -110,9 +109,8 @@ export function Sidebar({
   const effectiveBackdropTop = backdropTop ?? topOffset
   const location = useLocation()
   const { isAuthenticated } = useAuthStore()
-  const { parseStatus } = useResumeStore()
 
-  const isUploadPage = location.pathname === '/' && parseStatus === 'idle'
+  const isUploadPage = location.pathname === '/' || location.pathname.startsWith('/batches/')
   const isMePage = location.pathname === '/me'
   const isApplicationsPage = location.pathname === '/applications'
   const isAnalyticsPage = location.pathname === '/analytics'

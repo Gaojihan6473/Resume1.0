@@ -5,6 +5,7 @@ import type { Application, ApplicationChannel, ApplicationStatus } from '../../t
 import type { Resume } from '../../lib/api'
 import { CustomSelect } from './CustomSelect'
 import { CalendarInput } from './CalendarInput'
+import { useBatchStore } from '../../store/batchStore'
 
 interface Props {
   isOpen: boolean
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export interface SaveData {
+  batch_id?: string
   company: string
   position: string
   location: string
@@ -33,7 +35,7 @@ export interface ApplicationModalSaveContext {
   trigger: 'explicit' | 'dismiss'
 }
 
-type ValidationErrors = Partial<Record<'company' | 'position' | 'channel' | 'status', string>>
+type ValidationErrors = Partial<Record<'company' | 'position' | 'channel' | 'status' | 'batch_id', string>>
 
 const defaultData: SaveData = {
   company: '',
@@ -51,6 +53,7 @@ function getSaveData(application?: Application | null, initialData?: Partial<Sav
   if (!application) return { ...defaultData, ...initialData }
 
   return {
+    batch_id: application.batch_id,
     company: application.company || '',
     position: application.position || '',
     location: application.location || '',
@@ -83,6 +86,7 @@ export function ApplicationModal({
   onDelete,
   isDeletePending = false,
 }: Props) {
+  const { batches, fetch: fetchBatches } = useBatchStore()
   const [data, setData] = useState<SaveData>(defaultData)
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -99,6 +103,8 @@ export function ApplicationModal({
   useEffect(() => {
     if (!isOpen) return
 
+    void fetchBatches()
+
     const nextData = getSaveData(application, initialData)
     setData(nextData)
     setErrors({})
@@ -106,7 +112,7 @@ export function ApplicationModal({
     setSubmitTrigger('explicit')
     submissionRef.current = false
     initialSignatureRef.current = getDataSignature(nextData)
-  }, [application, initialData, isOpen])
+  }, [application, initialData, isOpen, fetchBatches])
 
   useEffect(() => {
     if (!isOpen) return
@@ -142,9 +148,10 @@ export function ApplicationModal({
     if (!data.position.trim()) nextErrors.position = '请输入岗位名称'
     if (!data.channel) nextErrors.channel = '请选择投递渠道'
     if (!data.status) nextErrors.status = '请选择投递状态'
+    if (!data.batch_id) nextErrors.batch_id = '请选择所属批次'
 
     setErrors(nextErrors)
-    const firstInvalidField = (['company', 'position', 'channel', 'status'] as const).find(
+    const firstInvalidField = (['batch_id', 'company', 'position', 'channel', 'status'] as const).find(
       (field) => nextErrors[field],
     )
 
@@ -159,7 +166,7 @@ export function ApplicationModal({
     }
 
     return true
-  }, [data.channel, data.company, data.position, data.status])
+  }, [data.channel, data.company, data.position, data.status, data.batch_id])
 
   const persist = useCallback(
     async (trigger: ApplicationModalSaveContext['trigger']) => {
@@ -278,6 +285,13 @@ export function ApplicationModal({
             <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <div className="space-y-3">
                 <div>
+                  <label className="mb-4 block text-xs font-semibold text-slate-600">所属批次
+                    <select aria-label="岗位所属批次" disabled={isEditing} value={data.batch_id || ''} onChange={(event) => { updateData('batch_id', event.target.value); updateData('resume_id', null); clearError('batch_id') }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50">
+                      <option value="">请选择批次</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
+                    </select>
+                    <FieldError message={errors.batch_id} />
+                    {isEditing && <span className="mt-1 block font-normal text-slate-400">调整归属请使用批次内容管理</span>}
+                  </label>
                   <FieldLabel htmlFor="application-company" required>公司名称</FieldLabel>
                   <input
                     ref={companyRef}
@@ -373,7 +387,7 @@ export function ApplicationModal({
                       onChange={(value) => updateData('resume_id', value || null)}
                       options={[
                         { value: '', label: '请选择' },
-                        ...resumes.map((resume) => ({ value: resume.id, label: resume.title })),
+                        ...resumes.filter((resume) => resume.batch_id === data.batch_id).map((resume) => ({ value: resume.id, label: resume.title })),
                       ]}
                       placeholder="请选择"
                     />

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { ResumeAgentStore } from '../../store/resumeAgentSessionStore'
+import { useResumeStore } from '../../store/resumeStore'
 import { useApplicationStore } from '../../store/applicationStore'
 import type { ResumeData } from '../../types/resume'
 
@@ -11,5 +12,9 @@ export function useResumeAgentValidity(agent: ResumeAgentStore, base: ResumeData
   useEffect(() => {
     if (runId) void validateInputs(base, jdText)
   }, [base, jdText, runId, resumeHash, jdHash, validateInputs])
-  return !isDirty && agent.inputsValid && agent.validatedBase === base && agent.validatedJdText === jdText
+  const resumes = useResumeStore((state) => state.cachedResumes)
+  const currentBatch = resumes.find((item) => item.id === agent.resumeId)?.batch_id
+  const selectedApplication = applications.find((item) => item.id === agent.applicationId)
+  const batchValid = (!agent.batchId || currentBatch === agent.batchId) && (!currentBatch || !selectedApplication || selectedApplication.batch_id === currentBatch)
+  return batchValid && !isDirty && agent.inputsValid && agent.validatedBase === base && agent.validatedJdText === jdText
 }

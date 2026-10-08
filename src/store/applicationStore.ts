@@ -12,7 +12,10 @@ import {
   deleteApplication as apiDeleteApplication,
 } from '../lib/api'
 
+let requestGeneration = 0
+
 interface ApplicationState {
+  reset: () => void
   applications: Application[]
   isLoading: boolean
   error: string | null
@@ -28,11 +31,13 @@ interface ApplicationState {
 }
 
 export const useApplicationStore = create<ApplicationState>((set, get) => ({
+  reset: () => { requestGeneration++; set({ applications: [], isLoading: false, error: null }) },
   applications: [],
   isLoading: false,
   error: null,
 
   fetchApplications: async () => {
+    const generation = requestGeneration
     const cachedApplications = get().applications
     if (cachedApplications.length === 0) {
       set({ isLoading: true, error: null })
@@ -42,6 +47,7 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
 
     try {
       const latestApplications = await fetchApplications()
+      if (generation !== requestGeneration) return
       const hasChanges =
         cachedApplications.length !== latestApplications.length ||
         latestApplications.some((app, index) => {
@@ -59,14 +65,16 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
       }))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch applications'
-      set({ error: message, isLoading: false })
+      if (generation === requestGeneration) set({ error: message, isLoading: false })
     }
   },
 
   createApplication: async (data) => {
+    const generation = requestGeneration
     set({ isLoading: true, error: null })
     try {
       const application = await apiCreateApplication(data)
+      if (generation !== requestGeneration) throw new Error('登录状态已变化')
       set((state) => ({
         applications: [application, ...state.applications],
         isLoading: false,
@@ -74,16 +82,18 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
       return application
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create application'
-      set({ error: message, isLoading: false })
+      if (generation === requestGeneration) set({ error: message, isLoading: false })
       throw error
     }
   },
 
   updateApplication: async (id, data) => {
+    const generation = requestGeneration
     set({ isLoading: true, error: null })
     try {
       console.log('[store.updateApplication] calling api with id:', id, 'data:', JSON.stringify(data))
       const application = await apiUpdateApplication(id, data)
+      if (generation !== requestGeneration) return
       console.log('[store.updateApplication] api returned:', application)
       set((state) => ({
         applications: state.applications.map((app) =>
@@ -94,22 +104,24 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
     } catch (error) {
       console.error('[store.updateApplication] error:', error)
       const message = error instanceof Error ? error.message : 'Failed to update application'
-      set({ error: message, isLoading: false })
+      if (generation === requestGeneration) set({ error: message, isLoading: false })
       throw error
     }
   },
 
   deleteApplication: async (id) => {
+    const generation = requestGeneration
     set({ isLoading: true, error: null })
     try {
       await apiDeleteApplication(id)
+      if (generation !== requestGeneration) return
       set((state) => ({
         applications: state.applications.filter((app) => app.id !== id),
         isLoading: false,
       }))
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete application'
-      set({ error: message, isLoading: false })
+      if (generation === requestGeneration) set({ error: message, isLoading: false })
       throw error
     }
   },

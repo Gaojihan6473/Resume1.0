@@ -1,10 +1,16 @@
 import { useRef, useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { useResumeStore } from './store/resumeStore'
 import { useAuthStore } from './store/authStore'
 import { Toolbar } from './components/Toolbar/Toolbar'
 import { EditorAnalysisLayout } from './components/Editor/EditorAnalysisLayout'
 import { HomePage } from './pages/HomePage'
+import { WorkspaceHomePage } from './pages/WorkspaceHomePage'
+import { EditorWorkspace } from './components/Batch/EditorWorkspace'
+import { BatchCreationPicker } from './components/Batch/BatchControls'
+import { useBatchStore } from './store/batchStore'
+import { batchPath } from './utils/batchWorkspace'
+import { LegacyWorkspaceEntry } from './components/Batch/LegacyWorkspaceEntry'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
 import { LoginPage } from './pages/LoginPage'
@@ -20,7 +26,11 @@ import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLaunche
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
 function AppContent() {
-  const { parseStatus, isDirty } = useResumeStore()
+  const { isDirty, currentResumeId, cachedResumes } = useResumeStore()
+  const location = useLocation()
+  const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || new URLSearchParams(location.search).get('batch') || useBatchStore.getState().draftBatchId
+  // Saving a new resume also updates its URL; read the latest save state at navigation time.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => useResumeStore.getState().isDirty && currentLocation.pathname === '/editor' && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(currentLocation.search).get('resumeId') !== new URLSearchParams(nextLocation.search).get('resumeId') || new URLSearchParams(currentLocation.search).get('batch') !== new URLSearchParams(nextLocation.search).get('batch')))
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
@@ -43,30 +53,9 @@ function AppContent() {
 
   useEffect(() => {
     if (!isDirty) return
-    let restoringHistory = false
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    const handlePopState = () => {
-      if (restoringHistory) return
-      const shouldLeave = window.confirm('当前简历有未保存的修改，确定要放弃修改并离开吗？')
-      if (shouldLeave) {
-        useResumeStore.getState().discardCurrentChanges()
-        return
-      }
-      restoringHistory = true
-      window.history.forward()
-      window.setTimeout(() => {
-        restoringHistory = false
-      }, 0)
-    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', handleBeforeUnload)
-    window.addEventListener('popstate', handlePopState)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('popstate', handlePopState)
-    }
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isDirty])
 
   // Listen for auth required events from Toolbar/Upload
@@ -88,57 +77,11 @@ function AppContent() {
     }
   }
 
-  // Dirty state navigation handlers
-  const handleGoHome = () => {
-    if (isDirty) {
-      setDirtyNavTarget('home')
-      setShowDirtyModal(true)
-    } else {
-      useResumeStore.getState().resetAll()
-      closeSidebar()
-    }
-  }
-
-  const handleNavigateToMe = () => {
-    closeSidebar()
-    if (isDirty) {
-      setDirtyNavTarget('me')
-      setShowDirtyModal(true)
-    } else {
-      navigate('/me')
-    }
-  }
-
-  const handleNavigateToApplications = () => {
-    closeSidebar()
-    if (isDirty) {
-      setDirtyNavTarget('applications')
-      setShowDirtyModal(true)
-    } else {
-      navigate('/applications')
-    }
-  }
-
-  const handleNavigateToAnalytics = () => {
-    closeSidebar()
-    if (isDirty) {
-      setDirtyNavTarget('analytics')
-      setShowDirtyModal(true)
-    } else {
-      navigate('/analytics')
-    }
-  }
-
-  const handleNavigateToLogin = () => {
-    closeSidebar()
-    if (isDirty) {
-      setDirtyNavTarget('login')
-      setShowDirtyModal(true)
-    } else {
-      navigate('/login')
-    }
-  }
-
+  const handleGoHome = () => { closeSidebar(); navigate('/') }
+  const handleNavigateToMe = () => { closeSidebar(); navigate('/me') }
+  const handleNavigateToApplications = () => { closeSidebar(); navigate(batchPath('/applications', batchId)) }
+  const handleNavigateToAnalytics = () => { closeSidebar(); navigate(batchPath('/analytics', batchId)) }
+  const handleNavigateToLogin = () => { closeSidebar(); navigate('/login') }
   // Show loading while initializing auth
   if (authInitializing) {
     return (
@@ -187,13 +130,7 @@ function AppContent() {
           }
         />
 
-        {/* Home/Editor Page */}
-        <Route
-          path="/"
-          element={
-            <div className="h-screen flex flex-col bg-gray-50">
-              {parseStatus !== 'success' ? (
-                <HomePage
+        <Route path="/" element={<LegacyWorkspaceEntry>                <WorkspaceHomePage
                   sidebarOpen={sidebarOpen}
                   sidebarTriggerRef={triggerRef}
                   sidebarRef={sidebarRef}
@@ -204,9 +141,20 @@ function AppContent() {
                     setPendingAction(action)
                     setShowAuthModal(true)
                   }}
-                />
-              ) : (
-                <div className="flex-1 flex flex-col overflow-hidden relative">
+                /></LegacyWorkspaceEntry>} />
+        <Route path="/batches/:batchId" element={<ProtectedRoute>                <HomePage
+                  sidebarOpen={sidebarOpen}
+                  sidebarTriggerRef={triggerRef}
+                  sidebarRef={sidebarRef}
+                  onOpenSidebar={openSidebar}
+                  onScheduleCloseSidebar={scheduleCloseSidebar}
+                  onCloseSidebar={closeSidebar}
+                  onAuthRequired={(action) => {
+                    setPendingAction(action)
+                    setShowAuthModal(true)
+                  }}
+                /></ProtectedRoute>} />
+        <Route path="/editor" element={<ProtectedRoute><div className="flex h-screen flex-col bg-gray-50"><EditorWorkspace>                <div className="flex-1 flex flex-col overflow-hidden relative">
                   {/* 工具栏 */}
                   <Toolbar
                     sidebarTriggerRef={triggerRef}
@@ -240,15 +188,13 @@ function AppContent() {
                     <EditorAnalysisLayout previewRef={previewRef} />
                   </div>
                 </div>
-              )}
-            </div>
-          }
-        />
+</EditorWorkspace></div></ProtectedRoute>} />
 
         {/* Redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
+      <BatchCreationPicker />
       <ResumeAgentGlobalLauncher />
 
       {/* Auth Required Modal */}
@@ -260,10 +206,12 @@ function AppContent() {
 
       {/* Dirty Confirm Modal */}
       <DirtyConfirmModal
-        isOpen={showDirtyModal}
+        isOpen={showDirtyModal || blocker.state === 'blocked'}
+        navigationPath={blocker.state === 'blocked' ? blocker.location.pathname + blocker.location.search : undefined}
         onClose={() => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
+          if (blocker.state === 'blocked') blocker.reset()
         }}
         navigationTarget={dirtyNavTarget}
         onSaveAndNavigateHome={() => {
@@ -292,13 +240,13 @@ function AppContent() {
         onSaveAndNavigateToPath={(path) => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
-          navigate(path)
+          if (blocker.state === 'blocked') blocker.proceed(); else navigate(path)
         }}
         onDiscardAndNavigateToPath={(path) => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
           useResumeStore.getState().discardCurrentChanges()
-          navigate(path)
+          if (blocker.state === 'blocked') blocker.proceed(); else navigate(path)
         }}
       />
 
@@ -313,11 +261,11 @@ function ToastContainerWith() {
   return <ToastContainer toasts={toasts} removeToast={removeToast} />
 }
 
+const router = createBrowserRouter([{ path: '*', element: <AppContent /> }])
+
 function App() {
   return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
+    <RouterProvider router={router} />
   )
 }
 

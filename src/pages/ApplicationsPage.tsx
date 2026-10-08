@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Loader2, ChevronsRight, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
@@ -15,11 +15,16 @@ import { ApplicationList } from '../components/Application/ApplicationList'
 import { ApplicationModal, type SaveData } from '../components/Application/ApplicationModal'
 import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
 import { JDParseModal } from '../components/Application/JDParseModal'
+import { BatchScopeSelector } from '../components/Batch/BatchControls'
+import { selectBatchForCreation } from '../lib/api/batches'
+import { useBatchStore } from '../store/batchStore'
+import { batchPath } from '../utils/batchWorkspace'
 import type { JDParsedResult } from '../types/application'
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const batchId = searchParams.get('batch')
   const {
     setResumeData,
     setCurrentResumeId,
@@ -49,6 +54,9 @@ export function ApplicationsPage() {
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
   const [showJDModal, setShowJDModal] = useState(false)
   const [aiParsedData, setAiParsedData] = useState<Partial<SaveData> | null>(null)
+  const initialModalData = useMemo(() => ({ batch_id: batchId || undefined, resume_id: selectedResumeId, ...aiParsedData }), [batchId, selectedResumeId, aiParsedData])
+  const scopedResumes = resumes.filter((item) => !batchId || item.batch_id === batchId)
+  const scopedApplications = applications.filter((item) => !batchId || item.batch_id === batchId)
   const createButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeDropdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -232,9 +240,13 @@ const handleGoHome = () => {
     navigate('/')
   }
 
+  useEffect(() => {
+    if (selectedResumeId && !scopedResumes.some((item) => item.id === selectedResumeId)) setSelectedResumeId(null)
+  }, [batchId, selectedResumeId, scopedResumes])
+
   const handleNavigateToAnalytics = () => {
     closeSidebar()
-    navigate('/analytics')
+    navigate(batchPath('/analytics', batchId))
   }
 
   const handleEditResume = (resume: Resume) => {
@@ -244,7 +256,7 @@ const handleGoHome = () => {
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate('/')
+    navigate(batchPath(`/editor?resumeId=${resume.id}`, resume.batch_id))
   }
 
   const handleAnalyzeResume = (resume: Resume) => {
@@ -254,17 +266,22 @@ const handleGoHome = () => {
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate('/?tab=jd')
+    navigate(batchPath(`/editor?resumeId=${resume.id}&tab=jd`, resume.batch_id))
   }
 
-  const handleNewResume = () => {
+  const handleNewResume = async () => {
+    let id = batchId
+    if (!id) {
+      try { id = await selectBatchForCreation() } catch { return }
+    }
+    useBatchStore.getState().setDraftBatchId(id)
     setResumeData(createDefaultResumeData())
     setCurrentResumeId(null)
     setIsDirty(false)
     clearCurrentFile()
     setParseError(null)
     setParseStatus('success')
-    navigate('/')
+    navigate(batchPath('/editor', id))
   }
 
   return (
@@ -284,6 +301,7 @@ const handleGoHome = () => {
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
         <SidebarTriggerHint triggerRef={triggerRef} />
+        <div className="ml-auto min-w-0"><BatchScopeSelector /></div>
 
       </header>
 
@@ -300,19 +318,19 @@ const handleGoHome = () => {
           backdropTop={56}
           onGoHome={handleGoHome}
           onNavigateToMe={() => navigate('/me')}
-          onNavigateToApplications={() => navigate('/applications')}
+          onNavigateToApplications={() => navigate(batchPath('/applications', batchId))}
           onNavigateToAnalytics={handleNavigateToAnalytics}
         />
 
         {/* 主内容区 - 左右分栏 */}
-        <main className="relative flex-1 flex overflow-hidden home-login-bg">
+        <main className="relative flex-1 flex flex-col overflow-auto md:flex-row md:overflow-hidden home-login-bg">
           {/* 左侧：简历选择区域 */}
-          <div className="w-[35%] shrink-0 border-r border-slate-200/80 bg-white/50 p-4 overflow-y-auto hide-scrollbar">
+          <div className="h-64 max-h-64 w-full shrink-0 border-b border-slate-200/80 bg-white/50 p-4 overflow-y-auto md:h-auto md:max-h-none md:w-[35%] md:border-b-0 md:border-r hide-scrollbar">
             {isLoadingResumes ? (
               <div className="h-64 flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
               </div>
-            ) : resumes.length === 0 ? (
+            ) : scopedResumes.length === 0 ? (
               <div className="flex min-h-full flex-col items-center justify-center text-center">
                 <p className="text-sm text-slate-500">暂无简历</p>
                 <p className="text-xs text-slate-400 mt-1">点击上方按钮创建第一个简历</p>
@@ -327,7 +345,7 @@ const handleGoHome = () => {
               </div>
             ) : (
               <ResumeSelector
-                resumes={resumes}
+                resumes={scopedResumes}
                 selectedResumeId={selectedResumeId}
                 onSelectResume={(id) => setSelectedResumeId(id || null)}
                 onEditResume={handleEditResume}
@@ -337,10 +355,10 @@ const handleGoHome = () => {
           </div>
 
           {/* 右侧：投递记录列表 */}
-          <div className="flex-1 overflow-hidden p-4">
+          <div className="min-h-96 flex-1 p-4 md:min-h-0 md:overflow-hidden">
             <ApplicationList
-              applications={applications}
-              resumes={resumes}
+              applications={scopedApplications}
+              resumes={scopedResumes}
               selectedResumeId={selectedResumeId}
               isLoading={isLoading}
               initialExpandedId={searchParams.get('applicationId')}
@@ -369,8 +387,8 @@ const handleGoHome = () => {
         onClose={() => { setShowModal(false); setAiParsedData(null) }}
         onSave={handleCreateApplication}
         application={null}
-        resumes={resumes}
-        initialData={aiParsedData || undefined}
+        resumes={scopedResumes}
+        initialData={initialModalData}
       />
 
       {/* 新建投递下拉菜单 */}
