@@ -96,6 +96,7 @@ export function ApplicationModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const companyRef = useRef<HTMLInputElement>(null)
   const positionRef = useRef<HTMLInputElement>(null)
+  const batchRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<HTMLDivElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
   const isEditing = Boolean(application)
@@ -157,6 +158,7 @@ export function ApplicationModal({
 
     if (firstInvalidField) {
       window.requestAnimationFrame(() => {
+        if (firstInvalidField === 'batch_id') batchRef.current?.querySelector('button')?.focus()
         if (firstInvalidField === 'company') companyRef.current?.focus()
         if (firstInvalidField === 'position') positionRef.current?.focus()
         if (firstInvalidField === 'channel') channelRef.current?.querySelector('button')?.focus()
@@ -285,13 +287,24 @@ export function ApplicationModal({
             <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <div className="space-y-3">
                 <div>
-                  <label className="mb-4 block text-xs font-semibold text-slate-600">所属批次
-                    <select aria-label="岗位所属批次" disabled={isEditing} value={data.batch_id || ''} onChange={(event) => { updateData('batch_id', event.target.value); updateData('resume_id', null); clearError('batch_id') }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:bg-slate-50">
-                      <option value="">请选择批次</option>{batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
-                    </select>
+                  <div ref={batchRef} className="mb-4">
+                    <FieldLabel required>所属批次</FieldLabel>
+                    <CustomSelect
+                      ariaLabel="岗位所属批次"
+                      disabled={isEditing}
+                      invalid={Boolean(errors.batch_id)}
+                      value={data.batch_id || ''}
+                      placeholder="请选择批次"
+                      options={batches.map((batch) => ({ value: batch.id, label: batch.name }))}
+                      onChange={(value) => {
+                        updateData('batch_id', value)
+                        updateData('resume_id', null)
+                        clearError('batch_id')
+                      }}
+                    />
                     <FieldError message={errors.batch_id} />
-                    {isEditing && <span className="mt-1 block font-normal text-slate-400">调整归属请使用批次内容管理</span>}
-                  </label>
+                    {isEditing && <span className="mt-1 block text-xs text-slate-400">调整归属请使用批次内容管理</span>}
+                  </div>
                   <FieldLabel htmlFor="application-company" required>公司名称</FieldLabel>
                   <input
                     ref={companyRef}
@@ -352,6 +365,7 @@ export function ApplicationModal({
                   <div ref={channelRef}>
                     <FieldLabel required>投递渠道</FieldLabel>
                     <CustomSelect
+                      ariaLabel="投递渠道"
                       value={data.channel}
                       onChange={(value) => updateData('channel', value as ApplicationChannel)}
                       options={[
@@ -366,6 +380,7 @@ export function ApplicationModal({
                   <div ref={statusRef}>
                     <FieldLabel required>投递状态</FieldLabel>
                     <CustomSelect
+                      ariaLabel="投递状态"
                       value={data.status}
                       onChange={(value) => updateData('status', value as ApplicationStatus)}
                       options={[
@@ -383,6 +398,7 @@ export function ApplicationModal({
                   <div>
                     <FieldLabel>关联简历</FieldLabel>
                     <CustomSelect
+                      ariaLabel="关联简历"
                       value={data.resume_id || ''}
                       onChange={(value) => updateData('resume_id', value || null)}
                       options={[

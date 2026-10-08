@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
-  Check,
   ChevronDown,
   Loader2,
   PanelRightClose,
@@ -48,6 +47,7 @@ import { ResumeAgentConfigPanel } from '../Agent/ResumeAgentConfigPanel'
 import { ResumeAgentHeaderNotice } from '../Agent/ResumeAgentHeaderNotice'
 import { ResumeAgentTaskPanel } from '../Agent/ResumeAgentTaskPanel'
 import { Editor, type EditorMainTab } from './Editor'
+import { CustomSelect } from '../Application/CustomSelect'
 
 interface EditorAnalysisLayoutProps {
   previewRef: RefObject<HTMLDivElement | null>
@@ -1502,139 +1502,38 @@ function JDHistorySelect({
   getManualRecordBadges: (record: JDAnalysisRecord) => HistoryBadges
   onChange: (sourceKey: string) => void
 }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const selectedApplicationId = getSourceId(value, 'application')
-  const selectedManualRecordId = getSourceId(value, 'manual')
-  const selectedApplication = applications.find((app) => app.id === selectedApplicationId)
-  const selectedManualRecord = manualRecords.find((record) => record.id === selectedManualRecordId)
-  const selectedLabel = selectedApplication
-    ? formatApplicationLabel(selectedApplication)
-    : selectedManualRecord?.title
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
   const isLoading = isLoadingApplications || isLoadingHistory
-  const hasOptions = applications.length > 0 || manualRecords.length > 0
-
-  return (
-    <div ref={ref} className="jd-analysis-select jd-history-select relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="jd-history-select-trigger"
-      >
-        <span className={selectedLabel ? 'truncate text-slate-800' : 'truncate text-slate-400'}>
-          {selectedLabel || (isLoading ? '记录加载中...' : '— 从已投递岗位中选择 —')}
-        </span>
-      </button>
-      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-
-      {isOpen && (
-        <div className="jd-history-select-menu">
-          {!hasOptions && (
-            <div className="px-3 py-3 text-sm text-slate-400">
-              {isLoading ? '记录加载中...' : '暂无可选岗位或未命名岗位记录'}
-            </div>
-          )}
-
-          {applications.length > 0 && (
-            <JDHistoryGroup title="已有岗位">
-              {applications.map((application) => {
-                const sourceKey = `${SOURCE_PREFIX.application}${application.id}`
-                const badges = getApplicationBadges(application)
-                return (
-                  <JDHistoryOption
-                    key={sourceKey}
-                    label={formatApplicationLabel(application)}
-                    badges={badges}
-                    selected={sourceKey === value}
-                    onClick={() => {
-                      onChange(sourceKey)
-                      setIsOpen(false)
-                    }}
-                  />
-                )
-              })}
-            </JDHistoryGroup>
-          )}
-
-          {manualRecords.length > 0 && (
-            <JDHistoryGroup title="未命名岗位">
-              {manualRecords.map((record) => {
-                const sourceKey = `${SOURCE_PREFIX.manual}${record.id}`
-                return (
-                  <JDHistoryOption
-                    key={sourceKey}
-                    label={record.title}
-                    badges={getManualRecordBadges(record)}
-                    selected={sourceKey === value}
-                    onClick={() => {
-                      onChange(sourceKey)
-                      setIsOpen(false)
-                    }}
-                  />
-                )
-              })}
-            </JDHistoryGroup>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function JDHistoryGroup({
-  title,
-  children,
-}: {
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <div className="py-1">
-      <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400">{title}</div>
-      {children}
-    </div>
-  )
-}
-
-function JDHistoryOption({
-  label,
-  badges,
-  selected,
-  onClick,
-}: {
-  label: string
-  badges: HistoryBadges | null
-  selected: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={getHistoryBadgeTitle(badges)}
-      className="jd-history-option"
-    >
-      <span className={`min-w-0 flex-1 truncate ${selected ? 'font-medium text-blue-600' : 'text-slate-700'}`}>
-        {label}
+  const withBadges = (badges: HistoryBadges | null) => ({
+    title: getHistoryBadgeTitle(badges),
+    trailing: badges?.length ? (
+      <span className="flex flex-wrap items-center justify-end gap-1">
+        {badges.map((badge) => <HistoryBadgePill key={badge.label} badge={badge} />)}
       </span>
-      <span className="flex max-w-[48%] shrink-0 flex-wrap items-center justify-end gap-1">
-        {selected && <Check className="h-3.5 w-3.5 shrink-0 text-blue-500" />}
-        {badges?.map((badge) => (
-          <HistoryBadgePill key={badge.label} badge={badge} />
-        ))}
-      </span>
-    </button>
+    ) : null,
+  })
+
+  return (
+    <CustomSelect
+      ariaLabel="选择 JD 历史岗位"
+      value={value}
+      onChange={onChange}
+      placeholder={isLoading ? '记录加载中...' : '— 从已投递岗位中选择 —'}
+      emptyMessage={isLoading ? '记录加载中...' : '暂无可选岗位或未命名岗位记录'}
+      options={[
+        ...applications.map((application) => ({
+          value: `${SOURCE_PREFIX.application}${application.id}`,
+          label: formatApplicationLabel(application),
+          group: '已有岗位',
+          ...withBadges(getApplicationBadges(application)),
+        })),
+        ...manualRecords.map((record) => ({
+          value: `${SOURCE_PREFIX.manual}${record.id}`,
+          label: record.title,
+          group: '未命名岗位',
+          ...withBadges(getManualRecordBadges(record)),
+        })),
+      ]}
+    />
   )
 }
 

@@ -7,6 +7,7 @@ import { saveBatch } from '../../lib/api/batches'
 import { toast } from '../Toast'
 import { useAuthStore } from '../../store/authStore'
 import { CustomSelect } from '../Application/CustomSelect'
+import { BatchStylePicker } from './BatchStylePicker'
 
 export function BatchSurface({ title, onClose, children, drawer = false }: { title: string; onClose: () => void; children: ReactNode; drawer?: boolean }) {
   const surface = useRef<HTMLDivElement>(null)
@@ -42,6 +43,7 @@ export function BatchFields({ value, onChange }: { value: BatchInput; onChange: 
     <label className="block text-sm font-medium text-slate-600">批次名称<input required maxLength={80} value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} className={`${batchInputClass} mt-2`} placeholder="例如：2027届互联网秋招" /></label>
     <label className="block text-sm font-medium text-slate-600">说明<span className="ml-2 text-xs font-normal text-slate-400">选填</span><textarea rows={3} maxLength={500} value={value.description} onChange={(e) => onChange({ ...value, description: e.target.value })} className={`${batchInputClass} mt-2 resize-none`} placeholder="记录这个批次的目标或安排" /></label>
     <fieldset><legend className="mb-3 text-sm font-medium text-slate-600">主题色</legend><div className="flex gap-3">{Object.entries(BATCH_COLORS).map(([color, item]) => <button key={color} type="button" aria-label={item.label} aria-pressed={value.color === color} onClick={() => onChange({ ...value, color: color as BatchInput['color'] })} className={`h-9 w-9 rounded-full border-4 transition ${value.color === color ? 'border-white ring-2 ring-slate-400' : 'border-transparent hover:scale-110'}`} style={{ backgroundColor: item.value }} />)}</div></fieldset>
+    <BatchStylePicker value={value} onChange={onChange} />
   </div>
 }
 

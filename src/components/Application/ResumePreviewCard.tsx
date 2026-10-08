@@ -1,4 +1,4 @@
-import { FileSearch2, FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, Wrench, SquarePen } from 'lucide-react'
+import { FileText, Mail, Phone, MapPin, GraduationCap, Briefcase, Wrench, SquarePen } from 'lucide-react'
 import { useMemo, type ReactNode } from 'react'
 import type { Resume } from '../../lib/api'
 import { normalizeResumeData } from '../../utils/resumeData'
@@ -10,10 +10,9 @@ interface Props {
   isMinimized: boolean
   onClick: () => void
   onEdit?: () => void
-  onAnalyze?: () => void
 }
 
-export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, onEdit, onAnalyze }: Props) {
+export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, onEdit }: Props) {
   const content = useMemo(() => normalizeResumeData(resume.content, resume.title), [resume.content, resume.title])
   const { basic, education, internships, skills } = content
   const hasPreview = !!resume.preview_url
@@ -151,7 +150,7 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
               <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
+              <ResumeCardActions onEdit={onEdit} />
             </div>
           </div>
           <div className="flex-1 p-1 bg-slate-100 overflow-hidden flex items-center justify-center">
@@ -169,7 +168,7 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
           <div className="w-full px-3 py-2 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-200">
             <div className="flex items-center justify-between gap-2">
               <span className="ml-1 block text-xs font-medium text-slate-700 truncate text-left">{resume.title}</span>
-              <ResumeCardActions onEdit={onEdit} onAnalyze={onAnalyze} />
+              <ResumeCardActions onEdit={onEdit} />
             </div>
           </div>
 
@@ -232,12 +231,10 @@ export function ResumePreviewCard({ resume, isSelected, isMinimized, onClick, on
 
 function ResumeCardActions({
   onEdit,
-  onAnalyze,
 }: {
   onEdit?: () => void
-  onAnalyze?: () => void
 }) {
-  if (!onEdit && !onAnalyze) return null
+  if (!onEdit) return null
 
   const buttonBase = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent outline-none transition-colors'
 
@@ -255,21 +252,6 @@ function ResumeCardActions({
             className={`${buttonBase} text-slate-400 hover:bg-slate-100/80 hover:text-slate-600 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-blue-100`}
           >
             <SquarePen className="h-4 w-4 translate-x-0.5" />
-          </button>
-        </IconActionWithTooltip>
-      )}
-      {onAnalyze && (
-        <IconActionWithTooltip label="JD分析">
-          <button
-            type="button"
-            aria-label="JD分析"
-            onClick={(event) => {
-              event.stopPropagation()
-              onAnalyze()
-            }}
-            className={`${buttonBase} text-indigo-500 hover:bg-blue-50 hover:text-blue-600 focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-100`}
-          >
-            <FileSearch2 className="h-4 w-4" />
           </button>
         </IconActionWithTooltip>
       )}

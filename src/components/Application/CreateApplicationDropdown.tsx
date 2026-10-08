@@ -75,7 +75,7 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
       ref={dropdownRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="fixed overflow-hidden rounded-xl border border-slate-100/80 bg-white py-1.5 shadow-lg shadow-slate-200/60"
+      className="dropdown-panel fixed overflow-hidden py-1"
       style={{
         top: buttonRect.bottom + 6,
         left: dropdownLeft,

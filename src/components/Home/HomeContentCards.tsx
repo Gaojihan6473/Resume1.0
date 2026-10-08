@@ -125,7 +125,7 @@ export function HomeResumeCard({
           {isMenuOpen && (
             <div
               role="menu"
-              className="dropdown-fade-in absolute bottom-12 right-0 w-36 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 shadow-xl shadow-slate-900/10"
+              className="dropdown-panel dropdown-fade-in absolute bottom-12 right-0 w-36 overflow-hidden py-1"
             >
               <button
                 type="button"

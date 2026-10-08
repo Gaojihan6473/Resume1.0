@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { batchPath } from '../../utils/batchWorkspace'
@@ -7,6 +7,7 @@ import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { toast } from '../../components/Toast'
 import { SidebarTriggerHint } from '../Sidebar/SidebarTriggerHint'
+import { CustomSelect } from '../Application/CustomSelect'
 import type { StyleSettings } from '../../types/resume'
 import { saveCurrentResumeToCloud } from '../../utils/saveResume'
 import {
@@ -18,8 +19,6 @@ import {
   RotateCcw,
   Save,
   FileDown,
-  ChevronDown,
-  Check,
   ChevronsRight,
   Send,
 } from 'lucide-react'
@@ -89,64 +88,25 @@ interface SelectProps {
   options: { label: string; value: string | number }[]
   onChange: (value: string | number) => void
   icon?: React.ReactNode
-  compact?: boolean
   label?: string
+  ariaLabel: string
 }
 
-function Select({ value, options, onChange, icon, compact, label }: SelectProps) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  const selected = options.find((o) => o.value === value)
-
-  const handleOpen = () => {
-    if (ref.current) {
-      const rect = ref.current.getBoundingClientRect()
-      setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-    }
-    setOpen(!open)
-  }
-
+function Select({ value, options, onChange, icon, label, ariaLabel }: SelectProps) {
   return (
-    <div ref={ref} className="relative flex flex-col shrink-0">
+    <div className="relative flex flex-col shrink-0">
       {label && <span className="text-[10px] text-slate-400 mb-0.5 ml-0.5 whitespace-nowrap">{label}</span>}
-      <button
-        onClick={handleOpen}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-xs font-medium text-slate-600 transition-all duration-150 whitespace-nowrap ${compact ? 'h-7' : 'h-8'}`}
-      >
-        {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
-        <span className="whitespace-nowrap">{selected?.label}</span>
-        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div
-          style={{ top: pos.top, left: pos.left, width: pos.width }}
-          className="fixed py-1 bg-white rounded-xl border border-slate-200 shadow-xl z-[9999] animate-in fade-in slide-in-from-top-1 duration-150"
-        >
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => {
-                onChange(opt.value)
-                setOpen(false)
-              }}
-              className={`w-full px-3 py-1.5 text-xs text-left flex items-center justify-between hover:bg-slate-50 ${opt.value === value ? 'text-blue-600 bg-blue-50/50 font-medium' : 'text-slate-600'}`}
-            >
-              <span>{opt.label}</span>
-              {opt.value === value && <Check className="w-3 h-3" />}
-            </button>
-          ))}
-        </div>
-      )}
+      <CustomSelect
+        ariaLabel={ariaLabel}
+        value={String(value)}
+        options={options.map((option) => ({ ...option, value: String(option.value) }))}
+        onChange={(nextValue) => {
+          const option = options.find((item) => String(item.value) === nextValue)
+          if (option) onChange(option.value)
+        }}
+        icon={icon}
+        size="sm"
+      />
     </div>
   )
 }
@@ -318,6 +278,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
       {/* 中间区域 - 可滚动 */}
       <div className="flex-1 flex items-center overflow-x-auto hide-scrollbar min-w-0 gap-1 px-2">
         <Select
+          ariaLabel="字体"
           value={resumeData.style.fontFamily}
           options={FONT_OPTIONS}
           onChange={(v) => updateStyle({ fontFamily: v as StyleSettings['fontFamily'] })}
@@ -325,6 +286,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <Select
+          ariaLabel="行高"
           value={resumeData.style.lineHeight}
           options={LINE_HEIGHT_OPTIONS}
           onChange={(v) => updateStyle({ lineHeight: v as number })}
@@ -332,6 +294,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <Select
+          ariaLabel="段落间距"
           value={resumeData.style.paragraphSpacing}
           options={SPACING_OPTIONS}
           onChange={(v) => updateStyle({ paragraphSpacing: v as number })}
@@ -339,6 +302,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <Select
+          ariaLabel="上下页边距"
           value={resumeData.style.pagePadding}
           options={PADDING_OPTIONS}
           onChange={(v) => updateStyle({ pagePadding: v as number })}
@@ -346,6 +310,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <Select
+          ariaLabel="左右页边距"
           value={resumeData.style.pageHorizontalPadding ?? resumeData.style.pagePadding}
           options={HORIZONTAL_PADDING_OPTIONS}
           onChange={(v) => updateStyle({ pageHorizontalPadding: v as number })}
@@ -353,6 +318,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
         />
 
         <Select
+          ariaLabel="字间距"
           value={resumeData.style.letterSpacing ?? 0}
           options={LETTER_SPACING_OPTIONS}
           onChange={(v) => updateStyle({ letterSpacing: v as number })}

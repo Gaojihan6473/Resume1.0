@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import type { BatchInput, BatchTransferInput, BatchTransferPreview, RecruitmentBatch } from '../../types/batch'
+import { normalizeBatchCardStyle } from '../../types/batch'
 
 async function userId() {
   const { data: { session } } = await supabase.auth.getSession()
@@ -17,13 +18,13 @@ export async function fetchBatches(): Promise<RecruitmentBatch[]> {
 
 export async function saveBatch(input: BatchInput, batchId?: string): Promise<RecruitmentBatch> {
   const id = await userId()
-  const values = { ...input, name: input.name.trim(), description: input.description.trim(), updated_at: new Date().toISOString() }
+  const values = { ...input, card_style: normalizeBatchCardStyle(input.card_style), name: input.name.trim(), description: input.description.trim(), updated_at: new Date().toISOString() }
   if (!values.name) throw new Error('请填写批次名称')
   const query = batchId
     ? supabase.from('recruitment_batches').update(values).eq('id', batchId).eq('user_id', id)
     : supabase.from('recruitment_batches').insert({ ...values, user_id: id })
   const { data, error } = await query.select().single()
-  if (error) throw new Error('保存批次失败，请重试')
+  if (error) throw new Error(error.code === 'PGRST204' || error.code === '42703' ? '保存批次失败，请先应用插画卡面数据库迁移' : '保存批次失败，请重试')
   if (await userId() !== id) throw new Error('登录状态已变化')
   return data
 }

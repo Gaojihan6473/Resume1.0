@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Layout, Lock, Home, User, Briefcase, BarChart2 } from 'lucide-react'
+import { Layout, Lock, Home, User, Briefcase, BarChart2, Layers3 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ interface SidebarProps {
   /** 遮罩层距离页面顶部的偏移量，默认同 topOffset */
   backdropTop?: number
   onGoHome?: () => void
+  onNavigateToWorkspace?: () => void
   onNavigateToMe?: () => void
   onNavigateToApplications?: () => void
   onNavigateToAnalytics?: () => void
@@ -96,6 +97,7 @@ export function Sidebar({
   topOffset = 0,
   backdropTop,
   onGoHome,
+  onNavigateToWorkspace,
   onNavigateToMe,
   onNavigateToApplications,
   onNavigateToAnalytics,
@@ -168,6 +170,15 @@ export function Sidebar({
               onClick={() => handleAction(onGoHome)}
               title="返回首页"
             />
+
+            {location.pathname === '/editor' && onNavigateToWorkspace && (
+              <NavItemButton
+                icon={<Layers3 className="h-4.5 w-4.5 shrink-0" />}
+                label="空间"
+                onClick={() => handleAction(onNavigateToWorkspace)}
+                title="返回当前批次"
+              />
+            )}
 
             {isAuthenticated && (
               <NavItemButton

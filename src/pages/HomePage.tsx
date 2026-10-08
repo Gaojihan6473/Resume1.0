@@ -514,7 +514,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                             <Link
                               to="/"
                               title="返回求职空间"
-                              className="inline-flex rounded-lg text-base font-medium leading-7 text-slate-500 transition-colors duration-200 hover:text-blue-600 active:text-blue-700 focus-visible:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 motion-reduce:transition-none sm:text-lg sm:leading-7"
+                              className="inline-flex rounded-lg text-[17px] font-medium leading-7 text-slate-500 transition-colors duration-200 hover:text-blue-600 active:text-blue-700 focus-visible:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 motion-reduce:transition-none sm:text-[19px] sm:leading-8"
                             >
                               求职空间
                             </Link>
@@ -525,7 +525,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                                 <ChevronRight className="h-5 w-5" />
                               </li>
                               <li aria-current="page" className="min-w-0">
-                                <h1 title={batch.name} className="truncate text-lg font-semibold text-slate-800 sm:text-xl">{batch.name}</h1>
+                                <h1 title={batch.name} className="truncate text-[19px] font-bold leading-7 tracking-tight text-slate-800 sm:text-[21px] sm:leading-8">{batch.name}</h1>
                               </li>
                             </>
                           )}
@@ -536,9 +536,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                         <p role="alert" className="-mt-4 mb-7 text-sm text-rose-600">{batchError}<button onClick={() => void fetchBatches()} className="ml-2 underline">重试</button></p>
                       ) : !batch ? (
                         <p className="-mt-4 mb-7 text-sm text-slate-500">{batchesLoaded ? '批次已不存在，请返回首页' : '批次加载中…'}</p>
-                      ) : batch.description && (
-                        <p className="-mt-4 mb-7 whitespace-pre-wrap text-sm leading-6 text-slate-500 [overflow-wrap:anywhere]">{batch.description}</p>
-                      )}
+                      ) : null}
                   </>
                 )}
                 <div className={batchId && !batch ? 'hidden' : ''}>

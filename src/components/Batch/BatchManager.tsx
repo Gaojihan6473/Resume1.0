@@ -5,6 +5,7 @@ import { useResumeStore } from '../../store/resumeStore'
 import { useApplicationStore } from '../../store/applicationStore'
 import { executeBatchTransfer, previewBatchTransfer, saveBatch } from '../../lib/api/batches'
 import type { BatchInput, BatchTransferInput, BatchTransferPreview, RecruitmentBatch } from '../../types/batch'
+import { normalizeBatchCardStyle } from '../../types/batch'
 import { BatchFields, BatchSurface, batchButtonClass, batchInputClass } from './BatchControls'
 import { toast } from '../Toast'
 import { CustomSelect } from '../Application/CustomSelect'
@@ -24,7 +25,8 @@ export function BatchManager({ batch, initialTab = 'info', initialDelete = false
   const applications = useApplicationStore((state) => state.applications)
   const [tab, setTab] = useState(initialTab)
   const [kind, setKind] = useState<'resume' | 'application'>(initialApplicationIds.length ? 'application' : 'resume')
-  const [value, setValue] = useState<BatchInput>({ name: batch?.name || '', description: batch?.description || '', color: batch?.color || 'blue' })
+  const initialValue: BatchInput = { name: batch?.name || '', description: batch?.description || '', color: batch?.color || 'blue', card_style: normalizeBatchCardStyle(batch?.card_style) }
+  const [value, setValue] = useState<BatchInput>(initialValue)
   const [resumeIds, setResumeIds] = useState(initialResumeIds)
   const [applicationIds, setApplicationIds] = useState(initialApplicationIds)
   const [search, setSearch] = useState('')
@@ -36,7 +38,7 @@ export function BatchManager({ batch, initialTab = 'info', initialDelete = false
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ input: BatchTransferInput; result: BatchTransferPreview; requestId: string } | null>(null)
   const submitting = useRef(false)
-  const original = JSON.stringify({ name: batch?.name || '', description: batch?.description || '', color: batch?.color || 'blue' })
+  const original = JSON.stringify(initialValue)
   const dirty = original !== JSON.stringify(value)
   const close = () => { if (!busy && (!dirty || window.confirm('批次信息尚未保存，确定放弃修改并关闭吗？'))) onClose() }
   const sourceId = importing ? otherId : batch?.id

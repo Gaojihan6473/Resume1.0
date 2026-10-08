@@ -28,7 +28,8 @@ type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 function AppContent() {
   const { isDirty, currentResumeId, cachedResumes } = useResumeStore()
   const location = useLocation()
-  const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || new URLSearchParams(location.search).get('batch') || useBatchStore.getState().draftBatchId
+  const draftBatchId = useBatchStore((state) => state.draftBatchId)
+  const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || new URLSearchParams(location.search).get('batch') || draftBatchId
   // Saving a new resume also updates its URL; read the latest save state at navigation time.
   const blocker = useBlocker(({ currentLocation, nextLocation }) => useResumeStore.getState().isDirty && currentLocation.pathname === '/editor' && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(currentLocation.search).get('resumeId') !== new URLSearchParams(nextLocation.search).get('resumeId') || new URLSearchParams(currentLocation.search).get('batch') !== new URLSearchParams(nextLocation.search).get('batch')))
   const { checkSession, authInitializing } = useAuthStore()
@@ -78,6 +79,7 @@ function AppContent() {
   }
 
   const handleGoHome = () => { closeSidebar(); navigate('/') }
+  const handleNavigateToWorkspace = () => { if (batchId) { closeSidebar(); navigate(`/batches/${encodeURIComponent(batchId)}`) } }
   const handleNavigateToMe = () => { closeSidebar(); navigate('/me') }
   const handleNavigateToApplications = () => { closeSidebar(); navigate(batchPath('/applications', batchId)) }
   const handleNavigateToAnalytics = () => { closeSidebar(); navigate(batchPath('/analytics', batchId)) }
@@ -178,6 +180,7 @@ function AppContent() {
                       topOffset={0}
                       backdropTop={56}
                       onGoHome={handleGoHome}
+                      onNavigateToWorkspace={batchId ? handleNavigateToWorkspace : undefined}
                       onNavigateToMe={handleNavigateToMe}
                       onNavigateToApplications={handleNavigateToApplications}
                       onNavigateToAnalytics={handleNavigateToAnalytics}

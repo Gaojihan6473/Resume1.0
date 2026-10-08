@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 
@@ -13,6 +14,9 @@ interface Option {
   badgeTone?: 'blue' | 'violet' | 'amber' | 'green'
   separatorBefore?: boolean
   actionPosition?: 'left' | 'right'
+  group?: string
+  trailing?: ReactNode
+  title?: string
 }
 
 interface Props {
@@ -25,6 +29,9 @@ interface Props {
   disabled?: boolean
   ariaLabel?: string
   variant?: 'default' | 'pill'
+  size?: 'default' | 'sm'
+  icon?: ReactNode
+  emptyMessage?: string
 }
 
 export function CustomSelect({
@@ -37,13 +44,19 @@ export function CustomSelect({
   disabled = false,
   ariaLabel,
   variant = 'default',
+  size = 'default',
+  icon,
+  emptyMessage = '暂无可选项',
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const listId = useId()
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   const selectedOption = options.find((o) => o.value === value)
+  const isPlaceholder = !selectedOption || (selectedOption.value === '' && selectedOption.label === placeholder)
   const estimatedOptionWidth = Math.max(
     120,
     ...options.map((option) =>
@@ -108,6 +121,10 @@ export function CustomSelect({
     if (!isOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        setIsOpen(false)
+        return
+      }
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
@@ -133,9 +150,37 @@ export function CustomSelect({
 
   const togglePanel = () => {
     if (disabled) return
-    if (!isOpen) updatePanelPosition()
+    if (!isOpen) {
+      updatePanelPosition()
+      setActiveIndex(options.findIndex((option) => option.value === value))
+    }
     setIsOpen((open) => !open)
   }
+
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      if (!isOpen) updatePanelPosition()
+      const current = isOpen ? activeIndex : options.findIndex((option) => option.value === value)
+      const next = event.key === 'Home' ? 0
+        : event.key === 'End' ? options.length - 1
+          : event.key === 'ArrowDown' ? Math.min(current + 1, options.length - 1)
+            : current < 0 ? options.length - 1 : Math.max(current - 1, 0)
+      setActiveIndex(next)
+      setIsOpen(true)
+    } else if (isOpen && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      if (options[activeIndex]) onChange(options[activeIndex].value)
+      setIsOpen(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen && activeIndex >= 0) {
+      document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [activeIndex, isOpen, listId])
 
   return (
     <div className={`relative ${className}`}>
@@ -146,13 +191,16 @@ export function CustomSelect({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-controls={isOpen ? listId : undefined}
+        aria-activedescendant={isOpen && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
         aria-invalid={invalid}
         disabled={disabled}
         onClick={togglePanel}
-        className={`w-full overflow-hidden pr-8 text-left text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        onKeyDown={handleTriggerKeyDown}
+        className={`w-full overflow-hidden text-left outline-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
           variant === 'pill'
-            ? `h-11 rounded-full border border-transparent bg-slate-100/80 px-4 hover:bg-slate-100 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100/60 ${invalid ? 'border-rose-200 bg-rose-50' : ''}`
-            : `rounded-xl border bg-white px-3.5 py-2.5 ${
+            ? `h-11 rounded-full border border-transparent bg-slate-100/80 px-4 pr-8 text-sm hover:bg-slate-100 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100/60 ${invalid ? 'border-rose-200 bg-rose-50' : ''}`
+            : `rounded-xl border bg-white ${size === 'sm' ? 'h-8 px-2.5 pr-7 text-xs' : 'px-3.5 py-2.5 pr-8 text-sm'} ${
                 invalid
                   ? 'border-rose-300 ring-4 ring-rose-50 focus:border-rose-400'
                   : 'border-slate-200 hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70'
@@ -160,7 +208,8 @@ export function CustomSelect({
         }`}
       >
         <span className="flex min-w-0 items-center gap-2">
-          <span className={`min-w-0 flex-1 truncate ${selectedOption ? 'text-slate-800' : 'text-slate-400'}`}>
+          {icon ? <span className="shrink-0 text-slate-400">{icon}</span> : null}
+          <span className={`min-w-0 flex-1 truncate ${isPlaceholder ? 'text-slate-400' : 'text-slate-800'}`}>
             {selectedOption?.label || placeholder}
           </span>
           {selectedOption?.badge ? <OptionBadge label={selectedOption.badge} tone={selectedOption.badgeTone} /> : null}
@@ -171,36 +220,48 @@ export function CustomSelect({
       {isOpen && !disabled && typeof document !== 'undefined' && createPortal(
         <div
           ref={panelRef}
+          id={listId}
           role="listbox"
+          aria-label={ariaLabel}
           data-application-floating-panel="true"
-          className="z-[1000] overflow-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl shadow-slate-900/15 animate-in fade-in zoom-in-95 duration-150"
+          className="dropdown-panel z-[1000] overflow-auto overscroll-contain py-1 animate-in fade-in zoom-in-95 duration-150"
           style={panelStyle}
         >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              onClick={() => {
-                onChange(option.value)
-                setIsOpen(false)
-                triggerRef.current?.focus()
-              }}
-              className={`${option.actionPosition ? 'inline-flex w-1/2 justify-center' : 'flex w-full justify-between'} px-3 py-2 text-sm text-left hover:bg-slate-50 items-center gap-3 transition-colors ${
-                option.separatorBefore ? 'mt-1 border-t border-slate-100 pt-2.5' : ''
-              } ${
-                option.actionPosition === 'right' ? 'border-l border-l-slate-100' : ''
-              }`}
-            >
-              <span className={`min-w-0 truncate ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
-                {option.label}
-              </span>
-              <span className={`shrink-0 items-center gap-2 ${option.actionPosition ? 'hidden' : 'flex'}`}>
-                {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}
-                {option.badge ? <OptionBadge label={option.badge} tone={option.badgeTone} /> : null}
-              </span>
-            </button>
+          {!options.length ? <div className="px-3 py-3 text-sm text-slate-400">{emptyMessage}</div> : null}
+          {options.map((option, index) => (
+            <Fragment key={option.value}>
+              {option.group && option.group !== options[index - 1]?.group ? (
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400">{option.group}</div>
+              ) : null}
+              <button
+                id={`${listId}-${index}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                title={option.title}
+                aria-selected={option.value === value}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => {
+                  onChange(option.value)
+                  setIsOpen(false)
+                  triggerRef.current?.focus()
+                }}
+                className={`${option.actionPosition ? 'inline-flex w-1/2 justify-center' : 'flex w-full justify-between'} px-3 py-2 text-sm text-left hover:bg-slate-50 items-center gap-3 transition-colors ${activeIndex === index ? 'bg-slate-50' : ''} ${
+                  option.separatorBefore ? 'mt-1 border-t border-slate-100 pt-2.5' : ''
+                } ${
+                  option.actionPosition === 'right' ? 'border-l border-l-slate-100' : ''
+                }`}
+              >
+                <span className={`min-w-0 truncate ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
+                  {option.label}
+                </span>
+                <span className={`max-w-[48%] shrink-0 items-center gap-2 ${option.actionPosition ? 'hidden' : 'flex'}`}>
+                  {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}
+                  {option.badge ? <OptionBadge label={option.badge} tone={option.badgeTone} /> : null}
+                  {option.trailing}
+                </span>
+              </button>
+            </Fragment>
           ))}
         </div>,
         document.body,

@@ -29,6 +29,7 @@ before(async () => {
     insert into public.applications(id,user_id,resume_id,company) values('${job1}','${user}','${resume}','历史岗位');
   `)
   await db.exec(await readFile(new URL('../supabase/migrations/20261007_recruitment_batches.sql', import.meta.url), 'utf8'))
+  await db.exec(await readFile(new URL('../supabase/migrations/20261008_batch_card_styles.sql', import.meta.url), 'utf8'))
   migrated = (await db.query(`select r.id, r.batch_id, a.resume_id, a.batch_id as application_batch from resumes r join applications a on a.resume_id=r.id`)).rows[0]
   await db.exec(`
     grant usage on schema public,auth to authenticated;
@@ -62,6 +63,14 @@ test('migration preserves existing IDs and associations in the default batch', (
   assert.equal(migrated.id, resume)
   assert.equal(migrated.resume_id, resume)
   assert.equal(migrated.batch_id, migrated.application_batch)
+})
+test('card style defaults to plain and persists independently of theme color', async () => {
+  assert.equal((await rows('recruitment_batches')).find((item) => item.id === source).card_style, 'none')
+  await db.query('update recruitment_batches set card_style=$1,color=$2 where id=$3', ['moon-garden', 'teal', source])
+  const saved = (await rows('recruitment_batches')).find((item) => item.id === source)
+  assert.equal(saved.card_style, 'moon-garden')
+  assert.equal(saved.color, 'teal')
+  await assert.rejects(db.query('update recruitment_batches set card_style=$1 where id=$2', ['unknown-illustration', source]), /recruitment_batches_card_style_check/)
 })
 test('transfer and deletion RPCs deny anonymous execution under Supabase default grants', async () => {
   const { rows: permissions } = await db.query(`select

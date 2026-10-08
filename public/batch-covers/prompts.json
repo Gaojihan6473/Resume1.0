@@ -1,0 +1,111 @@
+{
+  "generator": "Built-in image_gen",
+  "background": "transparent",
+  "assets": [
+    {
+      "id": "cloud-voyage",
+      "label": "云端启程",
+      "artDirection": "Airy editorial gouache illustration: a tiny cream sailboat sailing through a sculptural blue cloud arch with a pale peach sun. Soft powder blue, periwinkle, warm cream.",
+      "file": "cloud-voyage.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 云端启程. Subject and distinct medium: Airy editorial gouache illustration: a tiny cream sailboat sailing through a sculptural blue cloud arch with a pale peach sun. Soft powder blue, periwinkle, warm cream. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "forest-letter",
+      "label": "森林来信",
+      "artDirection": "Botanical picture-book illustration: a sage green leafy sprig curling around a small ivory envelope, one tiny bird perched on it. Colored pencil edges and subtle watercolor washes, sage, dusty teal, muted honey.",
+      "file": "forest-letter.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 森林来信. Subject and distinct medium: Botanical picture-book illustration: a sage green leafy sprig curling around a small ivory envelope, one tiny bird perched on it. Colored pencil edges and subtle watercolor washes, sage, dusty teal, muted honey. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "moon-garden",
+      "label": "月光花园",
+      "artDirection": "Dreamy chalk pastel illustration: a slender crescent moon cradling three stylized blue-lavender wildflowers and two tiny stars. Lavender, dusty indigo, buttery cream. Rich soft pastel grain.",
+      "file": "moon-garden.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 月光花园. Subject and distinct medium: Dreamy chalk pastel illustration: a slender crescent moon cradling three stylized blue-lavender wildflowers and two tiny stars. Lavender, dusty indigo, buttery cream. Rich soft pastel grain. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "sunlit-studio",
+      "label": "晴日书桌",
+      "artDirection": "Warm risograph editorial illustration: a small stack of books, a peach ceramic coffee cup and a bending desk lamp in a clever compact asymmetric still life. Apricot, terracotta, pale sand, muted cobalt accents.",
+      "file": "sunlit-studio.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 晴日书桌. Subject and distinct medium: Warm risograph editorial illustration: a small stack of books, a peach ceramic coffee cup and a bending desk lamp in a clever compact asymmetric still life. Apricot, terracotta, pale sand, muted cobalt accents. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "ocean-postcard",
+      "label": "海风明信片",
+      "artDirection": "Japanese-inspired painterly seaside illustration: an elegant curled teal wave with a tiny paper boat and an apricot sun, minimal flowing composition. Gouache ink textures, seafoam, teal, shell pink.",
+      "file": "ocean-postcard.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 海风明信片. Subject and distinct medium: Japanese-inspired painterly seaside illustration: an elegant curled teal wave with a tiny paper boat and an apricot sun, minimal flowing composition. Gouache ink textures, seafoam, teal, shell pink. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "paper-mountains",
+      "label": "纸上远山",
+      "artDirection": "Tactile handmade paper collage illustration: three overlapping irregular mountain silhouettes, one little winding trail, a circular golden sun. Torn paper edges, warm cream, muted slate blue, sage, ochre.",
+      "file": "paper-mountains.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 纸上远山. Subject and distinct medium: Tactile handmade paper collage illustration: three overlapping irregular mountain silhouettes, one little winding trail, a circular golden sun. Torn paper edges, warm cream, muted slate blue, sage, ochre. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "city-window",
+      "label": "城市一隅",
+      "artDirection": "Refined mid-century editorial illustration: a compact vignette of two slender pastel buildings with a tiny rooftop plant and a round sun, imaginative perspective and textured gouache. Dusty blue, blush, sand.",
+      "file": "city-window.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 城市一隅. Subject and distinct medium: Refined mid-century editorial illustration: a compact vignette of two slender pastel buildings with a tiny rooftop plant and a round sun, imaginative perspective and textured gouache. Dusty blue, blush, sand. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "cosmic-drift",
+      "label": "星际漫游",
+      "artDirection": "Soft clay miniature illustration: a small satin lavender planet with a sculptural ivory ring, a tiny peach moon and two floating rounded stars. Charming restrained 3D illustration with tactile matte surfaces, no shiny plastic.",
+      "file": "cosmic-drift.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 星际漫游. Subject and distinct medium: Soft clay miniature illustration: a small satin lavender planet with a sculptural ivory ring, a tiny peach moon and two floating rounded stars. Charming restrained 3D illustration with tactile matte surfaces, no shiny plastic. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "spring-bloom",
+      "label": "春日花束",
+      "artDirection": "Contemporary brush-painted floral illustration: three large simple cream and coral flowers with sculptural sage leaves in a tiny blue ceramic vase, asymmetrical. Visible confident brush marks, matte gouache texture.",
+      "file": "spring-bloom.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 春日花束. Subject and distinct medium: Contemporary brush-painted floral illustration: three large simple cream and coral flowers with sculptural sage leaves in a tiny blue ceramic vase, asymmetrical. Visible confident brush marks, matte gouache texture. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "kite-day",
+      "label": "风筝日记",
+      "artDirection": "Hand-drawn colored-pencil illustration: an expressive coral diamond kite with a gracefully curved blue string, two tiny cream cloud puffs and a delicate ribbon tail. Cheerful spacious composition with fine pencil grain.",
+      "file": "kite-day.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 风筝日记. Subject and distinct medium: Hand-drawn colored-pencil illustration: an expressive coral diamond kite with a gracefully curved blue string, two tiny cream cloud puffs and a delicate ribbon tail. Cheerful spacious composition with fine pencil grain. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "quiet-pond",
+      "label": "静谧池塘",
+      "artDirection": "Delicate oriental watercolor illustration: two overlapping pale jade lotus leaves, a small ivory lotus flower, a tiny orange koi and a few incomplete water ripples. Airy elegant watercolor and ink, ample transparency.",
+      "file": "quiet-pond.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 静谧池塘. Subject and distinct medium: Delicate oriental watercolor illustration: two overlapping pale jade lotus leaves, a small ivory lotus flower, a tiny orange koi and a few incomplete water ripples. Airy elegant watercolor and ink, ample transparency. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "golden-orchard",
+      "label": "金色果园",
+      "artDirection": "Mediterranean folk-art illustration: an elegant irregular branch with two honey-yellow lemons and dusty blue leaves, one tiny blossom. Painterly hand-cut shapes, subtle stippled grain, compact sophisticated composition.",
+      "file": "golden-orchard.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 金色果园. Subject and distinct medium: Mediterranean folk-art illustration: an elegant irregular branch with two honey-yellow lemons and dusty blue leaves, one tiny blossom. Painterly hand-cut shapes, subtle stippled grain, compact sophisticated composition. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "rainbow-path",
+      "label": "彩虹旅途",
+      "artDirection": "Textile felt craft illustration: an arched soft dusty rainbow ending in a small rolling sage hill and one white daisy. Visible wool felt fibers, cream, blush, ochre, muted teal. No saturated rainbow colors.",
+      "file": "rainbow-path.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 彩虹旅途. Subject and distinct medium: Textile felt craft illustration: an arched soft dusty rainbow ending in a small rolling sage hill and one white daisy. Visible wool felt fibers, cream, blush, ochre, muted teal. No saturated rainbow colors. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "little-lighthouse",
+      "label": "微光灯塔",
+      "artDirection": "Storybook screenprint illustration: a small ivory lighthouse on one rounded blue rock with a peach light beam and two flowing blue sea strokes. Soft grain, limited powder blue, coral, buttery yellow palette.",
+      "file": "little-lighthouse.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 微光灯塔. Subject and distinct medium: Storybook screenprint illustration: a small ivory lighthouse on one rounded blue rock with a peach light beam and two flowing blue sea strokes. Soft grain, limited powder blue, coral, buttery yellow palette. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    },
+    {
+      "id": "butterfly-notes",
+      "label": "蝴蝶手记",
+      "artDirection": "Sophisticated vintage botanical illustration: one large pale blue butterfly hovering over a delicate peach blossom and an open cream notebook with blank pages. Watercolor with gentle pencil contours, refined and minimal.",
+      "file": "butterfly-notes.webp",
+      "prompt": "Use case: illustration-story. Asset type: decorative illustration for the RIGHT SIDE of a small recruitment batch card in a polished Chinese resume app. Create one standalone designed illustration, 蝴蝶手记. Subject and distinct medium: Sophisticated vintage botanical illustration: one large pale blue butterfly hovering over a delicate peach blossom and an open cream notebook with blank pages. Watercolor with gentle pencil contours, refined and minimal. Composition: compact graceful vignette centered slightly to the right within a square canvas, artwork fits inside the central 78% with transparent padding all around. About 3 main elements, striking silhouette legible at 160px, sophisticated art direction and intentional shapes, not generic icons, not vector geometry. True TRANSPARENT background, preserve delicate irregular edges and material texture. Full-color artwork in a restrained harmonious muted palette; UI applies opacity later, so render the artwork fully opaque with good local contrast. No typography, letters, numbers, borders, card mockup, watermark, logo or checkerboard drawn into the image."
+    }
+  ]
+}

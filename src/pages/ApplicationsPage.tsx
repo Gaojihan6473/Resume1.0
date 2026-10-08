@@ -259,16 +259,6 @@ const handleGoHome = () => {
     navigate(batchPath(`/editor?resumeId=${resume.id}`, resume.batch_id))
   }
 
-  const handleAnalyzeResume = (resume: Resume) => {
-    setResumeData(resume.content as unknown as ResumeData)
-    setCurrentResumeId(resume.id)
-    setIsDirty(false)
-    clearCurrentFile()
-    setParseError(null)
-    setParseStatus('success')
-    navigate(batchPath(`/editor?resumeId=${resume.id}&tab=jd`, resume.batch_id))
-  }
-
   const handleNewResume = async () => {
     let id = batchId
     if (!id) {
@@ -349,7 +339,6 @@ const handleGoHome = () => {
                 selectedResumeId={selectedResumeId}
                 onSelectResume={(id) => setSelectedResumeId(id || null)}
                 onEditResume={handleEditResume}
-                onAnalyzeResume={handleAnalyzeResume}
               />
             )}
           </div>

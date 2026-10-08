@@ -10,6 +10,7 @@ import {
   IndentDecrease,
 } from 'lucide-react'
 import { sanitizeRichHtml } from '../../utils/richText'
+import { CustomSelect } from '../Application/CustomSelect'
 
 interface RichTextEditorProps {
   value: string
@@ -72,18 +73,14 @@ export function RichTextEditor({
   return (
     <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
-        <select
-          value={fontSize}
-          onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
-          className="h-7 px-2 text-xs rounded border border-gray-200 bg-white focus:outline-none focus:border-blue-400"
-          title="字号"
-        >
-          {FONT_SIZE_OPTIONS.map((size) => (
-            <option key={size} value={size}>
-              {size}px
-            </option>
-          ))}
-        </select>
+        <CustomSelect
+          ariaLabel="字号"
+          value={String(fontSize)}
+          onChange={(value) => onFontSizeChange(Number(value))}
+          options={FONT_SIZE_OPTIONS.map((size) => ({ value: String(size), label: `${size}px` }))}
+          size="sm"
+          className="w-20"
+        />
 
         <button
           type="button"

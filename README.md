@@ -9,11 +9,13 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Visual editor + live A4 preview from the same HTML used for PDF export
 - Save/load resumes with Supabase
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
+- Resume cards in the delivery dashboard offer an edit shortcut; JD analysis is accessed inside the resume editor.
 - The signed-in homepage shows recruitment batch cards and one responsive row each of recently edited resumes and jobs. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
 - JD analysis runs inside the resume editor with a viewport-height input panel; the editor column stays fixed while long JD content scrolls inside the text area
 - Resume Agent uses a global launcher that expands upward to select a base resume and target job, then creates an independently reviewable job-specific version without overwriting the base resume. It is available to authenticated users by default.
 - The launcher task list uses compact single-line rows with color-coded status badges and scrolls when more tasks are present.
 - Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
+- Dropdowns share one visual style across job forms, batch controls, the editor toolbar, font sizes, and JD history, with keyboard selection and menus that stay above scroll containers.
 - Export vector PDF / DOCX
 
 ## Tech Stack
@@ -54,14 +56,15 @@ npm run check:encoding
 
 ### 批次工作空间与迁移
 
-- 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色；最近简历和岗位分别按容器宽度展示一行（常规桌面宽度 5 份简历、4 条岗位），不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
+- 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色，并可独立选择 15 款插画卡面或“纯色”。新建与管理批次都提供缩略图和即时预览；插画半透明展示在卡片右侧，点击区域、文字及菜单保持可用。最近简历和岗位分别按容器宽度展示一行（常规桌面宽度 5 份简历、4 条岗位），不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
 - 首页仅纵向滚动。最近编辑分为上下两个区域，不单独显示“简历”“岗位”小标题及图标；简历和岗位均复用原首页（现批次详情）的卡片样式，所属批次可独立点击，编辑时间保留，长名称自动换行或截断。
-- 求职空间首页与批次详情共用紧凑的渐变标题栏，统一高度、内边距、图标和文字对齐；长批次名称截断显示，说明放在标题栏下方，详情底色随批次主题色变化。顶部切换、岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
+- 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明。顶部切换、岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
 - `/batches/:batchId` 展示该批次的简历和岗位，正文标题使用“求职空间 > 当前批次”面包屑；点击“求职空间”返回首页，支持悬停、按下和键盘聚焦反馈，顶部品牌旁不显示导航。新建、上传和岗位解析自动使用当前批次。`/editor?resumeId=...` 支持直接打开、刷新恢复及未保存修改保护。岗位页、面板使用 `?batch=...` 统一范围，省略时查看全部批次。
-- 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；可通过品牌区域的侧栏导航离开编辑页，未保存修改仍需确认。
+- 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；侧栏在“首页”和“岗位”之间显示“空间”，点击返回当前简历所属批次的详情页，其他页面不显示此入口。未保存修改仍需确认。
 - 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。确认前展示完整影响清单。
 - 简历副本独立编辑，使用新的 ID、来源标记及资源路径，不复制 JD 分析和 Agent 历史。已有记录移动保留 ID 和历史。删除非空批次必须整体迁移到另一个批次，不生成副本；空的最后一个批次可直接删除。
 - 迁移脚本为 `supabase/migrations/20261007_recruitment_batches.sql`。为每个已有用户创建“默认批次”并回填已有内容，保留原 ID 与关联。新用户仅初始化一次；主动删除后不会自动重建。旧客户端未传 `batch_id` 的创建请求优先沿用关联简历批次，否则使用现存默认/最早批次；没有批次时明确报错。
+- 插画卡面上线前需应用 `supabase/migrations/20261008_batch_card_styles.sql`，为批次增加 `card_style` 字段；已有批次默认“纯色”，选项随批次同步保存。生成素材位于 `public/batch-covers/`，采用带透明通道的 WebP；生成提示词和风格清单见该目录的 `prompts.json`。
 - 数据库使用用户隔离、批次归属与同批次简历关联约束。预览与执行 RPC 复核影响集合，关联变化要求重新确认；批量操作使用事务与请求 ID，防止部分迁移和重复生成副本。
 
 上线时先核对 `.env` 的 `VITE_SUPABASE_URL` / `VITE_EDGE_FUNCTIONS_URL` 与 CLI 项目，目标应为 `resume-parser`（`xvtklyowohmuqrolmgka`）。先通过 Supabase CLI 登录或配置 `SUPABASE_ACCESS_TOKEN`，查看待执行迁移，再应用数据库迁移、发布 `resume-agent` Edge Function 和前端；不要先发布依赖新表的前端。

@@ -4,7 +4,7 @@ import { BatchManager } from './BatchManager'
 import { useBatchStore } from '../../store/batchStore'
 import { useResumeStore } from '../../store/resumeStore'
 import { useApplicationStore } from '../../store/applicationStore'
-import { executeBatchTransfer, previewBatchTransfer } from '../../lib/api/batches'
+import { executeBatchTransfer, previewBatchTransfer, saveBatch } from '../../lib/api/batches'
 import type { RecruitmentBatch } from '../../types/batch'
 import type { Resume } from '../../lib/api/resumes'
 import type { Application } from '../../types/application'
@@ -24,6 +24,26 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe('batch management', () => {
+  it('saves the selected illustration independently of the theme and restores it when reopened', async () => {
+    const onClose = vi.fn()
+    const saved: RecruitmentBatch = { ...batch, color: 'teal', card_style: 'moon-garden' }
+    vi.mocked(saveBatch).mockResolvedValue(saved)
+    const view = render(<BatchManager batch={batch} onClose={onClose} />)
+    expect(screen.getAllByRole('button', { name: /^卡面：/ })).toHaveLength(16)
+    expect(screen.getByRole('button', { name: '卡面：纯色' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '卡面：月光花园' }))
+    fireEvent.click(screen.getByRole('button', { name: '青绿' }))
+    expect(screen.getByRole('button', { name: '卡面：月光花园' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('img', { name: '批次卡片预览：月光花园，青绿' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(saveBatch).toHaveBeenCalledWith({ name: batch.name, description: '', color: 'teal', card_style: 'moon-garden' }, batch.id))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(useBatchStore.getState().batches.find((item) => item.id === batch.id)?.card_style).toBe('moon-garden')
+    view.unmount()
+    render(<BatchManager batch={saved} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: '卡面：月光花园' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '青绿' })).toHaveAttribute('aria-pressed', 'true')
+  })
   it('previews the actual impacted records before executing and refreshes after success', async () => {
     render(<BatchManager batch={batch} initialTab="content" initialApplicationIds={['j']} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))

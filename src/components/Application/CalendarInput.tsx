@@ -181,7 +181,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
           role="dialog"
           aria-label="选择投递日期"
           data-application-floating-panel="true"
-          className="z-[1000] select-none rounded-xl border border-slate-100 bg-white p-3 shadow-xl shadow-slate-900/15"
+          className="dropdown-panel z-[1000] select-none p-3"
           style={panelStyle}
         >
           {/* Header */}

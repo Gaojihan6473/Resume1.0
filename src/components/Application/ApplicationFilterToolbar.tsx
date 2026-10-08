@@ -54,7 +54,7 @@ const STATUS_ORDER: ApplicationStatus[] = [
 ]
 
 const PANEL_CLASS =
-  'absolute top-full z-40 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15'
+  'dropdown-panel absolute top-full z-40 mt-1 overflow-hidden'
 
 export function ApplicationFilterToolbar({
   applications,
