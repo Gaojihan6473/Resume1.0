@@ -33,7 +33,6 @@ import { toast } from '../components/Toast'
 import { useBatchStore } from '../store/batchStore'
 import { BatchManager } from '../components/Batch/BatchManager'
 import { WorkspaceHeader } from '../components/Batch/WorkspaceHeader'
-import { CustomSelect } from '../components/Application/CustomSelect'
 import { BATCH_COLORS } from '../types/batch'
 import { batchPath } from '../utils/batchWorkspace'
 
@@ -503,10 +502,9 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
                   <>
                   <WorkspaceHeader
                     accent={batch ? BATCH_COLORS[batch.color].value : undefined}
-                    actions={batch && <>
-                      <CustomSelect ariaLabel="切换批次" value={batch.id} onChange={(id) => navigate(`/batches/${id}`)} options={batches.map((item) => ({ value: item.id, label: item.name }))} className="min-w-0 flex-1 sm:w-44 sm:flex-none" />
+                    actions={batch &&
                       <button type="button" onClick={() => setShowBatchManager(true)} className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:border-blue-200 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100/70">管理批次</button>
-                    </>}
+                    }
                   >
                       <nav aria-label="批次导航">
                         <ol className="flex min-w-0 items-center gap-3">

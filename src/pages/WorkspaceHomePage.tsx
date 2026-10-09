@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight, BriefcaseBusiness, FileText, Layers3, MoreHorizontal, Plus } from 'lucide-react'
 import { HomePage, type HomePageProps } from './HomePage'
@@ -24,10 +24,6 @@ export function WorkspaceHomePage(props: HomePageProps) {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [manager, setManager] = useState<{ batch?: RecruitmentBatch; deleting?: boolean } | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
-  const resumeGridRef = useRef<HTMLDivElement>(null)
-  const applicationGridRef = useRef<HTMLDivElement>(null)
-  const [resumeCapacity, setResumeCapacity] = useState(1)
-  const [applicationCapacity, setApplicationCapacity] = useState(1)
   const navigate = useNavigate()
   const retry = () => { setWorkspaceError(null); void refreshWorkspace().catch((error) => setWorkspaceError(error instanceof Error ? error.message : '内容加载失败')) }
   useEffect(() => {
@@ -43,20 +39,6 @@ export function WorkspaceHomePage(props: HomePageProps) {
     document.addEventListener('pointerdown', dismiss); document.addEventListener('keydown', key)
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', key) }
   }, [menuId])
-  useLayoutEffect(() => {
-    const resumeGrid = resumeGridRef.current
-    const applicationGrid = applicationGridRef.current
-    if (!authenticated || !resumeGrid || !applicationGrid) return
-    const measure = () => {
-      setResumeCapacity(Math.max(1, Math.floor((resumeGrid.clientWidth + 20) / 210)))
-      setApplicationCapacity(Math.max(1, Math.floor((applicationGrid.clientWidth + 16) / 246)))
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(resumeGrid)
-    observer.observe(applicationGrid)
-    return () => observer.disconnect()
-  }, [authenticated])
   if (!authenticated) return <HomePage {...props} />
   return <div className="flex h-dvh w-full min-w-0 flex-col bg-[#eef4ff] text-slate-900">
     <header className="app-topbar flex h-14 shrink-0 items-center px-4"><div ref={props.sidebarTriggerRef} onMouseEnter={props.onOpenSidebar} onMouseLeave={props.onScheduleCloseSidebar} className="flex items-center gap-2 px-2 py-1.5"><FishLogo className="h-6 w-7" /><span className="text-base font-bold">小鱼简历</span></div><SidebarTriggerHint triggerRef={props.sidebarTriggerRef} /></header>
@@ -83,18 +65,18 @@ export function WorkspaceHomePage(props: HomePageProps) {
           <WorkspaceHeader>
             <h2 className="text-[19px] font-bold leading-7 tracking-tight text-slate-800 sm:text-[21px]">最近编辑</h2>
           </WorkspaceHeader>
-          <div className="min-w-0 space-y-8">
+          <div className="grid min-w-0 items-start gap-6 md:grid-cols-2 lg:gap-8">
             <section aria-label="简历" className="min-w-0">
-              <div ref={resumeGridRef} role="list" aria-label="最近简历" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,190px),1fr))] items-start gap-5">
-                {getRecentItems(resumes, resumeCapacity).map((resume) => <div role="listitem" key={resume.id} className="min-w-0">
+              <div role="list" aria-label="最近简历" className="grid min-w-0 gap-4">
+                {getRecentItems(resumes, 3).map((resume) => <div role="listitem" key={resume.id} className="min-w-0">
                   <RecentResumeCard resume={resume} batch={batches.find((batch) => batch.id === resume.batch_id)} onOpen={() => navigate(`/editor?resumeId=${resume.id}`)} />
                 </div>)}
                 {!resumes.length && <p className="rounded-2xl border border-dashed border-blue-100 bg-white/50 p-5 text-sm text-slate-400">{workspaceError ? '简历暂未加载' : '暂无最近编辑的简历'}</p>}
               </div>
             </section>
             <section aria-label="岗位" className="min-w-0">
-              <div ref={applicationGridRef} role="list" aria-label="最近岗位" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,230px),1fr))] items-start gap-4">
-                {getRecentItems(applications, applicationCapacity).map((application) => <div role="listitem" key={application.id} className="min-w-0">
+              <div role="list" aria-label="最近岗位" className="grid min-w-0 gap-4">
+                {getRecentItems(applications, 3).map((application) => <div role="listitem" key={application.id} className="min-w-0">
                   <RecentApplicationCard application={application} resumes={resumes} batch={batches.find((batch) => batch.id === application.batch_id)} onOpen={() => navigate(`/applications?batch=${application.batch_id || ''}&applicationId=${application.id}`)} />
                 </div>)}
                 {!applications.length && <p className="rounded-2xl border border-dashed border-violet-100 bg-white/50 p-5 text-sm text-slate-400">{workspaceError ? '岗位暂未加载' : '暂无最近编辑的岗位'}</p>}

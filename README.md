@@ -10,7 +10,7 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Save/load resumes with Supabase
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
 - Resume cards in the delivery dashboard offer an edit shortcut; JD analysis is accessed inside the resume editor.
-- The signed-in homepage shows recruitment batch cards and one responsive row each of recently edited resumes and jobs. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
+- The signed-in homepage shows recruitment batch cards and two side-by-side lists of recently edited resumes and jobs, with the latest three items in each list. Compact resume rows pair thumbnails with their details; narrow screens stack the lists. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
 - JD analysis runs inside the resume editor with a viewport-height input panel; the editor column stays fixed while long JD content scrolls inside the text area
 - Resume Agent uses a global launcher that expands upward to select a base resume and target job, then creates an independently reviewable job-specific version without overwriting the base resume. It is available to authenticated users by default.
 - The launcher task list uses compact single-line rows with color-coded status badges and scrolls when more tasks are present.
@@ -56,9 +56,9 @@ npm run check:encoding
 
 ### 批次工作空间与迁移
 
-- 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色，并可独立选择 15 款插画卡面或“纯色”。新建与管理批次都提供缩略图和即时预览；插画半透明展示在卡片右侧，点击区域、文字及菜单保持可用。最近简历和岗位分别按容器宽度展示一行（常规桌面宽度 5 份简历、4 条岗位），不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
-- 首页仅纵向滚动。最近编辑分为上下两个区域，不单独显示“简历”“岗位”小标题及图标；简历和岗位均复用原首页（现批次详情）的卡片样式，所属批次可独立点击，编辑时间保留，长名称自动换行或截断。
-- 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明。顶部切换、岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
+- 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色，并可独立选择 15 款插画卡面或“纯色”。新建与管理批次都提供缩略图和即时预览；插画半透明展示在卡片右侧，点击区域、文字及菜单保持可用。最近简历和岗位分别按编辑时间倒序展示最近 3 条，不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
+- 首页仅纵向滚动。最近编辑在桌面分为左侧简历、右侧岗位两列，各展示最近 3 条并纵向排列，窄屏上下堆叠，不单独显示“简历”“岗位”小标题及图标。两侧卡片等高，桌面高度为 128px。简历左侧为缩略图，右侧为名称与求职方向；岗位依次展示公司与状态、岗位名称、地点与投递渠道。两类卡片底部统一显示所属批次和编辑时间，批次可独立点击，长名称自动换行或截断；岗位关联简历和投递日期可在详情查看。
+- 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明，右上角仅保留“管理批次”按钮，不显示批次切换下拉框。岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
 - `/batches/:batchId` 展示该批次的简历和岗位，正文标题使用“求职空间 > 当前批次”面包屑；点击“求职空间”返回首页，支持悬停、按下和键盘聚焦反馈，顶部品牌旁不显示导航。新建、上传和岗位解析自动使用当前批次。`/editor?resumeId=...` 支持直接打开、刷新恢复及未保存修改保护。岗位页、面板使用 `?batch=...` 统一范围，省略时查看全部批次。
 - 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；侧栏在“首页”和“岗位”之间显示“空间”，点击返回当前简历所属批次的详情页，其他页面不显示此入口。未保存修改仍需确认。
 - 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。确认前展示完整影响清单。

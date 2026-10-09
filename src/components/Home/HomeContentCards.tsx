@@ -167,13 +167,32 @@ export function HomeApplicationCard({
   application,
   resumes,
   onClick,
+  variant = 'default',
 }: {
   application: Application
   resumes: Resume[]
   onClick: () => void
+  variant?: 'default' | 'recent'
 }) {
   const linkedResume = resumes.find((resume) => resume.id === application.resume_id)
   const channelLabel = APPLICATION_CHANNEL_LABELS[application.channel] ?? application.channel
+
+  if (variant === 'recent') {
+    const details = [application.location, channelLabel].filter(Boolean).join(' · ')
+    return <button
+      type="button"
+      onClick={onClick}
+      aria-label={`编辑 ${application.company || '未填写公司'} ${application.position || '未填写岗位'}`}
+      className="w-full min-w-0 text-left after:absolute after:inset-0 after:rounded-[24px] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-blue-300"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="truncate text-sm font-semibold leading-5 text-slate-800" title={application.company}>{application.company || '未填写公司'}</p>
+        <span className="shrink-0"><StatusPill status={application.status} /></span>
+      </div>
+      <p className="mt-1.5 truncate text-xs leading-4 text-slate-600" title={application.position}>{application.position || '未填写岗位'}</p>
+      {details && <p className="mt-2 truncate text-[11px] leading-4 text-slate-400" title={details}>{details}</p>}
+    </button>
+  }
 
   return (
     <button

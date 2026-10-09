@@ -166,14 +166,25 @@ try {
   await db.query(`update applications set company=$1,position=$2,location=$3 where id=$4`, ['CompanyNameWithoutSpaces'.repeat(12), '产品经理与业务运营方向'.repeat(12), '工作地点'.repeat(30), job])
   await page.reload()
   await page.getByRole('button', { name: longName, exact: true }).waitFor()
-  for (const [width, capacity, jobCapacity] of [[320, 1, 1], [360, 1, 1], [390, 1, 1], [640, 2, 2], [768, 3, 2], [1024, 4, 3], [1280, 5, 4], [1440, 5, 4], [1920, 5, 4]]) {
+  for (const width of [320, 360, 390, 640, 768, 1024, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 })
-    await page.waitForFunction((count) => document.querySelector('[aria-label="最近简历"]').querySelectorAll('[role="listitem"]').length === count, capacity)
-    await page.waitForFunction((count) => document.querySelector('[aria-label="最近岗位"]').querySelectorAll('[role="listitem"]').length === count, jobCapacity)
+    await page.waitForFunction(() => document.querySelector('[aria-label="最近简历"]').querySelectorAll('[role="listitem"]').length === 3)
+    await page.waitForFunction(() => document.querySelector('[aria-label="最近岗位"]').querySelectorAll('[role="listitem"]').length === 3)
     const resumeTops = await page.getByRole('list', { name: '最近简历' }).getByRole('listitem').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
-    assert.ok(resumeTops.every((top) => Math.abs(top - resumeTops[0]) <= 1), `Resumes must remain on one row at ${width}px`)
+    assert.ok(resumeTops.every((top, index) => index === 0 || top > resumeTops[index - 1]), `Resumes must stack vertically at ${width}px`)
     const jobTops = await page.getByRole('list', { name: '最近岗位' }).getByRole('listitem').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
-    assert.ok(jobTops.every((top) => Math.abs(top - jobTops[0]) <= 1), `Jobs must remain on one row at ${width}px`)
+    assert.ok(jobTops.every((top, index) => index === 0 || top > jobTops[index - 1]), `Jobs must stack vertically at ${width}px`)
+    const resumeBox = await page.getByRole('list', { name: '最近简历' }).boundingBox()
+    const jobBox = await page.getByRole('list', { name: '最近岗位' }).boundingBox()
+    if (width >= 768) {
+      assert.ok(jobBox.x >= resumeBox.x + resumeBox.width, `Jobs must sit beside resumes at ${width}px`)
+      assert.ok(resumeTops.every((top, index) => Math.abs(top - jobTops[index]) <= 1), `Each resume/job row must align at ${width}px`)
+      const resumeHeights = await page.getByRole('list', { name: '最近简历' }).locator('article').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().height))
+      const jobHeights = await page.getByRole('list', { name: '最近岗位' }).locator('article').evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().height))
+      assert.ok(resumeHeights.every((height, index) => Math.abs(height - jobHeights[index]) <= 1), `Card borders must have equal heights at ${width}px`)
+    } else {
+      assert.ok(jobBox.y >= resumeBox.y + resumeBox.height, `Lists must stack on narrow screens at ${width}px`)
+    }
     const dimensions = await page.locator('main').evaluate((main) => ({
       content: main.scrollWidth, viewport: main.clientWidth,
       document: document.documentElement.scrollWidth, window: window.innerWidth,
@@ -181,8 +192,6 @@ try {
     assert.ok(dimensions.content <= dimensions.viewport + 1, `Homepage main overflows at ${width}px: ${JSON.stringify(dimensions)}`)
     assert.ok(dimensions.document <= dimensions.window + 1, `Homepage document overflows at ${width}px`)
     if (width >= 1280) {
-      const resumeBox = await page.getByRole('list', { name: '最近简历' }).boundingBox()
-      const jobBox = await page.getByRole('list', { name: '最近岗位' }).boundingBox()
       const contained = await page.getByRole('list', { name: '最近岗位' }).getByRole('button', { name: /^编辑 / }).evaluateAll((cards) => cards.every((card) => {
         const bounds = card.getBoundingClientRect()
         return [...card.children].every((child) => {
@@ -191,7 +200,6 @@ try {
         })
       }))
       assert.ok(contained, `Job information must stay inside its card at ${width}px`)
-      assert.ok(jobBox.y > resumeBox.y + resumeBox.height, `Jobs must occupy a separate section below resumes at ${width}px`)
     }
     if ([320, 768, 1280].includes(width)) await screenshot(`homepage-responsive-${width}`)
     if (width === 1280) {
@@ -204,11 +212,11 @@ try {
   await db.query(`update applications set company='测试公司一',position='产品经理',location='' where id=$1`, [job])
   await page.setViewportSize({ width: 1440, height: 1050 })
   await page.reload()
-  await page.getByRole('list', { name: '最近简历' }).getByRole('listitem').nth(4).waitFor()
+  await page.getByRole('list', { name: '最近简历' }).getByRole('listitem').nth(2).waitFor()
   await page.getByRole('heading', { name: '最近编辑', exact: true }).evaluate((heading) => heading.scrollIntoView({ block: 'start' }))
   await screenshot('recent-workspace-desktop')
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.waitForFunction(() => document.querySelector('[aria-label="最近简历"]').querySelectorAll('[role="listitem"]').length === 1)
+  await page.waitForFunction(() => document.querySelector('[aria-label="最近简历"]').querySelectorAll('[role="listitem"]').length === 3)
   await page.getByRole('heading', { name: '最近编辑', exact: true }).evaluate((heading) => heading.scrollIntoView({ block: 'start' }))
   await screenshot('recent-workspace-mobile')
   await db.query('delete from applications where id=any($1::uuid[])', [extraJobs])
