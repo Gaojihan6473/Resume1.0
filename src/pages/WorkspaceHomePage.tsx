@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowUpRight, BriefcaseBusiness, FileText, Layers3, MoreHorizontal, Plus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRight, ArrowUpRight, BriefcaseBusiness, FileText, Layers3, MoreHorizontal, Plus } from 'lucide-react'
 import { HomePage, type HomePageProps } from './HomePage'
 import { useAuthStore } from '../store/authStore'
 import { useBatchStore } from '../store/batchStore'
@@ -65,21 +65,34 @@ export function WorkspaceHomePage(props: HomePageProps) {
           <WorkspaceHeader>
             <h2 className="text-[19px] font-bold leading-7 tracking-tight text-slate-800 sm:text-[21px]">最近编辑</h2>
           </WorkspaceHeader>
-          <div className="grid min-w-0 items-start gap-6 md:grid-cols-2 lg:gap-8">
-            <section aria-label="简历" className="min-w-0">
-              <div role="list" aria-label="最近简历" className="grid min-w-0 gap-4">
+          <div className="grid min-w-0 items-start gap-6 md:grid-cols-2">
+            <section aria-label="简历" className="min-w-0 rounded-2xl border border-slate-200/80 bg-white/95 p-4 sm:p-5">
+              <div className="flex min-h-11 items-center gap-2.5 border-b border-slate-200/80 px-2 pb-3">
+                <FileText aria-hidden="true" className="h-4 w-4 text-slate-500" />
+                <h3 className="text-[15px] font-semibold text-slate-700">简历</h3>
+                <span className="text-xs tabular-nums text-slate-400">{Math.min(resumes.length, 3)}</span>
+              </div>
+              <div role="list" aria-label="最近简历" className="grid min-w-0 divide-y divide-slate-200/70">
                 {getRecentItems(resumes, 3).map((resume) => <div role="listitem" key={resume.id} className="min-w-0">
                   <RecentResumeCard resume={resume} batch={batches.find((batch) => batch.id === resume.batch_id)} onOpen={() => navigate(`/editor?resumeId=${resume.id}`)} />
                 </div>)}
-                {!resumes.length && <p className="rounded-2xl border border-dashed border-blue-100 bg-white/50 p-5 text-sm text-slate-400">{workspaceError ? '简历暂未加载' : '暂无最近编辑的简历'}</p>}
+                {!resumes.length && <p className="px-2 py-8 text-sm text-slate-500">{workspaceError ? '简历暂未加载' : '暂无最近编辑的简历'}</p>}
               </div>
             </section>
-            <section aria-label="岗位" className="min-w-0">
-              <div role="list" aria-label="最近岗位" className="grid min-w-0 gap-4">
+            <section aria-label="岗位" className="min-w-0 rounded-2xl border border-slate-200/80 bg-white/95 p-4 sm:p-5">
+              <div className="flex min-h-11 items-center gap-2.5 border-b border-slate-200/80 px-2 pb-3">
+                <BriefcaseBusiness aria-hidden="true" className="h-4 w-4 text-slate-500" />
+                <h3 className="text-[15px] font-semibold text-slate-700">岗位</h3>
+                <span className="text-xs tabular-nums text-slate-400">{Math.min(applications.length, 3)}</span>
+                <Link to="/applications" aria-label="查看全部岗位" className="group ml-auto inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
+                  查看全部<ArrowRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform motion-safe:group-hover:translate-x-0.5" />
+                </Link>
+              </div>
+              <div role="list" aria-label="最近岗位" className="grid min-w-0 divide-y divide-slate-200/70">
                 {getRecentItems(applications, 3).map((application) => <div role="listitem" key={application.id} className="min-w-0">
                   <RecentApplicationCard application={application} resumes={resumes} batch={batches.find((batch) => batch.id === application.batch_id)} onOpen={() => navigate(`/applications?batch=${application.batch_id || ''}&applicationId=${application.id}`)} />
                 </div>)}
-                {!applications.length && <p className="rounded-2xl border border-dashed border-violet-100 bg-white/50 p-5 text-sm text-slate-400">{workspaceError ? '岗位暂未加载' : '暂无最近编辑的岗位'}</p>}
+                {!applications.length && <p className="px-2 py-8 text-sm text-slate-500">{workspaceError ? '岗位暂未加载' : '暂无最近编辑的岗位'}</p>}
               </div>
             </section>
           </div>

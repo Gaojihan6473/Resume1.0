@@ -13,6 +13,37 @@
 .batch-card:hover { border-color: color-mix(in srgb, var(--batch-accent) 45%, white); }
 @media (prefers-reduced-motion: reduce) { .batch-card { transition: none; transform: none !important; } }
 
+/* Highlight the primary row action independently of its nested batch link. */
+.recent-workspace-row,
+.recent-row-title,
+.recent-row-icon {
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.recent-row-thumbnail,
+.recent-row-chevron {
+  transition: transform 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+.recent-workspace-row:has(.recent-row-open:focus-visible) { background-color: #f1f6ff; }
+.recent-workspace-row:has(.recent-row-open:focus-visible) .recent-row-title,
+.recent-workspace-row:has(.recent-row-open:focus-visible) .recent-row-chevron { color: #2563eb; }
+.recent-workspace-row:has(.recent-row-open:focus-visible) .recent-row-icon { color: #4f83f1; background-color: #e4edff; }
+@media (hover: hover) and (pointer: fine) {
+  .recent-workspace-row:has(.recent-row-open:hover) { background-color: #f7f9ff; }
+  .recent-workspace-row:has(.recent-row-open:hover) .recent-row-title,
+  .recent-workspace-row:has(.recent-row-open:hover) .recent-row-chevron { color: #2563eb; }
+  .recent-workspace-row:has(.recent-row-open:hover) .recent-row-icon { color: #4f83f1; background-color: #f0f5ff; }
+  .recent-workspace-row:has(.recent-row-open:hover) .recent-row-chevron { transform: translateX(2px); }
+  .recent-workspace-row:has(.recent-row-open:hover) .recent-row-thumbnail { transform: translateY(-1px); }
+}
+.recent-workspace-row:has(.recent-row-open:active) { background-color: #e7efff; }
+@media (prefers-reduced-motion: reduce) {
+  .recent-workspace-row,
+  .recent-workspace-row .recent-row-title,
+  .recent-workspace-row .recent-row-icon,
+  .recent-workspace-row .recent-row-thumbnail,
+  .recent-workspace-row .recent-row-chevron { transition: none; transform: none; }
+}
+
 * {
   box-sizing: border-box;
 }
