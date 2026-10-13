@@ -1,5 +1,4 @@
 import type { ResumeData } from '../types/resume'
-import templateAvatar from '../assets/hero.png'
 import resumeSans400Url from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff2?url'
 import resumeSans700Url from '@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff2?url'
 import resumeSerif400Url from '@fontsource/noto-serif-sc/files/noto-serif-sc-chinese-simplified-400-normal.woff2?url'
@@ -54,7 +53,6 @@ export function buildResumeDocumentHtml(
 ): string {
   return buildResumePdfHtml(data, title, {
     fontCss: getResumeDocumentFontCss(),
-    defaultAvatarUrl: absoluteAssetUrl(templateAvatar),
     analysisFocus: options.analysisFocus,
   })
 }

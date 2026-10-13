@@ -1,3 +1,4 @@
+import { normalizePayload, readPayload } from './payload.ts'
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -7,18 +8,6 @@ const corsHeaders = {
 }
 
 const DEFAULT_DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
-const ALLOWED_MODELS = new Set(['deepseek-v4-flash'])
-const MAX_MESSAGES = 8
-const MAX_TOTAL_CONTENT_LENGTH = 80_000
-const MAX_TOKENS_LIMIT = 8_000
-
-type ChatRole = 'system' | 'user' | 'assistant'
-
-interface ChatMessage {
-  role: ChatRole
-  content: string
-}
-
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -28,65 +17,6 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
-  return Math.max(min, Math.min(value, max))
-}
-
-function normalizeMessages(value: unknown): ChatMessage[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_MESSAGES) {
-    throw new Error('Invalid messages payload.')
-  }
-
-  const messages = value.map((item) => {
-    if (!isRecord(item)) throw new Error('Invalid message item.')
-    const role = item.role
-    const content = item.content
-    if (role !== 'system' && role !== 'user' && role !== 'assistant') {
-      throw new Error('Invalid message role.')
-    }
-    if (typeof content !== 'string' || !content.trim()) {
-      throw new Error('Invalid message content.')
-    }
-    return { role, content }
-  })
-
-  const totalLength = messages.reduce((sum, message) => sum + message.content.length, 0)
-  if (totalLength > MAX_TOTAL_CONTENT_LENGTH) {
-    throw new Error('Messages are too long.')
-  }
-
-  return messages
-}
-
-function normalizePayload(raw: unknown): Record<string, unknown> {
-  if (!isRecord(raw)) {
-    throw new Error('Invalid request body.')
-  }
-
-  const model = raw.model
-  if (typeof model !== 'string' || !ALLOWED_MODELS.has(model)) {
-    throw new Error('Unsupported model.')
-  }
-
-  const payload: Record<string, unknown> = {
-    model,
-    messages: normalizeMessages(raw.messages),
-    max_tokens: clampNumber(raw.max_tokens, 4_000, 1, MAX_TOKENS_LIMIT),
-    temperature: clampNumber(raw.temperature, 0, 0, 1),
-  }
-
-  if (
-    isRecord(raw.thinking)
-    && (raw.thinking.type === 'enabled' || raw.thinking.type === 'disabled')
-  ) {
-    payload.thinking = { type: raw.thinking.type }
-  }
-  if (isRecord(raw.response_format)) payload.response_format = raw.response_format
-
-  return payload
 }
 
 async function getAuthenticatedUser(req: Request): Promise<Response | null> {
@@ -147,7 +77,7 @@ serve(async (req) => {
       return jsonResponse({ error: 'DeepSeek API key is not configured.' }, 500)
     }
 
-    const payload = normalizePayload(await req.json())
+    const payload = normalizePayload(await readPayload(req))
     const deepseekUrl = Deno.env.get('DEEPSEEK_API_URL') || DEFAULT_DEEPSEEK_URL
     const upstreamStartedAt = Date.now()
     console.info('[deepseek-chat] upstream request', {
@@ -158,6 +88,7 @@ serve(async (req) => {
     })
     const upstream = await fetch(deepseekUrl, {
       method: 'POST',
+      signal: AbortSignal.any([req.signal, AbortSignal.timeout(90_000)]),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${deepseekApiKey}`,

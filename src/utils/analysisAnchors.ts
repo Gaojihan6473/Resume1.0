@@ -91,6 +91,9 @@ export function buildSkillsAnchorText(skills: Skills): string {
     ...skills.languages,
     ...skills.certificates,
     ...skills.interests,
+    ...skills.studentWork,
+    ...skills.awards,
+    ...skills.other,
   ])
 }
 

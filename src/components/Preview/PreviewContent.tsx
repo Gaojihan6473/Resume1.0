@@ -13,7 +13,6 @@ import {
   stripHtml,
 } from '../../utils/analysisAnchors'
 import { isRichHtmlEmpty, sanitizeRichHtml, textToSafeHtml } from '../../utils/richText'
-import templateAvatar from '../../assets/hero.png'
 
 const FONT_FAMILIES = {
   system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -23,7 +22,6 @@ const FONT_FAMILIES = {
 const SECTION_TITLE_COLOR = '#1f2937'
 const SECTION_DIVIDER_COLOR = SECTION_TITLE_COLOR
 const UNIFIED_TEXT_COLOR = SECTION_TITLE_COLOR
-const SCHOOL_TAG_OPTIONS = ['985', '211']
 
 export interface ResumeAnalysisFocus {
   section: JDAnalysisSectionId
@@ -99,7 +97,6 @@ export function PreviewContent({
               <span className="min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5" style={{ lineHeight: `${bodyLineHeightPx}px` }}>
                 <span className="font-bold" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.school}</span>
                 {(edu.schoolTags || [])
-                  .filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
                   .map((tag) => (
                     <span
                       key={tag}
@@ -119,7 +116,7 @@ export function PreviewContent({
                     </span>
                   ))}
               </span>
-              <span className="shrink-0" style={{ lineHeight: `${bodyLineHeightPx}px` }}>{edu.startDate} - {edu.endDate}</span>
+              <span className="shrink-0" style={{ lineHeight: `${bodyLineHeightPx}px`, order: style.datePlacement === 'left' ? -1 : 0 }}>{edu.startDate} - {edu.endDate}</span>
             </div>
             <div>
               {edu.major}
@@ -158,7 +155,7 @@ export function PreviewContent({
             >
               <div className="flex justify-between items-baseline gap-3">
                 <span className="font-bold">{intern.company}</span>
-                <span>{intern.startDate} - {intern.endDate}</span>
+                <span style={{ order: style.datePlacement === 'left' ? -1 : 0 }}>{intern.startDate} - {intern.endDate}</span>
               </div>
               <div>
                 {intern.position}
@@ -219,7 +216,7 @@ export function PreviewContent({
             >
               <div className="flex justify-between items-baseline gap-3">
                 <span className="font-bold">{proj.name}</span>
-                <span>{proj.startDate} - {proj.endDate}</span>
+                <span style={{ order: style.datePlacement === 'left' ? -1 : 0 }}>{proj.startDate} - {proj.endDate}</span>
               </div>
               {proj.role && <div>{proj.role}</div>}
               {!isRichHtmlEmpty(proj.content) ? (
@@ -273,10 +270,10 @@ export function PreviewContent({
       </Section>
     ) : null,
 
-    skills: (skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0) ? (
+    skills: Object.values(skills).some((entries) => entries.length > 0) ? (
       <Section
         key="skills"
-        title="技能证书"
+        title="技能与其他"
         section="skills"
         itemAnchorKey={skillsKey}
         itemStableAnchorKey={skillsStableKey}
@@ -285,7 +282,7 @@ export function PreviewContent({
       >
         <div className="space-y-0.5">
           {skills.technical.length > 0 && (
-            <div><span className="font-medium">技术技能：</span><HighlightedText text={skills.technical.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
+            <div>{!/^(?:技术技能|技术能力)\s*[:：]/.test(skills.technical[0]) && <span className="font-medium">技术技能：</span>}<HighlightedText text={skills.technical.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
           {skills.languages.length > 0 && (
             <div><span className="font-medium">语言能力：</span><HighlightedText text={skills.languages.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
@@ -296,6 +293,9 @@ export function PreviewContent({
           {skills.interests.length > 0 && (
             <div><span className="font-medium">兴趣爱好：</span><HighlightedText text={skills.interests.join('、')} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
           )}
+          {(['studentWork', 'awards', 'other'] as const).flatMap((field) => skills[field].map((text, index) => (
+            <div key={`${field}-${index}`} className="whitespace-pre-wrap"><span className="font-medium">{{studentWork: '学生工作', awards: '荣誉奖项', other: '其他补充'}[field]}：</span><HighlightedText text={text} marker={getMarker(skillsFocused)} flashKey={analysisFocus?.flashKey} flashMode={analysisFocus?.flashMode} /></div>
+          )))}
         </div>
       </Section>
     ) : null,
@@ -318,31 +318,28 @@ export function PreviewContent({
     >
       <div style={{ marginBottom: `${headerBlockSpacingPx}px` }}>
         <div className="flex items-stretch justify-between gap-5">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1" style={{ textAlign: style.headerAlign }}>
             <h1 className="font-bold leading-tight" style={{ fontSize: style.fontSize * 1.7, letterSpacing: '0' }}>
               {basic.name || '姓名'}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapTopPx}px` }}>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapTopPx}px`, justifyContent: style.headerAlign === 'center' ? 'center' : 'flex-start' }}>
               {basic.phone && <span>{basic.phone}</span>}
               {basic.email && <>{basic.phone && <span>|</span>}<span>{basic.email}</span></>}
               {basic.location && <>{((basic.phone || basic.email)) && <span>|</span>}<span>{basic.location}</span></>}
             </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapBottomPx}px` }}>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" style={{ marginTop: `${headerLineGapBottomPx}px`, justifyContent: style.headerAlign === 'center' ? 'center' : 'flex-start' }}>
               {basic.targetTitle && <span>{basic.targetTitle}</span>}
               {basic.targetLocation && <>{basic.targetTitle && <span>|</span>}<span>{basic.targetLocation}</span></>}
             </div>
           </div>
-          <div className="w-[65px] h-[81px] self-center shrink-0 flex items-center justify-center overflow-hidden">
+          {basic.avatarUrl && <div className="w-[65px] h-[81px] self-center shrink-0 flex items-center justify-center overflow-hidden">
             <img
-              src={basic.avatarUrl || templateAvatar}
+              src={basic.avatarUrl}
               alt="头像"
               className="block object-contain"
               style={{ maxWidth: '65px', maxHeight: '81px' }}
-              onError={(event) => {
-                if (event.currentTarget.src !== templateAvatar) event.currentTarget.src = templateAvatar
-              }}
             />
-          </div>
+          </div>}
         </div>
       </div>
 

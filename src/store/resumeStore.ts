@@ -14,6 +14,8 @@ export const useResumeStore = create<AppState>((set, get) => ({
   resumeData: createDefaultResumeData(),
   parseStatus: 'idle',
   parseError: null,
+  parseStage: null,
+  parseWarnings: [],
   rawText: '',
   zoom: 1,
   showMultiPage: true,
@@ -33,12 +35,19 @@ export const useResumeStore = create<AppState>((set, get) => ({
   clearCachedResumes: () =>
     set({ cachedResumes: [], cachedResumesLastFetched: null }),
 
-  setCurrentFile: (file) => set({ currentFile: file }),
+  setCurrentFile: (file) => {
+    parseRunId += 1
+    activeParseController?.abort()
+    activeParseController = null
+    set({ currentFile: file, parseStatus: 'idle', parseStage: null, parseError: null, parseWarnings: [] })
+  },
 
   clearCurrentFile: () => set({ currentFile: null }),
 
   setResumeData: (data, title) => set({
     resumeData: normalizeResumeData(data, title),
+    parseWarnings: [],
+    parseStage: null,
   }),
 
   updateBasic: (basic) =>
@@ -409,22 +418,28 @@ export const useResumeStore = create<AppState>((set, get) => ({
     set({
       parseStatus: 'parsing',
       parseError: null,
+      parseWarnings: [],
+      parseStage: '读取文件',
       currentResumeId: null,
       savedResumeSnapshot: null,
     })
     try {
       const { parseFile } = await import('../parsers')
-      const result = await parseFile(file, get().isAIEnabled, controller.signal)
+      const result = await parseFile(file, get().isAIEnabled, controller.signal, (parseStage) => {
+        if (runId === parseRunId && !controller.signal.aborted) set({ parseStage })
+      })
       if (runId !== parseRunId || controller.signal.aborted) return
       const endAt = new Date().toISOString()
       const sectionLine = result.parseLog.find((line: string) => line.startsWith('[result] sections:'))
       const summary = sectionLine ?? `text length=${result.rawText.length}`
-      console.info(`[Resume Parser] success | file=${file.name} | ${summary} | start=${startedAt} | end=${endAt}`)
+      console.info(`[Resume Parser] completed | ${summary} | start=${startedAt} | end=${endAt}`)
 
       set({
         resumeData: normalizeResumeData(applyReferenceTemplate(result.data)),
         rawText: result.rawText,
         parseStatus: 'success',
+        parseStage: null,
+        parseWarnings: result.warnings || [],
         currentResumeId: null,
         isDirty: true,
       })
@@ -433,17 +448,11 @@ export const useResumeStore = create<AppState>((set, get) => ({
         return
       }
       const message = error instanceof Error ? error.message : 'Parse failed'
-      console.groupCollapsed('[Resume Parser Debug]')
-      console.debug(`[${startedAt}] Start parsing: ${file.name}`)
-      console.debug(`- size: ${file.size} bytes`)
-      console.debug(`- type: ${file.type || 'unknown'}`)
-      console.debug(`- AI enabled: ${get().isAIEnabled}`)
-      console.debug('- AI proxy configured: server-side')
-      console.debug(`[${new Date().toISOString()}] ERROR: ${message}`)
-      console.groupEnd()
+      console.warn('[Resume Parser] import failed')
       set({
         parseStatus: 'error',
         parseError: message,
+        parseStage: null,
       })
       throw error
     } finally {
@@ -459,18 +468,24 @@ export const useResumeStore = create<AppState>((set, get) => ({
       activeParseController.abort()
       activeParseController = null
     }
-    set({ parseStatus: 'idle', parseError: null })
+    set({ parseStatus: 'idle', parseError: null, parseStage: null, parseWarnings: [] })
   },
 
-  resetAll: () =>
+  resetAll: () => {
+    parseRunId += 1
+    activeParseController?.abort()
+    activeParseController = null
     set({
       resumeData: createDefaultResumeData(),
       parseStatus: 'idle',
       parseError: null,
+      parseStage: null,
+      parseWarnings: [],
       rawText: '',
       currentResumeId: null,
       isDirty: false,
       currentFile: null,
       savedResumeSnapshot: null,
-    }),
+    })
+  },
 }))

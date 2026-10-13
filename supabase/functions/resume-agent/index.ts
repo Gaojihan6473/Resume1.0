@@ -117,6 +117,7 @@ function resumeToText(data: JsonRecord): string {
     `项目：${projects.map((item) => `[${asString(item.id)}] ${asString(item.name)} / ${asString(item.role)} / ${asString(item.startDate)}-${asString(item.endDate)}\n${stripHtml(asString(item.content))}`).join('\n')}`,
     `总结：[summary] ${stripHtml(asString(summary.content))}`,
     `技能：[skills] technical=${array(skills.technical).join('、')}；languages=${array(skills.languages).join('、')}；certificates=${array(skills.certificates).join('、')}；interests=${array(skills.interests).join('、')}`,
+    `学生工作：${array(skills.studentWork).join('\n')}\n荣誉奖项：${array(skills.awards).join('\n')}\n其他补充：${array(skills.other).join('\n')}`,
   ].join('\n\n'))
 }
 

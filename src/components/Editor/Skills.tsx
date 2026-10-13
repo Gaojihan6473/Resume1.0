@@ -146,6 +146,25 @@ function TagInput({
   )
 }
 
+function EntryInput({ label, entries, onChange }: { label: string; entries: string[]; onChange: (entries: string[]) => void }) {
+  return <div className="lg:col-span-2">
+    <div className="mb-2 flex items-center justify-between text-sm font-medium text-gray-700">
+      <span>{label}</span>
+      <button type="button" aria-label={`添加${label}条目`} onClick={() => onChange([...entries, ''])} className="text-blue-600">添加条目</button>
+    </div>
+    <div className="space-y-2">
+      {entries.map((entry, index) => <div key={index} className="flex items-start gap-2">
+        <textarea aria-label={`${label}第${index + 1}条`} rows={3} value={entry}
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+          placeholder="保留名称、日期和完整内容，可换行"
+          onChange={(event) => onChange(entries.map((value, i) => i === index ? event.target.value : value))} />
+        <button type="button" aria-label={`删除${label}第${index + 1}条`} onClick={() => onChange(entries.filter((_, i) => i !== index))}
+          className="rounded p-2 text-gray-400 hover:text-red-500"><X className="h-4 w-4" /></button>
+      </div>)}
+    </div>
+  </div>
+}
+
 export function SkillsEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const { resumeData, updateSkills } = useResumeStore()
   const { skills } = resumeData
@@ -184,6 +203,9 @@ export function SkillsEditor({ expanded, onToggle }: { expanded: boolean; onTogg
           icon={Heart}
           color="bg-pink-50 text-pink-500"
         />
+        <EntryInput label="学生工作" entries={skills.studentWork} onChange={(studentWork) => updateSkills({ studentWork })} />
+        <EntryInput label="荣誉奖项" entries={skills.awards} onChange={(awards) => updateSkills({ awards })} />
+        <EntryInput label="其他补充" entries={skills.other} onChange={(other) => updateSkills({ other })} />
       </div>
     </SortableModuleWrapper>
   )

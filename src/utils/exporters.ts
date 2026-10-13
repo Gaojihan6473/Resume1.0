@@ -265,10 +265,10 @@ export async function exportToWord(
       skills.technical.length > 0 ||
       skills.languages.length > 0 ||
       skills.certificates.length > 0 ||
-      skills.interests.length > 0
+      skills.interests.length > 0 || skills.studentWork.length > 0 || skills.awards.length > 0 || skills.other.length > 0
 
     if (!hasSkills) return
-    children.push(new Paragraph({ text: '技能证书', heading: HeadingLevel.HEADING_2 }))
+    children.push(new Paragraph({ text: '技能与其他', heading: HeadingLevel.HEADING_2 }))
 
     if (skills.technical.length > 0) {
       children.push(new Paragraph({ children: [new TextRun({ text: `技术技能：${skills.technical.join('，')}`, size: 20 })] }))
@@ -281,6 +281,11 @@ export async function exportToWord(
     }
     if (skills.interests.length > 0) {
       children.push(new Paragraph({ children: [new TextRun({ text: `兴趣爱好：${skills.interests.join('，')}`, size: 20 })] }))
+    }
+    for (const [label, entries] of [['学生工作', skills.studentWork], ['荣誉奖项', skills.awards], ['其他补充', skills.other]] as const) {
+      for (const entry of entries) {
+        entry.split('\n').forEach((line, index) => children.push(new Paragraph({ children: [new TextRun({ text: `${index === 0 ? `${label}：` : ''}${line}`, size: 20 })] })))
+      }
     }
   }
 

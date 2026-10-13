@@ -5,7 +5,7 @@
   ProjectItem,
   ResumeData,
 } from '../types/resume'
-import { buildRichHtmlFromLines, normalizeRichHtml } from './richText'
+import { buildRichHtmlFromLines, mergeRichContent, normalizeRichHtml } from './richText'
 import { sanitizeResumeText } from './textSanitizer'
 
 const REFERENCE_STYLE: ResumeData['style'] = {
@@ -16,6 +16,8 @@ const REFERENCE_STYLE: ResumeData['style'] = {
   pagePadding: 24,
   pageHorizontalPadding: 24,
   letterSpacing: 0,
+  headerAlign: 'left',
+  datePlacement: 'right',
 }
 
 function cleanText(value: string): string {
@@ -75,7 +77,6 @@ function normalizeEducation(item: EducationItem): EducationItem {
 
 function internshipContent(item: InternshipItem, projects: ProjectDetail[]): string {
   const explicit = normalizeRichHtml(item.content || '')
-  if (explicit) return explicit
 
   const lines: string[] = []
   for (const project of projects) {
@@ -84,18 +85,17 @@ function internshipContent(item: InternshipItem, projects: ProjectDetail[]): str
     lines.push(...cleanList(project.bullets))
     lines.push(...cleanList(project.achievements))
   }
-  return toHtml(lines)
+  return mergeRichContent(explicit, lines)
 }
 
 function projectContent(item: ProjectItem): string {
   const explicit = normalizeRichHtml(item.content || '')
-  if (explicit) return explicit
 
   const lines: string[] = []
   lines.push(...splitNonEmptyLines(item.description))
   lines.push(...cleanList(item.bullets))
   lines.push(...cleanList(item.achievements))
-  return toHtml(lines)
+  return mergeRichContent(explicit, lines)
 }
 
 function normalizeInternship(item: InternshipItem): InternshipItem {
@@ -165,8 +165,16 @@ export function applyReferenceTemplate(data: ResumeData): ResumeData {
       languages: cleanList(data.skills.languages),
       certificates: cleanList(data.skills.certificates),
       interests: cleanList(data.skills.interests),
+      studentWork: cleanList(data.skills.studentWork),
+      awards: cleanList(data.skills.awards),
+      other: cleanList(data.skills.other),
     },
-    style: REFERENCE_STYLE,
+    style: {
+      ...REFERENCE_STYLE,
+      fontSize: data.style.fontSize,
+      headerAlign: data.style.headerAlign,
+      datePlacement: data.style.datePlacement,
+    },
     sectionOrder: data.sectionOrder || ['education', 'internships', 'projects', 'summary', 'skills'],
   }
 }

@@ -4,11 +4,13 @@ const EDGE_FUNCTIONS_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL as string
 
 export interface DeepSeekChatMessage {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | DeepSeekContentPart[]
 }
 
+export type DeepSeekContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'original' | 'high' | 'auto' } }
+
 export interface DeepSeekChatRequest {
-  model: 'deepseek-v4-flash'
+  model: 'deepseek-v4-flash' | 'deepseek-flash'
   max_tokens?: number
   temperature?: number
   thinking?: { type: 'enabled' | 'disabled' }

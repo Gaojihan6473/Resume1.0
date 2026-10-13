@@ -59,7 +59,7 @@ export function Editor({
   jdPanel,
   focusTarget,
 }: EditorProps = {}) {
-  const { resumeData, reorderSections, setResumeTitle } = useResumeStore()
+  const { resumeData, reorderSections, setResumeTitle, parseWarnings } = useResumeStore()
   const { sectionOrder, resumeTitle } = resumeData
   const [isHovered, setIsHovered] = useState(false)
   const [expandedSection, setExpandedSection] = useState<SectionId | 'basic' | null>(null)
@@ -161,6 +161,9 @@ export function Editor({
         jdPanel
       ) : (
         <>
+          {parseWarnings.length > 0 && <div role="status" className="mx-4 mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+          </div>}
           <div ref={basicInfoRef}>
             <BasicInfoEditor
               expanded={expandedSection === 'basic'}

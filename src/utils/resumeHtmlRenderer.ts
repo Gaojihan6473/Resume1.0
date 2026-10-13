@@ -9,7 +9,6 @@ import {
 } from './analysisAnchors'
 import { sanitizeResumeText } from './textSanitizer'
 
-const schoolTagOptions = new Set(['985', '211'])
 const sectionIds = ['education', 'internships', 'projects', 'summary', 'skills']
 let currentRenderOptions = {}
 
@@ -54,6 +53,9 @@ const defaultResumeData = {
     languages: [],
     certificates: [],
     interests: [],
+    studentWork: [],
+    awards: [],
+    other: [],
   },
   style: {
     fontFamily: 'system',
@@ -63,6 +65,8 @@ const defaultResumeData = {
     pagePadding: 24,
     pageHorizontalPadding: 24,
     letterSpacing: 0,
+    headerAlign: 'left',
+    datePlacement: 'right',
   },
   sectionOrder: sectionIds,
 }
@@ -168,6 +172,9 @@ function normalizeResumeData(input) {
       languages: asStringArray(skillsSource.languages),
       certificates: asStringArray(skillsSource.certificates),
       interests: asStringArray(skillsSource.interests),
+      studentWork: asStringArray(skillsSource.studentWork),
+      awards: asStringArray(skillsSource.awards),
+      other: asStringArray(skillsSource.other),
     },
     style: {
       fontFamily: styleSource.fontFamily === 'serif' ? 'serif' : styleSource.fontFamily === 'sans-serif' ? 'sans-serif' : 'system',
@@ -177,6 +184,8 @@ function normalizeResumeData(input) {
       pagePadding: asNumber(styleSource.pagePadding, defaultResumeData.style.pagePadding),
       pageHorizontalPadding: asNumber(styleSource.pageHorizontalPadding, defaultResumeData.style.pageHorizontalPadding),
       letterSpacing: asNumber(styleSource.letterSpacing, defaultResumeData.style.letterSpacing),
+      headerAlign: styleSource.headerAlign === 'center' ? 'center' : 'left',
+      datePlacement: styleSource.datePlacement === 'left' ? 'left' : 'right',
     },
     sectionOrder: [
       ...sectionOrder.filter((section, index) => sectionOrder.indexOf(section) === index),
@@ -420,7 +429,6 @@ function renderEducation(data) {
   if (data.education.length === 0) return ''
   const children = data.education.map((edu) => {
     const tags = edu.schoolTags
-      .filter((tag) => schoolTagOptions.has(tag))
       .map((tag) => `<span class="school-tag">${escapeHtml(tag)}</span>`)
       .join('')
     const details = [edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).map(escapeHtml).join(' | ')
@@ -529,18 +537,19 @@ function renderSummary(data, bodyFontSize, lineHeight, options = currentRenderOp
 
 function renderSkills(data, options = currentRenderOptions) {
   const { skills } = data
-  const hasSkills = skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0
+  const hasSkills = skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0 || skills.studentWork.length > 0 || skills.awards.length > 0 || skills.other.length > 0
   if (!hasSkills) return ''
   const marker = focusMarker(options.analysisFocus, 'skills')
 
   const rows = [
-    skills.technical.length > 0 ? `<div class="pagination-unit"><strong>技术技能：</strong>${highlightHtmlForFocus(escapeHtml(skills.technical.join('、')), marker, options.analysisFocus)}</div>` : '',
+    skills.technical.length > 0 ? `<div class="pagination-unit">${/^(?:技术技能|技术能力)\s*[:：]/.test(skills.technical[0]) ? '' : '<strong>技术技能：</strong>'}${highlightHtmlForFocus(escapeHtml(skills.technical.join('、')), marker, options.analysisFocus)}</div>` : '',
     skills.languages.length > 0 ? `<div class="pagination-unit"><strong>语言能力：</strong>${highlightHtmlForFocus(escapeHtml(skills.languages.join('、')), marker, options.analysisFocus)}</div>` : '',
     skills.certificates.length > 0 ? `<div class="pagination-unit"><strong>证书资格：</strong>${highlightHtmlForFocus(escapeHtml(skills.certificates.join('、')), marker, options.analysisFocus)}</div>` : '',
     skills.interests.length > 0 ? `<div class="pagination-unit"><strong>兴趣爱好：</strong>${highlightHtmlForFocus(escapeHtml(skills.interests.join('、')), marker, options.analysisFocus)}</div>` : '',
+    ...(['studentWork', 'awards', 'other'] as const).flatMap((field) => skills[field].map((text) => `<div class="pagination-unit" style="white-space:pre-wrap"><strong>${{studentWork: '学生工作', awards: '荣誉奖项', other: '其他补充'}[field]}：</strong>${highlightHtmlForFocus(escapeHtml(text), marker, options.analysisFocus)}</div>`)),
   ].join('')
 
-  return renderSection('技能证书', `<div class="skills-block">${rows}</div>`, 'skills', options)
+  return renderSection('技能与其他', `<div class="skills-block">${rows}</div>`, 'skills', options)
 }
 
 function renderSections(data, bodyFontSize, lineHeight, options = {}) {
@@ -643,6 +652,12 @@ export function buildResumePdfHtml(
       min-width: 0;
       flex: 1 1 auto;
     }
+    .header-centered .header-main {
+      text-align: center;
+    }
+    .header-centered .header-line {
+      justify-content: center;
+    }
     h1 {
       margin: 0;
       font-size: ${pt(bodyFontSize * 1.7)};
@@ -731,6 +746,9 @@ export function buildResumePdfHtml(
     .item-date {
       flex: 0 0 auto;
       white-space: nowrap;
+    }
+    .dates-left .item-date {
+      order: -1;
     }
     .school-name {
       display: flex;
@@ -869,7 +887,7 @@ export function buildResumePdfHtml(
   </style>
 </head>
 <body>
-  <main class="resume-preview">
+  <main class="resume-preview${style.headerAlign === 'center' ? ' header-centered' : ''}${style.datePlacement === 'left' ? ' dates-left' : ''}">
     <header class="resume-header">
       <div class="header-row">
         <div class="header-main">
@@ -877,9 +895,9 @@ export function buildResumePdfHtml(
           ${contactLine ? `<div class="header-line contact-line">${contactLine}</div>` : ''}
           ${targetLine ? `<div class="header-line target-line">${targetLine}</div>` : ''}
         </div>
-        <div class="avatar-box">
+        ${avatarUrl ? `<div class="avatar-box">
           <img src="${escapeHtml(avatarUrl)}" alt="头像"${options.defaultAvatarUrl ? ` onerror="this.onerror=null;this.src='${escapeHtml(options.defaultAvatarUrl)}'"` : ''}>
-        </div>
+        </div>` : ''}
       </div>
     </header>
     ${renderSections(data, bodyFontSize, style.lineHeight, options)}

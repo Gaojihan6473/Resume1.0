@@ -167,6 +167,9 @@ export function buildResumeText(content: ResumeData): string {
   parts.push(`语言能力: ${content.skills.languages.join('、') || '暂无'}`)
   parts.push(`证书资格: ${content.skills.certificates.join('、') || '暂无'}`)
   parts.push(`兴趣爱好: ${content.skills.interests.join('、') || '暂无'}`)
+  parts.push(`学生工作: ${content.skills.studentWork.join('\n') || '暂无'}`)
+  parts.push(`荣誉奖项: ${content.skills.awards.join('\n') || '暂无'}`)
+  parts.push(`其他补充: ${content.skills.other.join('\n') || '暂无'}`)
 
   return limitText(parts.join('\n'), 12000)
 }

@@ -28,7 +28,7 @@ export function Upload({
   emphasizeAction = false,
   compact = false,
 }: UploadProps) {
-  const { parseFile, cancelParse, parseStatus, parseError, setCurrentFile } = useResumeStore()
+  const { parseFile, cancelParse, parseStatus, parseError, parseStage, parseWarnings, setCurrentFile } = useResumeStore()
   const { isAuthenticated } = useAuthStore()
 
   const [file, setFile] = useState<File | null>(null)
@@ -280,6 +280,9 @@ export function Upload({
           {parseError}
         </div>
       )}
+      {parseWarnings.length > 0 && <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+      </div>}
 
       {embedded && (showParseButton || isParsing) ? (
         <div className={`mt-4 flex items-center justify-center ${embeddedHasFile ? 'flex-1 items-end' : ''}`}>
@@ -296,7 +299,7 @@ export function Upload({
           {isParsing && (
             <div className="w-full py-3.5 px-4 text-[17px] bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 text-blue-600 rounded-xl font-medium flex items-center justify-center gap-3 animate-pulse">
               <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
-              <span>AI 正在解析中，请稍候...</span>
+              <span>{parseStage || '识别内容'}，请稍候...</span>
             </div>
           )}
         </div>
@@ -318,7 +321,7 @@ export function Upload({
             <div>
               <div className="mt-6 w-full py-3.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 text-blue-600 rounded-xl font-medium flex items-center justify-center gap-3">
                 <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
-                <span>AI 正在解析中，请稍候...</span>
+                <span>{parseStage || '识别内容'}，请稍候...</span>
               </div>
             </div>
           )}

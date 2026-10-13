@@ -155,6 +155,23 @@ export function textToSafeHtml(value: string): string {
   return escapeHtml(value).replace(/\n/g, '<br/>')
 }
 
+/** Keep unique legacy text before clearing compatibility fields. Never rewrite the existing HTML. */
+export function mergeRichContent(explicit: string, legacyLines: string[]): string {
+  const normalized = normalizeRichHtml(explicit)
+  const container = typeof document !== 'undefined' ? document.createElement('div') : null
+  if (container) container.innerHTML = normalized
+  const compact = (value: string) => value.replace(/\s+/g, '')
+  let existing = compact(container?.textContent || fallbackHtmlTextContent(normalized))
+  const missing: string[] = []
+  for (const line of legacyLines) {
+    const key = compact(line)
+    if (!key || existing.includes(key)) continue
+    missing.push(line)
+    existing += key
+  }
+  return normalized + buildRichHtmlFromLines(missing)
+}
+
 function closeList(listType: 'ul' | 'ol' | null, chunks: string[]) {
   if (!listType) return
   chunks.push(`</${listType}>`)
@@ -168,7 +185,7 @@ export function buildRichHtmlFromLines(lines: string[]): string {
   let currentListType: 'ul' | 'ol' | null = null
 
   for (const line of normalized) {
-    const unordered = line.match(/^[-*•·▪◦]\s+(.+)$/)
+    const unordered = line.match(/^[-*•·▪◦▸▹►]\s*(.+)$/)
     const ordered = line.match(/^\d+[.、)\]]\s+(.+)$/)
 
     if (unordered) {

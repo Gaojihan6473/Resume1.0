@@ -30,6 +30,8 @@ const DEFAULT_STYLE: ResumeData['style'] = {
   pagePadding: 24,
   pageHorizontalPadding: 24,
   letterSpacing: 0,
+  headerAlign: 'left',
+  datePlacement: 'right',
 }
 
 type SectionType = 'education' | 'internship' | 'project' | 'summary' | 'skills' | 'basic' | 'unknown'
@@ -451,6 +453,9 @@ function parseSkills(text: string): Skills {
     languages: [],
     certificates: [],
     interests: [],
+    studentWork: [],
+    awards: [],
+    other: [],
   }
 
   const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
@@ -505,6 +510,9 @@ export function parseByRules(rawText: string): ResumeData {
       languages: [],
       certificates: [],
       interests: [],
+      studentWork: [],
+      awards: [],
+      other: [],
     },
     style: DEFAULT_STYLE,
     sectionOrder: ['education', 'internships', 'projects', 'summary', 'skills'],

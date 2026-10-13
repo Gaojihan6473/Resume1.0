@@ -4,6 +4,7 @@ import { readFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { PGlite } from '@electric-sql/pglite'
+import mammoth from 'mammoth'
 
 const origin = process.env.WORKSPACE_TEST_URL || 'http://127.0.0.1:5175'
 const env = await readFile(new URL('../.env', import.meta.url), 'utf8')
@@ -24,7 +25,7 @@ const source = (await db.query('select id from recruitment_batches')).rows[0].id
 const target = crypto.randomUUID()
 await db.query(`insert into recruitment_batches(id,user_id,name,color,description) values($1,$2,'2027届金融秋招','violet','金融机构与国企岗位'),(gen_random_uuid(),$2,'2027年暑期实习','teal','实习机会与岗位准备')`, [target, user])
 const resume = crypto.randomUUID(), job = crypto.randomUUID(), otherJob = crypto.randomUUID()
-await db.query(`insert into resumes(id,user_id,batch_id,title,content) values($1,$2,$3,'基础简历',$4)`, [resume, user, source, JSON.stringify({ resumeTitle: '基础简历', basic: { name: '小鱼', targetTitle: '产品经理' } })])
+await db.query(`insert into resumes(id,user_id,batch_id,title,content) values($1,$2,$3,'基础简历',$4)`, [resume, user, source, JSON.stringify({ resumeTitle: '基础简历', basic: { name: '小鱼', targetTitle: '产品经理' }, skills: { studentWork: ['2024年学生会事务'], awards: ['2023年一等奖'], other: ['保留补充说明'] } })])
 await db.query(`insert into applications(id,user_id,batch_id,resume_id,company,position,channel,status,job_description) values($1,$3,$4,$5,'测试公司一','产品经理','官网','applied','产品需求与数据分析'),($2,$3,$4,$5,'测试公司二','运营经理','官网','interested','运营与用户增长')`, [job, otherJob, user, source, resume])
 await db.exec(`grant usage on schema public,auth to authenticated; grant select,insert,update,delete on all tables in schema public to authenticated;
   alter table resumes enable row level security; alter table applications enable row level security;
@@ -55,6 +56,14 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
   if (request.method() === 'OPTIONS') return respond({})
   if (url.pathname.startsWith('/auth/')) return respond({ user: { id: user, email: 'fixture@example.test' } })
   if (url.pathname.endsWith('/minimax-chat')) return respond({ choices: [{ message: { content: JSON.stringify({ basic: { name: '上传测试', targetTitle: '产品经理' }, education: [{ school: '测试大学', degree: '本科' }], internships: [], projects: [], summary: '', skills: '' }) } }] })
+  if (url.pathname.endsWith('/deepseek-chat')) return respond({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ groups: [
+    { kind: 'basic', entryId: 'p1-b1', blockIds: ['p1-b1', 'p1-b3'], bodyIds: [], fields: { name: '上传测试', targetTitle: '产品经理' } },
+    { kind: 'education', entryId: 'p1-b2', blockIds: ['p1-b2'], bodyIds: [], fields: { school: '测试大学', degree: '本科' } },
+    { kind: 'heading', entryId: 'p1-b4', blockIds: ['p1-b4', 'p1-b6', 'p1-b8'], bodyIds: [], fields: {} },
+    { kind: 'studentWork', entryId: 'p1-b5', blockIds: ['p1-b5'], bodyIds: ['p1-b5'], fields: {} },
+    { kind: 'awards', entryId: 'p1-b7', blockIds: ['p1-b7'], bodyIds: ['p1-b7'], fields: {} },
+    { kind: 'other', entryId: 'p1-b9', blockIds: ['p1-b9'], bodyIds: ['p1-b9'], fields: {} },
+  ], ocrBlocks: [], unreadablePages: [] }) } }] })
   if (url.pathname.startsWith('/storage/')) {
     if (url.pathname.includes('/object/sign/') && request.method() === 'POST') return respond({ signedURL: url.pathname.replace('/storage/v1', '') + '?token=fixture' })
     if (request.method() === 'POST') { storedFiles.set(url.pathname.replace('/storage/v1/object/', ''), request.postDataBuffer()); return respond({ Key: url.pathname, Id: crypto.randomUUID() }) }
@@ -245,6 +254,10 @@ try {
   await page.getByRole('button', { name: '预览移动 (0)' }).waitFor()
   const moved = (await db.query('select * from applications where id=$1', [job])).rows[0]
   assert.equal(moved.batch_id, target); assert.notEqual(moved.resume_id, resume)
+  const movedCopy = (await db.query('select content from resumes where id=$1', [moved.resume_id])).rows[0].content
+  assert.deepEqual(movedCopy.skills.studentWork, ['2024年学生会事务'])
+  assert.deepEqual(movedCopy.skills.awards, ['2023年一等奖'])
+  assert.deepEqual(movedCopy.skills.other, ['保留补充说明'])
   assert.equal((await db.query('select count(*)::int as count from resumes')).rows[0].count, 2)
   await page.getByRole('button', { name: '关闭', exact: true }).click()
   await screenshot('batch-detail')
@@ -311,15 +324,100 @@ try {
   await page.getByRole('heading', { name: '默认批次' }).waitFor()
   assert.equal((await db.query('select content from resumes where id=$1', [resume])).rows[0].content.basic.name, '小鱼')
   await page.getByRole('button', { name: '上传', exact: true }).click()
-  await page.locator('input[type="file"]').setInputFiles({ name: 'batch-fixture.txt', mimeType: 'text/plain', buffer: Buffer.from('上传测试\n测试大学 本科\n求职意向：产品经理') })
+  await page.locator('input[type="file"]').setInputFiles({ name: 'batch-fixture.txt', mimeType: 'text/plain', buffer: Buffer.from('上传测试\n测试大学 本科\n求职意向：产品经理\n学生工作\n2024年 学生会组织5场活动\n荣誉奖项\n2023年一等奖学金\n自我评价\n擅长数据分析与沟通') })
   await page.getByRole('button', { name: '开始智能解析' }).click()
   await page.waitForURL((url) => url.pathname === '/editor')
   await page.getByPlaceholder('输入简历名称...').waitFor()
+  await page.getByRole('button', { name: '技能与其他', exact: true }).click()
+  await page.getByRole('textbox', { name: '学生工作第1条' }).fill('2024年 学生会组织5场活动\n修订完整正文')
+  await page.getByRole('button', { name: '添加荣誉奖项条目', exact: true }).click()
+  await page.getByRole('textbox', { name: '荣誉奖项第2条' }).fill('临时奖项，验证逐条删除')
+  await page.getByRole('button', { name: '删除荣誉奖项第2条' }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.waitForURL((url) => url.searchParams.has('resumeId'))
   const uploaded = (await db.query('select * from resumes where id=$1', [new URL(page.url()).searchParams.get('resumeId')])).rows[0]
   assert.equal(uploaded.batch_id, source)
   assert.equal(uploaded.content.basic.name, '上传测试')
+  assert.deepEqual(uploaded.content.skills.studentWork, ['2024年 学生会组织5场活动\n修订完整正文'])
+  assert.deepEqual(uploaded.content.skills.awards, ['2023年一等奖学金'])
+  assert.ok(uploaded.content.skills.other.includes('擅长数据分析与沟通'))
+  await page.reload()
+  await page.getByRole('button', { name: '技能与其他', exact: true }).click()
+  assert.equal(await page.getByRole('textbox', { name: '学生工作第1条' }).inputValue(), '2024年 学生会组织5场活动\n修订完整正文')
+  const wordDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Word', exact: true }).click()
+  const wordFile = await wordDownload
+  const wordPath = new URL('../.cache/batch-check/import.docx', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')
+  await wordFile.saveAs(wordPath)
+  const wordText = (await mammoth.extractRawText({ buffer: await readFile(wordPath) })).value
+  for (const text of ['学生工作', '修订完整正文', '荣誉奖项', '2023年一等奖学金', '其他补充', '擅长数据分析与沟通']) assert.ok(wordText.includes(text), `DOCX missing ${text}`)
+  const importedPdfDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'PDF', exact: true }).click()
+  const importedPdfFile = await importedPdfDownload
+  const importedPdfPath = new URL('../.cache/batch-check/import.pdf', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')
+  await importedPdfFile.saveAs(importedPdfPath)
+  const importedPdfBytes = await readFile(importedPdfPath)
+  const importedPdfText = await page.evaluate(async (bytes) => {
+    const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs')
+    pdfjs.GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/build/pdf.worker.mjs'
+    const document = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise
+    const texts = []
+    for (let index = 1; index <= document.numPages; index++) texts.push((await (await document.getPage(index)).getTextContent()).items.map((item) => item.str).join(''))
+    await document.destroy()
+    return texts.join('\n')
+  }, Array.from(importedPdfBytes))
+  for (const text of ['学生工作', '修订完整正文', '荣誉奖项', '2023年一等奖学金', '其他补充', '擅长数据分析与沟通']) assert.ok(importedPdfText.includes(text), `PDF missing ${text}`)
+  const multipage = structuredClone(uploaded.content)
+  multipage.style = { ...multipage.style, fontFamily: 'serif', lineHeight: 1.6 }
+  multipage.skills.other = Array.from({ length: 85 }, (_, index) => `补充经历第${index + 1}条：保留原始内容、项目数字和完整日期。`)
+  await db.query('update resumes set content=$1 where id=$2', [JSON.stringify(multipage), uploaded.id])
+  await page.reload()
+  const previewFrame = page.frameLocator('iframe[title="简历预览"]')
+  await previewFrame.locator('#resume-page-stack .resume-page-frame').nth(1).waitFor()
+  const previewPages = await previewFrame.locator('#resume-page-stack .resume-page-frame').count()
+  assert.ok(previewPages >= 2, 'Long resume should have multiple preview pages')
+  assert.ok((await previewFrame.locator('#resume-page-stack').textContent()).includes('补充经历第85条'))
+  assert.ok(await previewFrame.locator('#resume-page-stack [data-anchor-keys]').count() > 0, 'JD anchor targets should remain available')
+  const longPdfDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'PDF', exact: true }).click()
+  const longPdfFile = await longPdfDownload
+  const longPdfPath = new URL('../.cache/batch-check/import-multipage.pdf', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')
+  await longPdfFile.saveAs(longPdfPath)
+  const longPdfBytes = await readFile(longPdfPath)
+  assert.ok(longPdfBytes.includes(Buffer.from('/FontFile2')), 'Serif Chinese font must be embedded')
+  const pdfDetails = await page.evaluate(async (bytes) => {
+    const pdfjs = await import('/node_modules/pdfjs-dist/build/pdf.mjs')
+    pdfjs.GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/build/pdf.worker.mjs'
+    const document = await pdfjs.getDocument({ data: new Uint8Array(bytes) }).promise
+    const texts = []
+    for (let index = 1; index <= document.numPages; index++) texts.push((await (await document.getPage(index)).getTextContent()).items.map((item) => item.str).join(''))
+    await document.destroy()
+    return { count: texts.length, text: texts.join('\n') }
+  }, Array.from(longPdfBytes))
+  assert.ok(pdfDetails.count >= 2 && pdfDetails.text.includes('补充经历第85条'), 'Multi-page PDF must include the last entry')
+  const longWordDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Word', exact: true }).click()
+  const longWordFile = await longWordDownload
+  const longWordPath = new URL('../.cache/batch-check/import-multipage.docx', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')
+  await longWordFile.saveAs(longWordPath)
+  const longWordText = (await mammoth.extractRawText({ buffer: await readFile(longWordPath) })).value
+  assert.ok(longWordText.includes('补充经历第85条'), 'Multi-page DOCX must include the last entry')
+  if (process.env.RESUME_VISUAL_QA === '1') {
+    for (const sample of ['bank', 'fan', 'hu']) {
+      const samplePath = new URL(`../.cache/resume-import-eval/${sample}/replayed-data.json`, import.meta.url)
+      if (!existsSync(samplePath)) continue
+      const sampleData = JSON.parse(await readFile(samplePath, 'utf8'))
+      await db.query('update resumes set content=$1 where id=$2', [JSON.stringify(sampleData), uploaded.id])
+      await page.reload()
+      await previewFrame.locator('#resume-page-stack .resume-page-frame').first().waitFor()
+      await page.screenshot({ path: new URL(`../.cache/batch-check/${sample}-editor.png`, import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'), fullPage: true })
+      const samplePages = await previewFrame.locator('#resume-page-stack .resume-page-frame').count()
+      for (let index = 0; index < samplePages; index++) {
+        await previewFrame.locator('#resume-page-stack .resume-page-frame').nth(index).screenshot({ path: new URL(`../.cache/batch-check/${sample}-preview-${index + 1}.png`, import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1') })
+      }
+      console.log(JSON.stringify({ sample, samplePages }))
+    }
+  }
   await page.goto(`${origin}/editor?resumeId=${resume}&tab=jd`)
   await page.getByRole('combobox', { name: '选择 JD 历史岗位', exact: true }).click()
   await page.getByRole('option', { name: /测试公司二/ }).waitFor()
@@ -336,7 +434,7 @@ try {
   await screenshot('analytics-mobile')
   assert.equal(await page.getByText('Unexpected Application Error!', { exact: true }).count(), 0)
   assert.equal(errors.length, 0, errors.join('\n'))
-  console.log(JSON.stringify({ passed: true, checks: ['overview', '15 transparent illustrations load', 'illustration selection and independent theme persist across reload', 'plain style restoration', 'illustration picker at 320px', 'decorative layer does not intercept clicks', 'membership transfer through RPC and PostgreSQL', 'counts refresh', 'batch creation', 'desktop/mobile layout', 'drawer', 'editor reload', 'Chromium PDF export with embedded fonts and no batch metadata', 'dirty navigation', 'upload parse and first save membership', 'JD entry filters jobs by batch'], apiRequests: requests.length, screenshots: '.cache/batch-check' }, null, 2))
+  console.log(JSON.stringify({ passed: true, checks: ['overview', '15 transparent illustrations load', 'illustration selection and independent theme persist across reload', 'plain style restoration', 'illustration picker at 320px', 'decorative layer does not intercept clicks', 'membership transfer through RPC and PostgreSQL', 'counts refresh', 'batch creation', 'desktop/mobile layout', 'drawer', 'editor reload', 'Chromium PDF export with embedded fonts and no batch metadata', 'dirty navigation', 'upload, multiline edit, save, reload, PDF and DOCX categories', 'multi-page preview, PDF and DOCX with serif font, line height and anchors', 'JD entry filters jobs by batch'], apiRequests: requests.length, previewPages, pdfPages: pdfDetails.count, screenshots: '.cache/batch-check' }, null, 2))
 } catch (error) {
   await screenshot('failure')
   console.error(JSON.stringify({ url: page.url(), errors, requests: requests.slice(-15), alerts: await page.locator('[role="alert"]').allTextContents(), buttons: await page.getByRole('button').allTextContents() }, null, 2))

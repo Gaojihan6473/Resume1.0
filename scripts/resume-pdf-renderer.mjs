@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
-const heroImagePath = path.join(repoRoot, 'src', 'assets', 'hero.png')
-const schoolTagOptions = new Set(['985', '211'])
 const sectionIds = ['education', 'internships', 'projects', 'summary', 'skills']
 
 const defaultResumeData = {
@@ -35,6 +33,9 @@ const defaultResumeData = {
     languages: [],
     certificates: [],
     interests: [],
+    studentWork: [],
+    awards: [],
+    other: [],
   },
   style: {
     fontFamily: 'system',
@@ -44,12 +45,13 @@ const defaultResumeData = {
     pagePadding: 24,
     pageHorizontalPadding: 24,
     letterSpacing: 0,
+    headerAlign: 'left',
+    datePlacement: 'right',
   },
   sectionOrder: sectionIds,
 }
 
 const embeddedFontCssCache = new Map()
-let defaultAvatarDataUrl = null
 const cjkRadicalReplacements = new Map([
   ['\u2ECB', '\u8F66'],
   ['\u2ED3', '\u957F'],
@@ -195,6 +197,9 @@ function normalizeResumeData(input) {
       languages: asStringArray(skillsSource.languages),
       certificates: asStringArray(skillsSource.certificates),
       interests: asStringArray(skillsSource.interests),
+      studentWork: asStringArray(skillsSource.studentWork),
+      awards: asStringArray(skillsSource.awards),
+      other: asStringArray(skillsSource.other),
     },
     style: {
       fontFamily: styleSource.fontFamily === 'serif' ? 'serif' : styleSource.fontFamily === 'sans-serif' ? 'sans-serif' : 'system',
@@ -204,6 +209,8 @@ function normalizeResumeData(input) {
       pagePadding: asNumber(styleSource.pagePadding, defaultResumeData.style.pagePadding),
       pageHorizontalPadding: asNumber(styleSource.pageHorizontalPadding, defaultResumeData.style.pageHorizontalPadding),
       letterSpacing: asNumber(styleSource.letterSpacing, defaultResumeData.style.letterSpacing),
+      headerAlign: styleSource.headerAlign === 'center' ? 'center' : 'left',
+      datePlacement: styleSource.datePlacement === 'left' ? 'left' : 'right',
     },
     sectionOrder: [
       ...sectionOrder.filter((section, index) => sectionOrder.indexOf(section) === index),
@@ -351,19 +358,11 @@ export function getEmbeddedFontCss(fontFamily = 'sans') {
   return embeddedFontCssCache.get(familyKey)
 }
 
-function getDefaultAvatarDataUrl() {
-  if (!defaultAvatarDataUrl) {
-    const base64 = fs.readFileSync(heroImagePath).toString('base64')
-    defaultAvatarDataUrl = `data:image/png;base64,${base64}`
-  }
-  return defaultAvatarDataUrl
-}
-
 function safeImageUrl(value) {
   const trimmed = value.trim()
-  if (!trimmed) return getDefaultAvatarDataUrl()
+  if (!trimmed) return ''
   if (/^https?:\/\//i.test(trimmed) || /^data:image\//i.test(trimmed) || /^blob:/i.test(trimmed)) return trimmed
-  return getDefaultAvatarDataUrl()
+  return ''
 }
 
 function joinWithSeparator(parts) {
@@ -387,7 +386,6 @@ function renderEducation(data) {
   if (data.education.length === 0) return ''
   const children = data.education.map((edu) => {
     const tags = edu.schoolTags
-      .filter((tag) => schoolTagOptions.has(tag))
       .map((tag) => `<span class="school-tag">${escapeHtml(tag)}</span>`)
       .join('')
     const details = [edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).map(escapeHtml).join(' | ')
@@ -480,17 +478,18 @@ function renderSummary(data, bodyFontSize, lineHeight) {
 
 function renderSkills(data) {
   const { skills } = data
-  const hasSkills = skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0
+  const hasSkills = skills.technical.length > 0 || skills.languages.length > 0 || skills.certificates.length > 0 || skills.interests.length > 0 || skills.studentWork.length > 0 || skills.awards.length > 0 || skills.other.length > 0
   if (!hasSkills) return ''
 
   const rows = [
-    skills.technical.length > 0 ? `<div class="pagination-unit"><strong>技术技能：</strong>${escapeHtml(skills.technical.join('、'))}</div>` : '',
+    skills.technical.length > 0 ? `<div class="pagination-unit">${/^(?:技术技能|技术能力)\s*[:：]/.test(skills.technical[0]) ? '' : '<strong>技术技能：</strong>'}${escapeHtml(skills.technical.join('、'))}</div>` : '',
     skills.languages.length > 0 ? `<div class="pagination-unit"><strong>语言能力：</strong>${escapeHtml(skills.languages.join('、'))}</div>` : '',
     skills.certificates.length > 0 ? `<div class="pagination-unit"><strong>证书资格：</strong>${escapeHtml(skills.certificates.join('、'))}</div>` : '',
     skills.interests.length > 0 ? `<div class="pagination-unit"><strong>兴趣爱好：</strong>${escapeHtml(skills.interests.join('、'))}</div>` : '',
+    ...['studentWork', 'awards', 'other'].flatMap((field) => skills[field].map((text) => `<div class="pagination-unit" style="white-space:pre-wrap"><strong>${{studentWork: '学生工作', awards: '荣誉奖项', other: '其他补充'}[field]}：</strong>${escapeHtml(text)}</div>`)),
   ].join('')
 
-  return renderSection('技能证书', `<div class="skills-block">${rows}</div>`)
+  return renderSection('技能与其他', `<div class="skills-block">${rows}</div>`)
 }
 
 function renderSections(data, bodyFontSize, lineHeight) {
@@ -578,6 +577,12 @@ export function buildResumePdfHtml(input, title = '') {
     .header-main {
       min-width: 0;
       flex: 1 1 auto;
+    }
+    .header-centered .header-main {
+      text-align: center;
+    }
+    .header-centered .header-line {
+      justify-content: center;
     }
     h1 {
       margin: 0;
@@ -668,6 +673,9 @@ export function buildResumePdfHtml(input, title = '') {
       flex: 0 0 auto;
       white-space: nowrap;
     }
+    .dates-left .item-date {
+      order: -1;
+    }
     .school-name {
       display: flex;
       flex-wrap: wrap;
@@ -725,7 +733,7 @@ export function buildResumePdfHtml(input, title = '') {
   </style>
 </head>
 <body>
-  <main class="resume-preview">
+  <main class="resume-preview${style.headerAlign === 'center' ? ' header-centered' : ''}${style.datePlacement === 'left' ? ' dates-left' : ''}">
     <header class="resume-header">
       <div class="header-row">
         <div class="header-main">
@@ -733,9 +741,9 @@ export function buildResumePdfHtml(input, title = '') {
           ${contactLine ? `<div class="header-line contact-line">${contactLine}</div>` : ''}
           ${targetLine ? `<div class="header-line target-line">${targetLine}</div>` : ''}
         </div>
-        <div class="avatar-box">
+        ${avatarUrl ? `<div class="avatar-box">
           <img src="${escapeHtml(avatarUrl)}" alt="头像">
-        </div>
+        </div>` : ''}
       </div>
     </header>
     ${renderSections(data, bodyFontSize, style.lineHeight)}

@@ -72,6 +72,9 @@ export interface Skills {
   languages: string[]
   certificates: string[]
   interests: string[]
+  studentWork: string[]
+  awards: string[]
+  other: string[]
 }
 
 export interface StyleSettings {
@@ -82,6 +85,8 @@ export interface StyleSettings {
   pagePadding: number
   pageHorizontalPadding: number
   letterSpacing: number
+  headerAlign: 'left' | 'center'
+  datePlacement: 'left' | 'right'
 }
 
 export type SectionId = 'education' | 'internships' | 'projects' | 'summary' | 'skills'
@@ -103,7 +108,10 @@ export interface ParsedResult {
   data: ResumeData
   rawText: string
   parseLog: string[]
+  warnings?: string[]
 }
+
+export type ParseStage = '读取文件' | '识别内容' | '检查完整性' | '补充识别'
 
 export type ParserStatus = 'idle' | 'parsing' | 'success' | 'error'
 
@@ -111,6 +119,8 @@ export interface AppState {
   resumeData: ResumeData
   parseStatus: ParserStatus
   parseError: string | null
+  parseStage: ParseStage | null
+  parseWarnings: string[]
   rawText: string
   zoom: number
   showMultiPage: boolean
@@ -203,6 +213,9 @@ export const createDefaultResumeData = (): ResumeData => ({
     languages: [],
     certificates: [],
     interests: [],
+    studentWork: [],
+    awards: [],
+    other: [],
   },
   style: {
     fontFamily: 'system',
@@ -212,6 +225,8 @@ export const createDefaultResumeData = (): ResumeData => ({
     pagePadding: 24,
     pageHorizontalPadding: 24,
     letterSpacing: 0,
+    headerAlign: 'left',
+    datePlacement: 'right',
   },
   sectionOrder: ['education', 'internships', 'projects', 'summary', 'skills'],
 })

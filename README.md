@@ -5,7 +5,8 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 ## Features
 
 - Upload and parse resume files
-- Rule-based section extraction (basic info, education, internships, projects, summary, skills)
+- Source-backed AI import with page images for PDFs, native DOCX/TXT content, completeness checks, and rule-based fallback
+- Edit student work, awards, and other supplementary content as multiline entries in 技能与其他
 - Visual editor + live A4 preview from the same HTML used for PDF export
 - Save/load resumes with Supabase
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
@@ -46,14 +47,22 @@ npm run check:encoding
 
 ## Notes
 
-- Resume/JD parsing calls are proxied through the `minimax-chat` Supabase Edge Function. Configure `MINIMAX_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
+- AI resume import uses DeepSeek `deepseek-flash` through the `deepseek-chat` Edge Function. PDFs send bounded inline page images and positioned text blocks; DOCX/TXT send native content blocks. Model output identifies sections and source block references; the client assembles the original text, checks missing or conflicting blocks, retries the affected region once, and retains uncertain text in 其他补充 with a review warning. Rule parsing remains available if AI fails. Scans that cannot be read show an upload warning. Old `.doc` files require conversion to DOCX or PDF before upload.
+- PDF imports keep the source section order, infer name/date alignment and body font size from text coordinates, remove header text already represented by fields, and join physical PDF line wraps inside each content item. The editable preview preserves the source's text layout where possible; photographs and decorative color blocks are not reconstructed. A resume with no uploaded avatar does not show a placeholder image.
+- Set `VITE_RESUME_IMPORT_MODE=legacy` only to roll back resume import to the previous MiniMax route. This does not remove the new data categories. Keep `MINIMAX_API_KEY` on the Edge Function for this rollback and existing MiniMax calls; never use `VITE_` for API keys.
 - JD analysis calls are proxied through the `deepseek-chat` Supabase Edge Function and use `deepseek-v4-flash`. Configure `DEEPSEEK_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
+- Existing resumes are normalized on read: absent `studentWork`, `awards`, and `other` arrays become empty arrays. New content survives editing, saving, copying, preview, PDF, and Word export. Import status shows 读取文件、识别内容、检查完整性 and, when needed, 补充识别. Requests are isolated so cancelling or uploading a new file cannot apply an earlier result.
 - Resume Agent uses the separate `resume-agent` Edge Function. The frontend is enabled by default and can be rolled back per environment with `VITE_RESUME_AGENT_ENABLED=false`; keep server-side `RESUME_AGENT_ENABLED=true` after deploying the function. The default Eval command validates 20 synthetic fixtures locally; add `-- --live` only for an explicit local DeepSeek run.
 - Login uses the `auth-sign-in` Supabase Edge Function: it verifies an `sk-...` key against `public.valid_keys`, then exchanges a server-generated magic-link token for a Supabase Auth session. Configure `SUPABASE_SERVICE_ROLE_KEY` for auth and AI Edge Functions.
 - The `resumes` storage bucket is private. The frontend stores object paths in `file_url` / `preview_url` and resolves them to signed URLs when rendering.
 - The editor preview renders the same A4 HTML document that is sent to Playwright for PDF export. In local `npm run dev`, Vite serves `/render-resume-pdf` directly. On Vercel, `/render-resume-pdf` is rewritten to the Node Function in `api/render-resume-pdf.js`. For a separate render service, set `VITE_PDF_RENDER_URL`.
 - For production, set `ALLOWED_ORIGINS` on auth Edge Functions to a comma-separated list of trusted browser origins.
 - Production build uses code splitting for parser/export modules.
+- Import logs contain only stage, timing, block counts, and error category; raw resumes, images, and credentials must not be logged or committed. No cross-user parsing cache is used.
+
+### Resume import release order
+
+Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; verify multi-page previews and PDF/DOCX exports. Release the compatible `deepseek-chat` Edge Function and PDF renderer first, then the frontend. The renderer normalizes old and new resume data. Confirm `VITE_SUPABASE_URL` and `VITE_EDGE_FUNCTIONS_URL` point to the intended Supabase project before a release. This change does not deploy those services automatically.
 
 ### 批次工作空间与迁移
 

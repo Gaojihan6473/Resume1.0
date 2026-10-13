@@ -103,7 +103,10 @@ function hasPreviewableContent(resumeData: ResumeData): boolean {
     resumeData.skills.technical.length > 0 ||
     resumeData.skills.languages.length > 0 ||
     resumeData.skills.certificates.length > 0 ||
-    resumeData.skills.interests.length > 0
+    resumeData.skills.interests.length > 0 ||
+    resumeData.skills.studentWork.length > 0 ||
+    resumeData.skills.awards.length > 0 ||
+    resumeData.skills.other.length > 0
   )
 }
 

@@ -186,6 +186,9 @@ function normalizeSkills(value: unknown): Skills {
     languages: asStringArray(source.languages),
     certificates: asStringArray(source.certificates),
     interests: asStringArray(source.interests),
+    studentWork: asStringArray(source.studentWork),
+    awards: asStringArray(source.awards),
+    other: asStringArray(source.other),
   }
 }
 
@@ -203,6 +206,8 @@ function normalizeStyle(value: unknown, defaults: StyleSettings): StyleSettings 
     pagePadding: asNumber(source.pagePadding, defaults.pagePadding),
     pageHorizontalPadding: asNumber(source.pageHorizontalPadding, defaults.pageHorizontalPadding),
     letterSpacing: asNumber(source.letterSpacing, defaults.letterSpacing),
+    headerAlign: source.headerAlign === 'center' ? 'center' : defaults.headerAlign,
+    datePlacement: source.datePlacement === 'left' ? 'left' : defaults.datePlacement,
   }
 }
 
