@@ -109,7 +109,7 @@ export async function createResume(
 export async function updateResumePreviewUrl(
   id: string,
   previewUrl: string,
-  options: { touchUpdatedAt?: boolean } = {}
+  options: { touchUpdatedAt?: boolean; expectedFileUrl?: string | null } = {}
 ): Promise<ResumesResponse> {
   try {
     console.log('[updateResumePreviewUrl] Updating resume', id, 'with URL:', previewUrl)
@@ -126,13 +126,16 @@ export async function updateResumePreviewUrl(
       updates.updated_at = new Date().toISOString()
     }
 
-    const { data: resume, error } = await supabase
+    let query = supabase
       .from('resumes')
       .update(updates)
       .eq('id', id)
       .eq('user_id', session.user.id)
-      .select()
-      .single()
+    if (options.expectedFileUrl !== undefined) {
+      const expectedPath = getResumeAssetPath(options.expectedFileUrl)
+      query = expectedPath === null ? query.is('file_url', null) : query.eq('file_url', expectedPath)
+    }
+    const { data: resume, error } = await query.select().single()
 
     if (error) {
       console.error('[updateResumePreviewUrl] Error:', error)

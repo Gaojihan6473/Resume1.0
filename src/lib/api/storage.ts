@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { v4 as uuidv4 } from 'uuid'
 
 const RESUME_BUCKET = 'resumes'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
@@ -66,12 +67,22 @@ export function invalidateResumeAssetUrl(value: string | null | undefined) {
   if (path) signedUrlCache.delete(path)
 }
 
-export async function resolveResumeAssetUrls<T extends { file_url: string | null; preview_url: string | null }>(
+export async function resolveResumeAssetUrls<T extends { id?: string; file_url: string | null; preview_url: string | null }>(
   resume: T
 ): Promise<T> {
+  const foreignLegacyAsset = (value: string | null, folder: string, extension: string) => {
+    const path = getResumeAssetPath(value)
+    if (!resume.id || !path) return false
+    const match = path.match(new RegExp(`^[^/]+/${folder}/([^/]+)\\.${extension}$`))
+    return !!match && match[1] !== resume.id
+  }
+  // Old copies may already reference a mutable source PDF that has changed.
+  // Display their own structured content until saving creates a fresh snapshot.
+  const invalidPdf = foreignLegacyAsset(resume.file_url, 'generated', 'pdf')
+  const invalidPreview = invalidPdf || foreignLegacyAsset(resume.preview_url, 'previews', 'png')
   const [fileUrl, previewUrl] = await Promise.all([
-    getSignedResumeAssetUrl(resume.file_url),
-    getSignedResumeAssetUrl(resume.preview_url),
+    getSignedResumeAssetUrl(invalidPdf ? null : resume.file_url),
+    getSignedResumeAssetUrl(invalidPreview ? null : resume.preview_url),
   ])
 
   return {
@@ -125,13 +136,14 @@ export async function uploadGeneratedResumePdf(
       return { success: false, error: '未登录' }
     }
 
-    const fileName = `${session.user.id}/generated/${resumeId}.pdf`
+    // Copies retain these URLs as a snapshot. Never overwrite a previous version.
+    const fileName = `${session.user.id}/generated/${resumeId}/${uuidv4()}.pdf`
     const { error: uploadError } = await supabase.storage
       .from(RESUME_BUCKET)
       .upload(fileName, pdfBlob, {
         cacheControl: '3600',
         contentType: 'application/pdf',
-        upsert: true,
+        upsert: false,
       })
 
     if (uploadError) {
@@ -185,14 +197,14 @@ export async function uploadResumePreview(
       return { success: false, error: '未登录' }
     }
 
-    const fileName = `${session.user.id}/previews/${resumeId}.png`
+    const fileName = `${session.user.id}/previews/${resumeId}/${uuidv4()}.png`
     console.log('[uploadResumePreview] Uploading to:', fileName, 'blob size:', imageBlob.size)
 
     const { error: uploadError } = await supabase.storage
       .from(RESUME_BUCKET)
       .upload(fileName, imageBlob, {
         cacheControl: '3600',
-        upsert: true,
+        upsert: false,
       })
 
     if (uploadError) {

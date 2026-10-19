@@ -9,8 +9,14 @@ let activeParseController: AbortController | null = null
 let parseRunId = 0
 
 const cloneResumeData = (data: unknown) => normalizeResumeData(data)
+const invalidateParse = () => {
+  parseRunId += 1
+  activeParseController?.abort()
+  activeParseController = null
+}
 
 export const useResumeStore = create<AppState>((set, get) => ({
+  documentSessionId: uuidv4(),
   resumeData: createDefaultResumeData(),
   parseStatus: 'idle',
   parseError: null,
@@ -36,19 +42,21 @@ export const useResumeStore = create<AppState>((set, get) => ({
     set({ cachedResumes: [], cachedResumesLastFetched: null }),
 
   setCurrentFile: (file) => {
-    parseRunId += 1
-    activeParseController?.abort()
-    activeParseController = null
-    set({ currentFile: file, parseStatus: 'idle', parseStage: null, parseError: null, parseWarnings: [] })
+    invalidateParse()
+    set({ documentSessionId: uuidv4(), currentFile: file, parseStatus: 'idle', parseStage: null, parseError: null, parseWarnings: [] })
   },
 
   clearCurrentFile: () => set({ currentFile: null }),
 
-  setResumeData: (data, title) => set({
-    resumeData: normalizeResumeData(data, title),
-    parseWarnings: [],
-    parseStage: null,
-  }),
+  setResumeData: (data, title) => {
+    invalidateParse()
+    set({
+      documentSessionId: uuidv4(),
+      resumeData: normalizeResumeData(data, title),
+      parseWarnings: [],
+      parseStage: null,
+    })
+  },
 
   updateBasic: (basic) =>
     set((state) => ({
@@ -327,7 +335,12 @@ export const useResumeStore = create<AppState>((set, get) => ({
     set((state) => ({
       resumeData: {
         ...state.resumeData,
-        summary: { ...state.resumeData.summary, ...summary },
+        summary: {
+          ...state.resumeData.summary,
+          ...summary,
+          // Rich text is authoritative once edited; legacy fields must not restore deleted text.
+          ...('content' in summary ? { text: '', highlights: [] } : {}),
+        },
       },
       isDirty: true,
     })),
@@ -374,37 +387,55 @@ export const useResumeStore = create<AppState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
   setRawText: (text) => set({ rawText: text }),
   setIsAIEnabled: (enabled) => set({ isAIEnabled: enabled }),
-  setCurrentResumeId: (id) => set((state) => ({
-    currentResumeId: id,
-    savedResumeSnapshot: id ? cloneResumeData(state.resumeData) : null,
-  })),
+  setCurrentResumeId: (id) => {
+    if (id !== get().currentResumeId) invalidateParse()
+    set((state) => ({
+      documentSessionId: id !== state.currentResumeId ? uuidv4() : state.documentSessionId,
+      currentResumeId: id,
+      savedResumeSnapshot: id ? cloneResumeData(state.resumeData) : null,
+    }))
+  },
   setIsDirty: (dirty) => set({ isDirty: dirty }),
-  markCurrentResumeSaved: (data) => set((state) => ({
-    resumeData: data ? cloneResumeData(data) : state.resumeData,
-    savedResumeSnapshot: cloneResumeData(data ?? state.resumeData),
-    isDirty: false,
-  })),
-  discardCurrentChanges: () => set((state) => {
-    if (!state.currentResumeId || !state.savedResumeSnapshot) {
-      return {
-        resumeData: createDefaultResumeData(),
-        parseStatus: 'idle' as const,
-        parseError: null,
-        rawText: '',
-        currentResumeId: null,
-        isDirty: false,
-        currentFile: null,
-        savedResumeSnapshot: null,
-      }
-    }
+  markCurrentResumeSaved: (data, expected) => set((state) => {
+    if (expected && state.documentSessionId !== expected.documentSessionId) return state
+    const editedDuringSave = !!expected && state.resumeData !== expected.sourceData
     return {
-      resumeData: cloneResumeData(state.savedResumeSnapshot),
-      isDirty: false,
-      currentFile: null,
-      parseError: null,
-      parseStatus: 'success' as const,
+      resumeData: editedDuringSave ? state.resumeData : data ? cloneResumeData(data) : state.resumeData,
+      savedResumeSnapshot: cloneResumeData(data ?? state.resumeData),
+      isDirty: editedDuringSave,
+      ...(expected ? { currentResumeId: expected.resumeId, currentFile: null } : {}),
     }
   }),
+  discardCurrentChanges: () => {
+    invalidateParse()
+    set((state) => {
+      if (!state.currentResumeId || !state.savedResumeSnapshot) {
+        return {
+          documentSessionId: uuidv4(),
+          resumeData: createDefaultResumeData(),
+          parseStatus: 'idle' as const,
+          parseError: null,
+          parseStage: null,
+          parseWarnings: [],
+          rawText: '',
+          currentResumeId: null,
+          isDirty: false,
+          currentFile: null,
+          savedResumeSnapshot: null,
+        }
+      }
+      return {
+        documentSessionId: uuidv4(),
+        resumeData: cloneResumeData(state.savedResumeSnapshot),
+        isDirty: false,
+        currentFile: null,
+        parseError: null,
+        parseStage: null,
+        parseWarnings: [],
+        parseStatus: 'success' as const,
+      }
+    })
+  },
 
   parseFile: async (file) => {
     parseRunId += 1
@@ -416,6 +447,7 @@ export const useResumeStore = create<AppState>((set, get) => ({
     activeParseController = controller
     const startedAt = new Date().toISOString()
     set({
+      documentSessionId: uuidv4(),
       parseStatus: 'parsing',
       parseError: null,
       parseWarnings: [],
@@ -463,19 +495,14 @@ export const useResumeStore = create<AppState>((set, get) => ({
   },
 
   cancelParse: () => {
-    parseRunId += 1
-    if (activeParseController) {
-      activeParseController.abort()
-      activeParseController = null
-    }
+    invalidateParse()
     set({ parseStatus: 'idle', parseError: null, parseStage: null, parseWarnings: [] })
   },
 
   resetAll: () => {
-    parseRunId += 1
-    activeParseController?.abort()
-    activeParseController = null
+    invalidateParse()
     set({
+      documentSessionId: uuidv4(),
       resumeData: createDefaultResumeData(),
       parseStatus: 'idle',
       parseError: null,

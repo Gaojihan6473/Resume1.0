@@ -116,6 +116,7 @@ export type ParseStage = '读取文件' | '识别内容' | '检查完整性' | '
 export type ParserStatus = 'idle' | 'parsing' | 'success' | 'error'
 
 export interface AppState {
+  documentSessionId: string
   resumeData: ResumeData
   parseStatus: ParserStatus
   parseError: string | null
@@ -173,7 +174,7 @@ export interface AppState {
   setIsAIEnabled: (enabled: boolean) => void
   setCurrentResumeId: (id: string | null) => void
   setIsDirty: (dirty: boolean) => void
-  markCurrentResumeSaved: (data?: ResumeData) => void
+  markCurrentResumeSaved: (data?: ResumeData, expected?: { documentSessionId: string; sourceData: ResumeData; resumeId: string }) => void
   discardCurrentChanges: () => void
 
   parseFile: (file: File) => Promise<void>

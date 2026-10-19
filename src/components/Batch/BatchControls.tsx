@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore'
 import { CustomSelect } from '../Application/CustomSelect'
 import { BatchStylePicker } from './BatchStylePicker'
 
-export function BatchSurface({ title, onClose, children, drawer = false }: { title: string; onClose: () => void; children: ReactNode; drawer?: boolean }) {
+export function BatchSurface({ title, onClose, onBackdropClose, children, drawer = false }: { title: string; onClose: () => void; onBackdropClose?: () => void; children: ReactNode; drawer?: boolean }) {
   const surface = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
   close.current = onClose
@@ -27,7 +27,7 @@ export function BatchSurface({ title, onClose, children, drawer = false }: { tit
     document.addEventListener('keydown', keydown)
     return () => { window.clearTimeout(timer); document.removeEventListener('keydown', keydown); previous?.focus() }
   }, [])
-  return <div className={`fixed inset-0 z-[150] flex bg-slate-950/25 backdrop-blur-sm ${drawer ? 'justify-end' : 'items-center justify-center p-4'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+  return <div className={`fixed inset-0 z-[150] flex bg-slate-950/25 backdrop-blur-sm ${drawer ? 'justify-end' : 'items-center justify-center p-4'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) (onBackdropClose || onClose)() }}>
     <div ref={surface} role="dialog" aria-modal="true" aria-label={title} className={`flex max-h-full flex-col bg-white shadow-2xl ${drawer ? 'h-full w-full sm:max-w-[640px]' : 'w-full max-w-lg rounded-3xl'}`}>
       <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-5"><h2 className="min-w-0 break-words pr-4 text-lg font-semibold text-slate-800">{title}</h2><button type="button" aria-label="关闭" onClick={onClose} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></header>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>

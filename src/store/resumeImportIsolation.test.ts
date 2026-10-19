@@ -36,4 +36,31 @@ describe('resume import isolation', () => {
     await old
     expect(useResumeStore.getState().resumeData.basic.name).toBe('最新结果')
   })
+
+  it('invalidates a pending import when an existing resume is selected', async () => {
+    let complete!: (value: ReturnType<typeof result>) => void
+    mocks.parseFile.mockImplementation(() => new Promise((resolve) => { complete = resolve }))
+    const store = useResumeStore.getState()
+    const run = store.parseFile(file('old'))
+    await vi.waitFor(() => expect(mocks.parseFile).toHaveBeenCalled())
+    store.setResumeData(result('已选简历').data)
+    store.setCurrentResumeId('selected-id'); store.setParseStatus('success'); store.setIsDirty(false)
+    store.updateBasic({ name: '新的编辑' })
+    complete(result('过期结果')); await run
+    expect(useResumeStore.getState().currentResumeId).toBe('selected-id')
+    expect(useResumeStore.getState().resumeData.basic.name).toBe('新的编辑')
+    expect(useResumeStore.getState().isDirty).toBe(true)
+  })
+
+  it('invalidates a pending import when current changes are discarded', async () => {
+    let complete!: (value: ReturnType<typeof result>) => void
+    mocks.parseFile.mockImplementation(() => new Promise((resolve) => { complete = resolve }))
+    const store = useResumeStore.getState()
+    const run = store.parseFile(file('old'))
+    await vi.waitFor(() => expect(mocks.parseFile).toHaveBeenCalled())
+    store.discardCurrentChanges()
+    complete(result('过期结果')); await run
+    expect(useResumeStore.getState().parseStatus).toBe('idle')
+    expect(useResumeStore.getState().resumeData.basic.name).toBe('')
+  })
 })

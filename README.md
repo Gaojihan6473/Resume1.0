@@ -9,6 +9,7 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Edit student work, awards, and other supplementary content as multiline entries in 技能与其他
 - Visual editor + live A4 preview from the same HTML used for PDF export
 - Save/load resumes with Supabase
+- Saving preserves edits made while the request is in flight; responses from another document cannot replace the current editor. Closing an import or switching documents cancels the previous parse.
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
 - Resume cards in the delivery dashboard offer an edit shortcut; JD analysis is accessed inside the resume editor.
 - The signed-in homepage shows recruitment batch cards and two side-by-side white panels of recently edited resumes and jobs, with the latest three items in each list. Visible category headings and subtle dividers organize compact rows; only the jobs heading offers a borderless text-and-arrow link to view all jobs. Narrow screens stack the panels. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
@@ -55,7 +56,12 @@ npm run check:encoding
 - Resume Agent uses the separate `resume-agent` Edge Function. The frontend is enabled by default and can be rolled back per environment with `VITE_RESUME_AGENT_ENABLED=false`; keep server-side `RESUME_AGENT_ENABLED=true` after deploying the function. The default Eval command validates 20 synthetic fixtures locally; add `-- --live` only for an explicit local DeepSeek run.
 - Login uses the `auth-sign-in` Supabase Edge Function: it verifies an `sk-...` key against `public.valid_keys`, then exchanges a server-generated magic-link token for a Supabase Auth session. Configure `SUPABASE_SERVICE_ROLE_KEY` for auth and AI Edge Functions.
 - The `resumes` storage bucket is private. The frontend stores object paths in `file_url` / `preview_url` and resolves them to signed URLs when rendering.
+- Generated PDFs and thumbnails use a new immutable object path for each version. Copies may share the saved snapshot, while later saves of the original write new objects and leave that snapshot intact. Existing fixed-path snapshots remain readable for their original resume and are no longer overwritten by new saves. Historical copies pointing at another resume's mutable PDF fall back to their own structured content; their next save creates fresh assets.
+- Clearing imported personal-summary text is an explicit edit; saving does not restore the legacy text/highlights fields.
 - The editor preview renders the same A4 HTML document that is sent to Playwright for PDF export. In local `npm run dev`, Vite serves `/render-resume-pdf` directly. On Vercel, `/render-resume-pdf` is rewritten to the Node Function in `api/render-resume-pdf.js`. For a separate render service, set `VITE_PDF_RENDER_URL`.
+- All PDF render entry points isolate client HTML: document scripts and network requests are disabled, active elements/attributes are removed, and only embedded `data:` images/fonts load. The normal avatar uploader already supplies an embedded image. Pagination geometry and server-embedded Chinese fonts are retained. Run `node scripts/pdf-render-security.check.mjs` with local Chromium to verify blocked requests, multipage Chinese text, and avatars.
+- Signing out clears local credentials before attempting remote revocation, so a network outage cannot restore the local session on reload. Remote revocation is best effort with a five-second timeout; local cleanup failures remain visible instead of reporting success.
+- In the Manage Batch drawer, clicking outside the drawer saves batch information changes before closing. If saving fails, the drawer stays open and shows the error.
 - For production, set `ALLOWED_ORIGINS` on auth Edge Functions to a comma-separated list of trusted browser origins.
 - Production build uses code splitting for parser/export modules.
 - Import logs contain only stage, timing, block counts, and error category; raw resumes, images, and credentials must not be logged or committed. No cross-user parsing cache is used.
@@ -70,9 +76,10 @@ Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; v
 - 首页仅纵向滚动。最近编辑采用双栏白色面板：桌面左侧简历、右侧岗位，各展示最近 3 条，窄屏上下堆叠。分类标题显示图标和当前展示数量，简历不设“查看全部”，岗位右上角提供无底色、无边框的文字加箭头链接进入全部岗位。每类内容共用一个圆角面板，内部通过细分隔线和留白组织紧凑条目，不为每条记录单独设置卡片边框和阴影；条目桌面高度为 100px。简历配缩略图与名称，岗位配统一图标、公司、状态和岗位名称；所属批次与编辑时间紧邻排列，批次可独立点击，条目支持整行打开和键盘焦点。求职方向、地点、投递渠道、关联简历和投递日期可在编辑页或详情查看。
 - 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明，右上角仅保留“管理批次”按钮，不显示批次切换下拉框。岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
 - `/batches/:batchId` 展示该批次的简历和岗位，正文标题使用“求职空间 > 当前批次”面包屑；点击“求职空间”返回首页，支持悬停、按下和键盘聚焦反馈，顶部品牌旁不显示导航。新建、上传和岗位解析自动使用当前批次。`/editor?resumeId=...` 支持直接打开、刷新恢复及未保存修改保护。岗位页、面板使用 `?batch=...` 统一范围，省略时查看全部批次。
+- 批次详情中的岗位卡片按最近修改时间倒序排列，先排序再分页；修改岗位信息或状态后，返回批次详情或刷新页面时，最近修改的岗位排在最前。
 - 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；侧栏在“首页”和“岗位”之间显示“空间”，点击返回当前简历所属批次的详情页，其他页面不显示此入口。未保存修改仍需确认。
 - 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。确认前展示完整影响清单。
-- 简历副本独立编辑，使用新的 ID、来源标记及资源路径，不复制 JD 分析和 Agent 历史。已有记录移动保留 ID 和历史。删除非空批次必须整体迁移到另一个批次，不生成副本；空的最后一个批次可直接删除。
+- 简历副本使用新的 ID 和来源标记独立编辑，不复制 JD 分析和 Agent 历史；复制时可引用同一份不可变 PDF/缩略图快照，后续保存写入新的资源路径，不改变其他副本。已有记录移动保留 ID 和历史。删除非空批次必须整体迁移到另一个批次，不生成副本；空的最后一个批次可直接删除。
 - 迁移脚本为 `supabase/migrations/20261007_recruitment_batches.sql`。为每个已有用户创建“默认批次”并回填已有内容，保留原 ID 与关联。新用户仅初始化一次；主动删除后不会自动重建。旧客户端未传 `batch_id` 的创建请求优先沿用关联简历批次，否则使用现存默认/最早批次；没有批次时明确报错。
 - 插画卡面上线前需应用 `supabase/migrations/20261008_batch_card_styles.sql`，为批次增加 `card_style` 字段；已有批次默认“纯色”，选项随批次同步保存。生成素材位于 `public/batch-covers/`，采用带透明通道的 WebP；生成提示词和风格清单见该目录的 `prompts.json`。
 - 数据库使用用户隔离、批次归属与同批次简历关联约束。预览与执行 RPC 复核影响集合，关联变化要求重新确认；批量操作使用事务与请求 ID，防止部分迁移和重复生成副本。

@@ -12,6 +12,8 @@ type ResumePdfRenderer = {
   buildResumePdfHtml: (resumeData: unknown, title?: string) => string
   getEmbeddedFontCss: (fontFamily?: string) => string
   sanitizeResumeText: (value: string) => string
+  createResumePdfPage: (browser: Browser) => Promise<Page>
+  setResumePdfPageContent: (page: Page, html: string) => Promise<void>
 }
 
 let rendererPromise: Promise<ResumePdfRenderer> | null = null
@@ -162,16 +164,14 @@ async function renderDevResumePdfOnce(
   let page: Page | null = null
 
   try {
-    page = await browser.newPage({
-      viewport: { width: 794, height: 1123 },
-      deviceScaleFactor: 1,
-    })
+    const renderer = await getRenderer()
+    page = await renderer.createResumePdfPage(browser)
 
     await page.emulateMedia({ media: 'print' })
     const content = html
       ? await injectEmbeddedResumeFonts(html, resumeData)
       : (await getRenderer()).buildResumePdfHtml(resumeData, title)
-    await page.setContent(content, { waitUntil: 'networkidle' })
+    await renderer.setResumePdfPageContent(page, content)
     await page.evaluate('document.fonts.ready')
     const pdf = await page.pdf({
       format: 'A4',

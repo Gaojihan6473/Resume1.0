@@ -1,5 +1,7 @@
-import { supabase, type AuthSession, type User } from '../supabase'
+import { forgetLocalAuthSession, storeAuthSession, type AuthSession, type User } from '../supabase'
 import { EDGE_FUNCTIONS_URL, getAuthHeaders } from './shared'
+
+let authOperation = 0
 
 export interface SignInResponse {
   success: boolean
@@ -16,6 +18,7 @@ export interface MeResponse {
 }
 
 export async function signIn(key: string): Promise<SignInResponse> {
+  const operation = ++authOperation
   try {
     const response = await fetch(`${EDGE_FUNCTIONS_URL}/auth-sign-in`, {
       method: 'POST',
@@ -24,9 +27,10 @@ export async function signIn(key: string): Promise<SignInResponse> {
     })
 
     const data = await response.json()
+    if (operation !== authOperation) return { success: false, error: '登录操作已取消' }
 
     if (data.success && data.session) {
-      const { error } = await supabase.auth.setSession({
+      const { error } = await storeAuthSession({
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
       })
@@ -42,20 +46,25 @@ export async function signIn(key: string): Promise<SignInResponse> {
 }
 
 export async function signOut(): Promise<{ success: boolean; error?: string }> {
+  authOperation += 1
+  let token: string | null
   try {
-    const headers = await getAuthHeaders()
-    const response = await fetch(`${EDGE_FUNCTIONS_URL}/auth-sign-out`, {
-      method: 'POST',
-      headers,
-    })
-
-    await supabase.auth.signOut()
-
-    return await response.json()
+    token = await forgetLocalAuthSession()
   } catch {
-    await supabase.auth.signOut()
-    return { success: true }
+    return { success: false, error: '本地会话清理失败，请重试退出登录' }
   }
+
+  if (!token) return { success: true }
+  try {
+    await fetch(`${EDGE_FUNCTIONS_URL}/auth-sign-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    })
+  } catch {
+    // The local session is gone even when global revocation is unavailable.
+  }
+  return { success: true }
 }
 
 export async function fetchCurrentUser(): Promise<MeResponse> {

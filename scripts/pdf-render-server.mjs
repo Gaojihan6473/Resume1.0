@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { buildResumePdfHtml, getEmbeddedFontCss, sanitizeResumeText } from './resume-pdf-renderer.mjs'
+import { buildResumePdfHtml, createResumePdfPage, getEmbeddedFontCss, sanitizeResumeText, setResumePdfPageContent } from './resume-pdf-renderer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -213,13 +213,10 @@ async function renderHtmlToPdfOnce(html) {
   let page = null
 
   try {
-    page = await browser.newPage({
-      viewport: { width: 794, height: 1123 },
-      deviceScaleFactor: 1,
-    })
+    page = await createResumePdfPage(browser)
 
     await page.emulateMedia({ media: 'print' })
-    await page.setContent(html, { waitUntil: 'networkidle' })
+    await setResumePdfPageContent(page, html)
     await page.evaluate(() => document.fonts.ready)
     return await page.pdf({
       format: 'A4',

@@ -38,9 +38,26 @@ export function BatchManager({ batch, initialTab = 'info', initialDelete = false
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ input: BatchTransferInput; result: BatchTransferPreview; requestId: string } | null>(null)
   const submitting = useRef(false)
+  const saving = useRef(false)
   const original = JSON.stringify(initialValue)
   const dirty = original !== JSON.stringify(value)
   const close = () => { if (!busy && (!dirty || window.confirm('批次信息尚未保存，确定放弃修改并关闭吗？'))) onClose() }
+  const save = async () => {
+    if (busy || saving.current) return
+    saving.current = true; setBusy(true); setError(null)
+    try {
+      const saved = await saveBatch(value, batch?.id)
+      useBatchStore.setState((state) => ({ batches: batch ? state.batches.map((item) => item.id === saved.id ? saved : item) : [saved, ...state.batches] }))
+      try { await refreshWorkspace() } catch { toast('批次已保存，内容刷新失败，请重新加载', 'error') }
+      toast('批次已保存', 'success'); onClose()
+    } catch (error) { setError(error instanceof Error ? error.message : '保存失败') }
+    finally { saving.current = false; setBusy(false) }
+  }
+  const closeFromBackdrop = () => {
+    if (busy || saving.current) return
+    if (batch && dirty) { void save(); return }
+    close()
+  }
   const sourceId = importing ? otherId : batch?.id
   const otherBatches = batches.filter((item) => item.id !== batch?.id)
   const items = (kind === 'resume'
@@ -81,7 +98,7 @@ export function BatchManager({ batch, initialTab = 'info', initialDelete = false
       if (message.includes('变化') || message.includes('不存在')) setPreview(null)
     } finally { submitting.current = false; setBusy(false) }
   }
-  return <BatchSurface title={batch ? `管理批次 · ${batch.name}` : '新建批次'} onClose={close} drawer>
+  return <BatchSurface title={batch ? `管理批次 · ${batch.name}` : '新建批次'} onClose={close} onBackdropClose={closeFromBackdrop} drawer>
     {batch && <div className="mb-6 flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="批次管理">
       {(['info', 'content'] as const).map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} disabled={busy} onClick={() => { setTab(item); setDeleting(false); setPreview(null) }} className={`flex-1 rounded-lg py-2 text-sm font-medium ${tab === item ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>{item === 'info' ? '批次信息' : '内容管理'}</button>)}
     </div>}
@@ -94,18 +111,7 @@ export function BatchManager({ batch, initialTab = 'info', initialDelete = false
       <p className="rounded-xl bg-blue-50 p-4 text-xs leading-6 text-blue-700">{preview.input.mode === 'delete' ? '简历与岗位整体迁移，原有内容和关联保留。删除后无法进入原批次。' : '关联岗位已计入上述清单。简历副本独立编辑，不复制原版本的分析历史。'}</p>
       <div className="flex gap-3"><button disabled={busy} onClick={() => setPreview(null)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm">返回调整</button><button disabled={busy} onClick={() => void submitTransfer()} className={batchButtonClass}>{busy ? '处理中…' : '确认执行'}</button></div>
     </div> : tab === 'info' ? <>
-      <form onSubmit={async (event) => {
-        event.preventDefault(); if (busy) return
-        setBusy(true); setError(null)
-        try {
-          const saved = await saveBatch(value, batch?.id)
-          useBatchStore.setState((state) => ({ batches: batch ? state.batches.map((item) => item.id === saved.id ? saved : item) : [saved, ...state.batches] }))
-          try { await refreshWorkspace() } catch { toast('批次已保存，内容刷新失败，请重新加载', 'error') }
-          toast('批次已保存', 'success'); onClose()
-        }
-        catch (error) { setError(error instanceof Error ? error.message : '保存失败') }
-        finally { setBusy(false) }
-      }}><fieldset disabled={busy}><BatchFields value={value} onChange={setValue} /><button disabled={busy || !value.name.trim()} className={`${batchButtonClass} mt-7`}>{busy ? '保存中…' : batch ? '保存修改' : '创建批次'}</button></fieldset></form>
+      <form onSubmit={(event) => { event.preventDefault(); void save() }}><fieldset disabled={busy}><BatchFields value={value} onChange={setValue} /><button disabled={busy || !value.name.trim()} className={`${batchButtonClass} mt-7`}>{busy ? '保存中…' : batch ? '保存修改' : '创建批次'}</button></fieldset></form>
       {batch && <div className="mt-10 border-t border-slate-100 pt-6">
         <button disabled={busy} onClick={() => { setDeleting(!deleting); setImporting(false); setOtherId('') }} className="flex items-center gap-2 text-sm text-rose-600"><Trash2 className="h-4 w-4" />删除批次</button>
         {deleting && <div className="mt-4 space-y-4 rounded-xl bg-rose-50/60 p-4"><p className="text-sm leading-6 text-slate-600">{hasContent ? '请选择接收全部简历和岗位的批次，迁移成功后再删除。' : '该批次没有内容，可以删除。'}</p>{hasContent && <TargetSelect batches={otherBatches} value={otherId} onChange={setOtherId} disabled={busy} />}{hasContent && !otherBatches.length && <p className="text-xs text-rose-600">请先关闭此面板并创建一个接收批次。</p>}<button disabled={busy || (hasContent && !otherId)} onClick={() => void prepare('delete')} className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm text-white disabled:opacity-50">预览并确认删除</button></div>}

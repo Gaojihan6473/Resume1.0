@@ -8,6 +8,7 @@ import { bindJDAnalysisHistoryUser } from './jdAnalysisHistoryStore'
 import { bindResumeAgentUser } from './resumeAgentSessionStore'
 
 const AUTHENTICATED_HINT_KEY = 'resume-authenticated'
+let authGeneration = 0
 
 function hasAuthenticatedHint(): boolean {
   try {
@@ -52,14 +53,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   signIn: async (key: string) => {
+    const generation = ++authGeneration
     set({ isLoading: true, error: null })
 
     if (!key.startsWith('sk-')) {
-      set({ error: '密钥格式不正确', isLoading: false })
+      set({ error: '密钥格式不正确', isLoading: false, authInitializing: false })
       return false
     }
 
     const result = await apiSignIn(key)
+    if (generation !== authGeneration) return false
 
     if (result.success && result.user) {
       if (get().user?.id !== result.user.id) { useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
@@ -67,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         user: result.user,
         isAuthenticated: true,
+        authInitializing: false,
         isLoading: false,
         error: null,
       })
@@ -78,16 +82,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({
       error: result.error || '登录失败',
       isLoading: false,
+      authInitializing: false,
     })
     return false
   },
 
   signOut: async () => {
+    const generation = ++authGeneration
     set({ isLoading: true })
     bindResumeAgentUser(null)
     bindJDAnalysisHistoryUser(null)
     useBatchStore.getState().reset()
-    await apiSignOut()
+    const result = await apiSignOut()
+    if (generation !== authGeneration) return
+    if (!result.success) {
+      set({ isLoading: false, authInitializing: false, error: result.error || '退出登录失败，请重试' })
+      return
+    }
     setAuthenticatedHint(false)
     useResumeStore.getState().resetAll()
     bindResumeAgentUser(null)
@@ -95,16 +106,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({
       user: null,
       isAuthenticated: false,
+      authInitializing: false,
       isLoading: false,
       error: null,
     })
   },
 
   checkSession: async () => {
+    const generation = authGeneration
     set({ authInitializing: true })
 
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
+      if (generation !== authGeneration) return
 
       if (error) {
         if (error.status === 400 || error.status === 401) {
@@ -153,6 +167,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         authInitializing: false,
       })
     } catch {
+      if (generation !== authGeneration) return
       set({
         authInitializing: false,
       })

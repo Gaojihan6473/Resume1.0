@@ -47,7 +47,9 @@ function mergeCachedResume(updatedResume: Resume) {
 
   setCachedResumes(
     cachedResumes.map((resume) =>
-      resume.id === updatedResume.id ? { ...resume, ...updatedResume } : resume
+      resume.id === updatedResume.id && resume.user_id === updatedResume.user_id
+        && getResumeAssetPath(resume.file_url) === getResumeAssetPath(updatedResume.file_url)
+        ? { ...resume, preview_url: updatedResume.preview_url } : resume
     ),
     cachedResumesLastFetched ?? Date.now()
   )
@@ -74,6 +76,7 @@ async function generateResumePreviewImage(resume: PreviewSourceResume, cacheKey:
 
     const updateResult = await updateResumePreviewUrl(resume.id, uploadResult.previewUrl, {
       touchUpdatedAt: false,
+      expectedFileUrl: resume.file_url,
     })
     if (!updateResult.success || !updateResult.resume) return null
 

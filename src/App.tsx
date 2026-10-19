@@ -10,6 +10,7 @@ import { EditorWorkspace } from './components/Batch/EditorWorkspace'
 import { BatchCreationPicker } from './components/Batch/BatchControls'
 import { useBatchStore } from './store/batchStore'
 import { batchPath } from './utils/batchWorkspace'
+import { shouldBlockResumeNavigation } from './utils/resumeNavigation'
 import { LegacyWorkspaceEntry } from './components/Batch/LegacyWorkspaceEntry'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
@@ -31,7 +32,13 @@ function AppContent() {
   const draftBatchId = useBatchStore((state) => state.draftBatchId)
   const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || new URLSearchParams(location.search).get('batch') || draftBatchId
   // Saving a new resume also updates its URL; read the latest save state at navigation time.
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => useResumeStore.getState().isDirty && currentLocation.pathname === '/editor' && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(currentLocation.search).get('resumeId') !== new URLSearchParams(nextLocation.search).get('resumeId') || new URLSearchParams(currentLocation.search).get('batch') !== new URLSearchParams(nextLocation.search).get('batch')))
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    const state = useResumeStore.getState()
+    const savedBatchId = state.cachedResumes.find((item) => item.id === state.currentResumeId)?.batch_id
+      || useBatchStore.getState().draftBatchId
+      || new URLSearchParams(currentLocation.search).get('batch')
+    return shouldBlockResumeNavigation(currentLocation, nextLocation, state, savedBatchId)
+  })
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)

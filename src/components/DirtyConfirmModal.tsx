@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Cloud, X, Loader2, AlertCircle } from 'lucide-react'
 import { toast } from './Toast'
 import { saveCurrentResumeToCloud } from '../utils/saveResume'
+import { useResumeStore } from '../store/resumeStore'
 
 type DirtyNavigationTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
@@ -45,12 +46,22 @@ export function DirtyConfirmModal({
     if (isSaving) return
     setIsSaving(true)
     setSaveError(null)
+    const documentSessionId = useResumeStore.getState().documentSessionId
 
     try {
       const result = await saveCurrentResumeToCloud()
       if (!result.success) {
         setSaveError(result.error || '保存失败')
         toast(result.error || '保存失败', 'error')
+        setIsSaving(false)
+        return
+      }
+
+      const current = useResumeStore.getState()
+      if (current.documentSessionId !== documentSessionId || current.isDirty) {
+        setSaveError(current.documentSessionId !== documentSessionId
+          ? '当前简历已变化，请确认后再切换'
+          : '保存期间有新的修改，请再次保存后切换')
         setIsSaving(false)
         return
       }
@@ -100,6 +111,8 @@ export function DirtyConfirmModal({
           </div>
           <button
             onClick={onClose}
+            disabled={isSaving}
+            aria-label="关闭未保存修改提示"
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
           >
             <X className="w-5 h-5" />

@@ -191,7 +191,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const sortedApplications = useMemo(
     () =>
       applications.filter((item) => !batchId || item.batch_id === batchId)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
     [applications, batchId]
   )
 
@@ -699,7 +699,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
 
       <UploadResumeModal
         open={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
+        onClose={() => { useResumeStore.getState().cancelParse(); setShowUploadModal(false) }}
         onAuthRequired={() => onAuthRequired?.('upload')}
       />
       {showBatchManager && batch && <BatchManager key={batch.id} batch={batch} onClose={() => setShowBatchManager(false)} onDeleted={() => navigate('/')} />}

@@ -1,4 +1,4 @@
-import { buildResumePdfHtml, getEmbeddedFontCss, sanitizeResumeText } from '../scripts/resume-pdf-renderer.mjs'
+import { buildResumePdfHtml, createResumePdfPage, getEmbeddedFontCss, sanitizeResumeText, setResumePdfPageContent } from '../scripts/resume-pdf-renderer.mjs'
 
 export const config = {
   maxDuration: 60,
@@ -187,13 +187,10 @@ async function renderHtmlToPdfOnce(html) {
   let page = null
 
   try {
-    page = await browser.newPage({
-      viewport: { width: 794, height: 1123 },
-      deviceScaleFactor: 1,
-    })
+    page = await createResumePdfPage(browser)
 
     await page.emulateMedia({ media: 'print' })
-    await page.setContent(html, { waitUntil: 'networkidle' })
+    await setResumePdfPageContent(page, html)
     await page.evaluate(() => document.fonts.ready)
     return await page.pdf({
       format: 'A4',
