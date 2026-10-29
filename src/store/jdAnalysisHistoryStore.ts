@@ -16,6 +16,7 @@ interface JDAnalysisHistoryState {
   fetchRecords: (resumeId: string) => Promise<void>
   createRecord: (input: CreateJDAnalysisRecordInput) => Promise<JDAnalysisRecord>
   clearRecords: () => void
+  removeRecord: (id: string) => void
 }
 
 let ownerId: string | null = null
@@ -66,5 +67,10 @@ export const useJDAnalysisHistoryStore = create<JDAnalysisHistoryState>((set, ge
   clearRecords: () => {
     epoch++
     set({ records: [], loadedResumeId: null, isLoading: false, error: null })
+  },
+  removeRecord: (id) => {
+    epoch++ // Prevent in-flight reads from restoring a deleted record.
+    for (const [resumeId, records] of cache) cache.set(resumeId, records.filter((record) => record.id !== id))
+    set((state) => ({ records: state.records.filter((record) => record.id !== id), isLoading: false }))
   },
 }))

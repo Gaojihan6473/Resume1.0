@@ -1,528 +1,263 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
+import { ChevronsRight, Cloud, FileText, Loader2, LogOut, Plus, RefreshCw, Search, User } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import {
-  fetchResumes,
-  deleteResume,
-  createResume,
-  updateResume,
-  type Resume,
-} from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
 import { useBatchStore } from '../store/batchStore'
-import { createDefaultResumeData, type ResumeData } from '../types/resume'
+import { useApplicationStore } from '../store/applicationStore'
+import { createResume, deleteResume, type Resume } from '../lib/api/resumes'
+import { selectBatchForCreation } from '../lib/api/batches'
+import { createDefaultResumeData } from '../types/resume'
+import { APPLICATION_STATUS_LABELS } from '../types/application'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
 import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
-import { toast } from '../components/Toast'
-import {
-  FileText,
-  Plus,
-  Trash2,
-  Edit3,
-  Cloud,
-  CloudOff,
-  Loader2,
-  CheckCircle,
-  Clock,
-  User,
-  LogOut,
-  Copy,
-  ChevronsRight,
-} from 'lucide-react'
 import { FishLogo } from '../components/Brand/FishLogo'
+import { CustomSelect } from '../components/Application/CustomSelect'
+import { BatchSurface } from '../components/Batch/BatchControls'
+import { useLibraryData, type ResourceState } from '../components/Me/useLibraryData'
+import { AgentHistorySection } from '../components/Me/AgentHistorySection'
+import { LibraryResumeRow, LibraryApplicationRow, LibraryBatchRow, LibraryBatchLink, libraryLink } from '../components/Me/LibraryRows'
+import { toast } from '../components/Toast'
+import { saveCurrentResumeToCloud } from '../utils/saveResume'
+import { filterLibrary, LIBRARY_PAGE_SIZE, libraryTab, readLibraryPosition, rememberLibraryPosition, resetLibraryPosition, type LibraryTab } from '../utils/meLibrary'
 
-type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
-
-function hasResumeContent(data: ResumeData) {
-  const hasBasic = Object.values(data.basic).some((value) =>
-    Array.isArray(value) ? value.length > 0 : Boolean(String(value).trim())
-  )
-  const hasSummary = Boolean(data.summary.text.trim() || data.summary.content.trim() || data.summary.highlights.length > 0)
-  const hasSkills = Object.values(data.skills).some((items) => items.length > 0)
-
-  return hasBasic ||
-    data.education.length > 0 ||
-    data.internships.length > 0 ||
-    data.projects.length > 0 ||
-    hasSummary ||
-    hasSkills
+const tabs = [
+  { id: 'resumes', label: '简历' },
+  { id: 'applications', label: '岗位' },
+  { id: 'batches', label: '批次' },
+] as const
+const primaryButton = 'inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+function resourceHint(state: ResourceState, noun: string) { return state.error ? `${noun}加载失败` : `${noun}加载中…` }
+function positionKey(account: string, params: URLSearchParams) {
+  return `${account}/${libraryTab(params.get('tab'))}/${JSON.stringify([params.get('q') || '', params.get('batch') || '', params.get('status') || ''])}`
 }
-
+function editorPath(id?: string | null, batch?: string | null) {
+  return `/editor?${new URLSearchParams({ ...(id ? { resumeId: id } : {}), ...(batch ? { batch } : {}) })}`
+}
 export function MePage() {
+  const accountId = useAuthStore((state) => state.user?.id || '')
+  return <MePageContent key={accountId} accountId={accountId} />
+}
+function MePageContent({ accountId }: { accountId: string }) {
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const navigationType = useNavigationType()
   const { user, signOut } = useAuthStore()
-  const {
-    resumeData, setResumeData, setParseStatus, setParseError, currentResumeId, setCurrentResumeId, setIsDirty,
-    cachedResumes, setCachedResumes, clearCachedResumes, clearCurrentFile
-  } = useResumeStore()
-
-  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
-  const [resumes, setResumes] = useState<Resume[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
-  const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
-  const [isSigningOut, setIsSigningOut] = useState(false)
-  const accountDisplayName = user?.keyName || user?.email || ''
-
-  // 首次渲染使用缓存，后台静默刷新
-  useEffect(() => {
-    // 优先使用缓存数据（瞬间展示）
-    if (cachedResumes.length > 0) {
-      setResumes(cachedResumes)
-      setIsLoading(false)
+  const resumes = useResumeStore((state) => state.cachedResumes)
+  const isDirty = useResumeStore((state) => state.isDirty)
+  const draftTitle = useResumeStore((state) => state.resumeData.resumeTitle || state.resumeData.basic.name || '未命名简历')
+  const batches = useBatchStore((state) => state.batches)
+  const applications = useApplicationStore((state) => state.applications)
+  const { resources, refresh } = useLibraryData(accountId)
+  const sidebar = useHoverSidebar()
+  const [busy, setBusy] = useState(false)
+  const operation = useRef(false)
+  const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Resume | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const mainRef = useRef<HTMLElement>(null)
+  const restored = useRef<string | null>(null)
+  const tab = libraryTab(params.get('tab'))
+  const query = params.get('q') || '', batchId = params.get('batch') || '', status = params.get('status') || ''
+  // Keep native typing independent of router transitions, especially during IME composition.
+  const [searchText, setSearchText] = useState(query)
+  const composing = useRef(false)
+  const viewKey = positionKey(accountId, params)
+  const [range, setRange] = useState(() => ({ key: viewKey, limit: readLibraryPosition(viewKey).limit }))
+  const limit = range.key === viewKey ? range.limit : readLibraryPosition(viewKey).limit
+  const filtered = useMemo(() => filterLibrary(resumes, applications, batches, query, batchId, status), [resumes, applications, batches, query, batchId, status])
+  const resumeById = useMemo(() => new Map(resumes.map((item) => [item.id, item])), [resumes])
+  const batchById = useMemo(() => new Map(batches.map((item) => [item.id, item])), [batches])
+  const counts = useMemo(() => {
+    const related = new Map<string, number>(), batchResumes = new Map<string, number>(), batchJobs = new Map<string, number>()
+    for (const item of resumes) if (item.batch_id) batchResumes.set(item.batch_id, (batchResumes.get(item.batch_id) || 0) + 1)
+    for (const item of applications) {
+      if (item.resume_id) related.set(item.resume_id, (related.get(item.resume_id) || 0) + 1)
+      if (item.batch_id) batchJobs.set(item.batch_id, (batchJobs.get(item.batch_id) || 0) + 1)
     }
+    return { related, batchResumes, batchJobs }
+  }, [resumes, applications])
+  const ready = (key: LibraryTab) => resources[key].loaded && !resources[key].error
+  const total = { resumes: resumes.length, applications: applications.length, batches: batches.length }
+  const resultCount = filtered[tab].length, currentResource = resources[tab]
+  const refreshing = Object.values(resources).some((item) => item.loading)
+  const hasError = Object.values(resources).some((item) => item.error)
+  const hasFilter = Boolean(query || (tab !== 'batches' && batchId) || (tab === 'applications' && status))
 
-    // 后台静默刷新云端数据
-    const silentRefresh = async () => {
-      const result = await fetchResumes()
-      if (result.success && result.resumes) {
-        // 检查是否有更新（通过 updated_at 对比）
-        const hasChanges = cachedResumes.length !== result.resumes.length ||
-          result.resumes.some((r, i) => {
-            const cached = cachedResumes[i]
-            return !cached || r.updated_at !== cached.updated_at
-          })
+  useLayoutEffect(() => {
+    // Our own edits use REPLACE; browser history and incoming links restore the URL value.
+    if (navigationType !== 'REPLACE') {
+      composing.current = false
+      setSearchText(query)
+    }
+  }, [navigationType, query])
 
-        if (hasChanges) {
-          setResumes(result.resumes)
-          setCachedResumes(result.resumes, Date.now())
-          if (cachedResumes.length > 0) {
-            toast('简历列表已更新', 'info')
-          }
-        }
+  useLayoutEffect(() => {
+    if (restored.current === viewKey || !currentResource.loaded) return
+    if (mainRef.current) mainRef.current.scrollTop = readLibraryPosition(viewKey).scroll
+    restored.current = viewKey
+  }, [viewKey, currentResource.loaded, resultCount, limit])
 
-        // 根据是否有简历设置同步状态
-        if (result.resumes.length > 0) {
-          setSyncStatus('synced')
-        }
+  const changeQuery = (changes: Record<string, string>) => {
+    if ('q' in changes) setSearchText(changes.q)
+    const next = new URLSearchParams(params)
+    if (searchText) next.set('q', searchText); else next.delete('q')
+    Object.entries(changes).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key) })
+    if (next.toString() === params.toString()) return
+    const nextKey = positionKey(accountId, next)
+    resetLibraryPosition(nextKey)
+    // Searching changes the result range, but must not move the focused input on the page.
+    const searchOnly = Object.keys(changes).every((key) => key === 'q')
+    if (searchOnly) rememberLibraryPosition(nextKey, { limit: LIBRARY_PAGE_SIZE, scroll: mainRef.current?.scrollTop || 0 })
+    setRange({ key: nextKey, limit: LIBRARY_PAGE_SIZE }); restored.current = null
+    setParams(next, { replace: true, preventScrollReset: true })
+  }
+  const changeSearchText = (value: string) => {
+    setSearchText(value)
+    if (!composing.current) changeQuery({ q: value })
+  }
+  const remember = () => {
+    if (restored.current === viewKey) rememberLibraryPosition(viewKey, { limit, scroll: mainRef.current?.scrollTop || 0 })
+  }
+  const protect = (action: () => void) => {
+    remember()
+    if (useResumeStore.getState().isDirty) setPendingAction(() => action)
+    else action()
+  }
+  const go = (path: string) => { sidebar.closeSidebar(); remember(); navigate(path) }
+  const openResume = (id: string, batch?: string) => protect(() => go(editorPath(id, batch)))
+  const continueEditing = () => {
+    const state = useResumeStore.getState()
+    go(editorPath(state.currentResumeId, resumeById.get(state.currentResumeId || '')?.batch_id || useBatchStore.getState().draftBatchId))
+  }
+  const confirmLogout = () => {
+    setConfirmSignOut(false)
+    protect(() => { void mutate(async () => {
+      await signOut()
+      if (useAuthStore.getState().isAuthenticated) {
+        toast(useAuthStore.getState().error || '退出失败', 'error')
+        return
       }
-      setIsLoading(false)
-    }
-
-    silentRefresh()
-  }, [cachedResumes, setCachedResumes])
-
-  const handleCreateResume = async () => {
-    setSyncStatus('syncing')
-    setError(null)
-
-    const result = await createResume('未命名简历', createDefaultResumeData() as unknown as Record<string, unknown>, 'blank')
-
-    if (result.success && result.resume) {
-      const updatedResumes = [result.resume, ...resumes]
-      setResumes(updatedResumes)
-      setCachedResumes(updatedResumes, Date.now())
-      setSyncStatus('synced')
-      setResumeData(result.resume.content as unknown as ResumeData)
-      setCurrentResumeId(result.resume.id)
-      setIsDirty(false)
-      clearCurrentFile()
-      setParseError(null)
-      setParseStatus('success')
-      toast('新建简历成功', 'success')
-      navigate(`/editor?resumeId=${result.resume.id}`)
-    } else {
-      setSyncStatus('error')
-      setError(result.error || '创建失败')
-      setRetryCount(1)
-      toast(result.error || '创建失败', 'error')
-    }
+      navigate('/login')
+    }) })
+  }
+  const saveDraft = async () => {
+    if (saveInFlight.current) return false
+    saveInFlight.current = true; setSaving(true); setSaveError(null)
+    try {
+      const result = await saveCurrentResumeToCloud()
+      if (useAuthStore.getState().user?.id !== accountId) return false
+      if (!result.success) throw new Error(result.error || '保存失败')
+      if (useResumeStore.getState().isDirty) throw new Error('保存期间有新的修改，请再次保存')
+      toast('简历已保存', 'success'); return true
+    } catch (error) { setSaveError(error instanceof Error ? error.message : '保存失败，请重试'); return false }
+    finally { saveInFlight.current = false; setSaving(false) }
+  }
+  const mutate = async (action: () => Promise<void>) => {
+    if (operation.current) return
+    operation.current = true; setBusy(true)
+    try { await action() }
+    catch (error) { if (useAuthStore.getState().user?.id === accountId) toast(error instanceof Error ? error.message : '操作失败，请重试', 'error') }
+    finally { operation.current = false; setBusy(false) }
+  }
+  const create = () => protect(() => { void mutate(async () => {
+    let target = batchId
+    if (!target) { try { target = await selectBatchForCreation() } catch { return } }
+    if (useAuthStore.getState().user?.id !== accountId) return
+    const result = await createResume('未命名简历', createDefaultResumeData() as unknown as Record<string, unknown>, 'blank', null, null, accountId, target)
+    if (useAuthStore.getState().user?.id !== accountId) return
+    if (!result.success || !result.resume) throw new Error(result.error || '创建失败')
+    const store = useResumeStore.getState()
+    store.setCachedResumes([result.resume, ...store.cachedResumes], Date.now())
+    go(editorPath(result.resume.id, target))
+  }) })
+  const duplicate = (resume: Resume) => { void mutate(async () => {
+    if (!resume.batch_id) throw new Error('简历缺少所属批次，请先在批次内整理后再复制')
+    const title = `${resume.title?.trim() || '未命名简历'}-副本`
+    const result = await createResume(title, { ...resume.content, resumeTitle: title }, `copy:${resume.id}`, resume.file_url, resume.preview_url, accountId, resume.batch_id)
+    if (useAuthStore.getState().user?.id !== accountId) return
+    if (!result.success || !result.resume) throw new Error(result.error || '复制失败')
+    const store = useResumeStore.getState()
+    store.setCachedResumes([result.resume, ...store.cachedResumes], Date.now())
+    toast('复制成功', 'success'); await refresh()
+  }) }
+  const confirmDelete = () => { if (!deleteTarget) return; void mutate(async () => {
+    setDeleteError(null)
+    const result = await deleteResume(deleteTarget.id)
+    if (useAuthStore.getState().user?.id !== accountId) return
+    if (!result.success) { setDeleteError(result.error || '删除失败'); return }
+    const store = useResumeStore.getState()
+    store.setCachedResumes(store.cachedResumes.filter((item) => item.id !== deleteTarget.id), Date.now())
+    useApplicationStore.setState((state) => ({ applications: state.applications.map((app) => app.resume_id === deleteTarget.id ? { ...app, resume_id: null } : app) }))
+    if (store.currentResumeId === deleteTarget.id) store.resetAll()
+    setDeleteTarget(null); toast('删除成功，岗位记录已保留', 'success'); await refresh()
+  }) }
+  const batchLink = (id?: string) => <LibraryBatchLink batch={batchById.get(id || '')} onOpen={go} fallback={!ready('batches') ? resourceHint(resources.batches, '批次') : id ? '批次已不存在' : '未归属批次'} />
+  const changeTab = (id: LibraryTab) => { if (id !== tab) changeQuery({ tab: id, q: '' }) }
+  const tabKeys = (event: React.KeyboardEvent) => {
+    const index = tabs.findIndex((item) => item.id === tab)
+    const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
+    if (next >= 0) { event.preventDefault(); changeTab(tabs[next].id); document.getElementById(`library-tab-${tabs[next].id}`)?.focus() }
   }
 
-  const handleDeleteResume = async (id: string) => {
-    setSyncStatus('syncing')
-
-    const result = await deleteResume(id)
-
-    if (result.success) {
-      const updatedResumes = resumes.filter((r) => r.id !== id)
-      setResumes(updatedResumes)
-      setCachedResumes(updatedResumes, Date.now())
-      setSyncStatus('synced')
-      setShowDeleteConfirm(null)
-      toast('删除成功', 'success')
-    } else {
-      setSyncStatus('error')
-      setError(result.error || '删除失败')
-      toast(result.error || '删除失败', 'error')
-    }
-  }
-
-  const handleSelectResume = async (resume: Resume) => {
-    setResumeData(resume.content as unknown as ResumeData, resume.title)
-    setCurrentResumeId(resume.id)
-    setIsDirty(false)
-    clearCurrentFile()
-    setParseError(null)
-    setParseStatus('success')
-    navigate(`/editor?resumeId=${resume.id}`)
-  }
-
-  const handleSyncToCloud = async () => {
-    if (retryCount >= 3) {
-      setError('云端保存失败，已保留本地备份')
-      setSyncStatus('error')
-      return
-    }
-
-    setSyncStatus('syncing')
-    setError(null)
-
-    if (!hasResumeContent(resumeData)) {
-      setError('当前简历为空，已阻止覆盖云端数据')
-      setSyncStatus('error')
-      toast('当前简历为空，已阻止覆盖云端数据', 'error')
-      return
-    }
-
-    const currentCloudResume = currentResumeId
-      ? resumes.find((r) => r.id === currentResumeId && r.source !== 'local')
-      : null
-
-    if (currentCloudResume) {
-      const result = await updateResume(
-        currentCloudResume.id,
-        resumeData.resumeTitle || currentCloudResume.title || resumeData.basic.name || '我的简历',
-        resumeData as unknown as Record<string, unknown>
-      )
-
-      if (result.success) {
-        const updatedResumes = resumes.map((r) =>
-          r.id === currentCloudResume.id ? { ...r, ...result.resume } : r
-        )
-        setResumes(updatedResumes)
-        setCachedResumes(updatedResumes, Date.now())
-        setSyncStatus('synced')
-        setRetryCount(0)
-      } else {
-        setSyncStatus('error')
-        if (retryCount < 3) setRetryCount((c) => c + 1)
-        setError(result.error || '同步失败')
-      }
-    } else {
-      const result = await createResume(
-        '我的简历',
-        resumeData as unknown as Record<string, unknown>,
-        'cloud', null, null, undefined, useBatchStore.getState().draftBatchId || undefined
-      )
-
-      if (result.success && result.resume) {
-        const updatedResumes = [result.resume, ...resumes]
-        setResumes(updatedResumes)
-        setCachedResumes(updatedResumes, Date.now())
-        setSyncStatus('synced')
-        setRetryCount(0)
-      } else {
-        setSyncStatus('error')
-        if (retryCount < 3) setRetryCount((c) => c + 1)
-        setError(result.error || '同步失败')
-      }
-    }
-  }
-
-  const handleDuplicateResume = async (resume: Resume) => {
-    setSyncStatus('syncing')
-    setError(null)
-
-    const title = resume.title?.trim() || '未命名简历'
-    const duplicateTitle = `${title}-副本`
-    const duplicateContent = {
-      ...resume.content,
-      resumeTitle: duplicateTitle,
-    }
-    const result = await createResume(
-      duplicateTitle,
-      duplicateContent,
-      `copy:${resume.id}`,
-      resume.file_url,
-      resume.preview_url,
-      undefined,
-      resume.batch_id
-    )
-
-    if (result.success && result.resume) {
-      const updatedResumes = [result.resume, ...resumes]
-      setResumes(updatedResumes)
-      setCachedResumes(updatedResumes, Date.now())
-      setSyncStatus('synced')
-      toast('复制成功', 'success')
-    } else {
-      setSyncStatus('error')
-      setError(result.error || '复制失败')
-      toast(result.error || '复制失败', 'error')
-    }
-  }
-
-  const handleSignOut = async () => {
-    setIsSigningOut(true)
-    clearCachedResumes()
-    await signOut()
-    navigate('/login')
-  }
-
-  const handleGoHome = () => {
-    useResumeStore.getState().resetAll()
-    closeSidebar()
-    navigate('/')
-  }
-
-  const handleNavigateToApplications = () => {
-    closeSidebar()
-    navigate('/applications')
-  }
-
-  const getSyncStatusIcon = () => {
-    switch (syncStatus) {
-      case 'syncing':
-        return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-      case 'synced':
-        return <Cloud className="w-4 h-4 text-emerald-500" />
-      case 'error':
-        return <CloudOff className="w-4 h-4 text-red-500" />
-      default:
-        return <Cloud className="w-4 h-4 text-slate-400" />
-    }
-  }
-
-  return (
-    <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
-      {/* 顶部栏 */}
-      <header className="app-topbar h-14 shrink-0 flex items-center px-4">
-        <div
-          ref={triggerRef}
-          onMouseEnter={openSidebar}
-          onMouseLeave={scheduleCloseSidebar}
-          className="flex items-center gap-2 px-2 py-1.5"
-        >
-          <div className="flex h-8 w-8 items-center justify-center text-black">
-            <FishLogo className="h-6 w-7" />
-          </div>
-          <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
-        </div>
-        <SidebarTriggerHint triggerRef={triggerRef} />
-
-        <div className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/70">
-          <User className="w-4 h-4 text-indigo-500" />
-          <span className="text-sm font-medium text-slate-700">{accountDisplayName}</span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200/80">
-            {getSyncStatusIcon()}
-            <span className="text-xs font-medium text-slate-600">
-              {syncStatus === 'syncing' ? '同步中...' : syncStatus === 'synced' ? '已同步' : syncStatus === 'error' ? '同步失败' : '仅本地'}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* 主体 */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* 左侧边栏 */}
-        <Sidebar
-          open={sidebarOpen}
-          sidebarRef={sidebarRef}
-          onClose={closeSidebar}
-          onMouseEnter={openSidebar}
-          onMouseLeave={scheduleCloseSidebar}
-          topOffset={0}
-          backdropTop={56}
-          onGoHome={handleGoHome}
-          onNavigateToMe={() => navigate('/me')}
-          onNavigateToApplications={handleNavigateToApplications}
-          onNavigateToAnalytics={() => navigate('/analytics')}
-        />
-
-        {/* 主内容区 */}
-        <main className="relative flex-1 overflow-y-auto py-8 px-6 lg:px-10 home-login-bg">
-          <div className="max-w-3xl mx-auto">
-            {/* 同步状态卡片 */}
-            <div className="mb-6 p-4 rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur-sm shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {syncStatus === 'synced' && (
-                    <>
-                      <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <span className="text-sm font-medium text-emerald-700">简历已同步到云端</span>
-                    </>
-                  )}
-                  {syncStatus === 'error' && (
-                    <>
-                      <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
-                        <CloudOff className="w-4 h-4 text-red-500" />
-                      </div>
-                      <span className="text-sm font-medium text-red-700">{error || '同步失败'}</span>
-                      {retryCount < 3 && (
-                        <button
-                          onClick={handleSyncToCloud}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                        >
-                          重试
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {syncStatus === 'idle' && (
-                    <>
-                      <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center">
-                        <Clock className="w-4 h-4 text-slate-400" />
-                      </div>
-                      <span className="text-sm text-slate-600">本地草稿未同步</span>
-                    </>
-                  )}
-                  {syncStatus === 'syncing' && (
-                    <>
-                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                      </div>
-                      <span className="text-sm text-blue-600">同步中...</span>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={handleSyncToCloud}
-                  disabled={syncStatus === 'syncing'}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200 flex items-center gap-2"
-                >
-                  <Cloud className="w-4 h-4" />
-                  同步
-                </button>
-              </div>
+  return <div className="flex h-dvh min-w-0 flex-col bg-[#eef4ff] text-slate-900">
+    <header className="app-topbar flex h-14 shrink-0 items-center gap-3 px-4">
+      <div ref={sidebar.triggerRef} onMouseEnter={sidebar.openSidebar} onMouseLeave={sidebar.scheduleCloseSidebar} className="flex shrink-0 items-center gap-2 px-2 py-1.5"><FishLogo className="h-6 w-7" /><span className="text-base font-bold text-slate-800">小鱼简历</span><ChevronsRight className="h-4 w-4 text-slate-400" /></div>
+      <SidebarTriggerHint triggerRef={sidebar.triggerRef} />
+    </header>
+    <div className="relative flex min-h-0 flex-1">
+      <Sidebar open={sidebar.sidebarOpen} sidebarRef={sidebar.sidebarRef} onClose={sidebar.closeSidebar} onMouseEnter={sidebar.openSidebar} onMouseLeave={sidebar.scheduleCloseSidebar} backdropTop={56} onGoHome={() => go('/')} onNavigateToMe={sidebar.closeSidebar} onNavigateToApplications={() => go('/applications')} onNavigateToAnalytics={() => go('/analytics')} />
+      <main ref={mainRef} onScroll={remember} className="workspace-home home-login-bg min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-7 sm:px-8 lg:px-10">
+        <div className="mx-auto w-full min-w-0 max-w-[1080px] pb-12">
+          <section aria-label="账号设置" className="mb-6 flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/95 px-5 py-4"><User className="h-5 w-5 shrink-0 text-blue-400" /><div className="min-w-0 flex-1"><h2 className="text-xs text-slate-400">当前登录账号</h2><p className="mt-1 break-all text-sm text-slate-600">{user?.keyName || user?.email}</p></div><button type="button" disabled={busy || saving} onClick={() => setConfirmSignOut(true)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />退出登录</button></section>
+          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="flex min-h-10 items-center gap-3 text-xl font-semibold tracking-tight text-slate-800"><span aria-hidden="true" className="h-8 w-1 shrink-0 rounded-full bg-[#5b7ed1]" />我的资料</h2><button type="button" aria-label="刷新资料" onClick={() => void refresh()} disabled={refreshing || busy} className="flex min-h-9 items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-500 hover:bg-white disabled:opacity-60">{refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}{refreshing ? "刷新中…" : hasError ? "重试加载" : "刷新"}</button></div>
+          {isDirty && <aside aria-label="未保存草稿" className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4"><Cloud className="h-5 w-5 shrink-0 text-amber-600" /><div className="min-w-0 flex-1"><p className="break-words text-sm font-medium text-slate-700">{draftTitle} · 有未保存的修改</p><p className="mt-1 text-xs text-slate-500">刷新资料不会覆盖当前草稿</p>{saveError && <p role="alert" className="mt-1 text-xs text-red-600">{saveError}</p>}</div><button type="button" disabled={saving || busy} onClick={() => void saveDraft()} className={primaryButton}>{saving && <Loader2 className="h-4 w-4 animate-spin" />}{saving ? '保存中…' : '保存当前草稿'}</button><button type="button" disabled={saving || busy} onClick={continueEditing} className={`${libraryLink} text-sm disabled:opacity-50`}>继续编辑</button></aside>}
+          <section aria-label="资料列表" className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm shadow-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 pt-3 sm:px-5"><div className="flex gap-1" role="tablist" aria-label="资料类型">{tabs.map(({ id, label }) => <button id={`library-tab-${id}`} key={id} type="button" role="tab" aria-selected={tab === id} aria-controls="library-panel" tabIndex={tab === id ? 0 : -1} onKeyDown={tabKeys} onClick={() => changeTab(id)} className={`flex items-center gap-1.5 border-b-2 px-2 py-3 text-sm font-medium transition sm:gap-2 sm:px-4 ${tab === id ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}<span className="px-1 text-xs font-normal tabular-nums text-slate-400">{ready(id) ? total[id] : '—'}</span></button>)}</div>{tab === 'resumes' && <button type="button" disabled={busy || saving} onClick={create} className={`${primaryButton} mb-2`}><Plus className="h-4 w-4" />新建简历</button>}</div>
+            <div className="flex flex-wrap gap-3 px-4 pt-4 sm:px-5">
+              <label className="flex min-h-10 min-w-0 flex-[1_1_240px] items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 focus-within:ring-2 focus-within:ring-slate-200">
+                <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-400" />
+                <input
+                  aria-label="搜索资料"
+                  value={searchText}
+                  onChange={(event) => changeSearchText(event.target.value)}
+                  onCompositionStart={() => { composing.current = true }}
+                  onCompositionEnd={(event) => {
+                    composing.current = false
+                    changeQuery({ q: event.currentTarget.value })
+                  }}
+                  placeholder={tab === 'resumes' ? '搜索简历名称、姓名' : tab === 'applications' ? '搜索岗位、公司、关联简历' : '搜索批次名称、说明'}
+                  className="min-w-0 w-full bg-transparent py-2 text-sm outline-none placeholder:text-slate-400"
+                />
+                {searchText && <button type="button" onClick={() => { composing.current = false; changeQuery({ q: '' }) }} className="shrink-0 text-xs text-slate-500" aria-label="清除搜索">清除</button>}
+              </label>
+              {tab !== 'batches' && <CustomSelect ariaLabel="筛选批次" value={batchId} onChange={(value) => changeQuery({ batch: value })} className="w-full sm:w-[190px]" options={[{ value: '', label: '全部批次' }, ...batches.map((batch) => ({ value: batch.id, label: batch.name })), ...(batchId && !batchById.has(batchId) ? [{ value: batchId, label: ready('batches') ? '批次已不存在' : '批次暂未加载' }] : [])]} />}
+              {tab === 'applications' && <CustomSelect ariaLabel="筛选岗位状态" value={status} onChange={(value) => changeQuery({ status: value })} className="w-full sm:w-[150px]" options={[{ value: '', label: '全部状态' }, ...Object.entries(APPLICATION_STATUS_LABELS).map(([value, label]) => ({ value, label }))]} />}
             </div>
-
-            {/* 简历列表卡片 */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur-sm shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100/60 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-800">我的简历</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCreateResume}
-                    disabled={syncStatus === 'syncing'}
-                    className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-200 flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    新建
-                  </button>
-                </div>
-              </div>
-
-              {isLoading ? (
-                <div className="py-16 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
-                  <p className="mt-3 text-sm text-slate-500">加载中...</p>
-                </div>
-              ) : resumes.length === 0 ? (
-                <div className="py-16 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto">
-                    <FileText className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <p className="mt-4 text-sm text-slate-500">暂无简历</p>
-                  <p className="mt-1 text-xs text-slate-400">点击上方按钮创建第一个简历</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100/60">
-                  {resumes.map((resume) => (
-                    <div
-                      key={resume.id}
-                      className="px-5 py-4 flex items-center justify-between hover:bg-slate-50/50 transition-colors group cursor-pointer"
-                      onDoubleClick={() => handleSelectResume(resume)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-blue-500" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-medium text-slate-800">{resume.title}</h3>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            更新于 {new Date(resume.updated_at).toLocaleDateString('zh-CN')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleSelectResume(resume)}
-                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="编辑"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDuplicateResume(resume)}
-                          className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="复制"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteConfirm(resume.id)}
-                          className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="删除"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {hasFilter && currentResource.loaded ? <p role="status" className="px-5 pt-3 text-xs text-slate-400">找到 {resultCount} 条{currentResource.error ? "缓存资料" : "资料"}</p> : null}<div className="h-3" />
+            {Object.entries(resources).filter(([, state]) => state.error).map(([key, state]) => <div key={key} role="alert" className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600"><span>{tabs.find((item) => item.id === key)?.label}：{state.error}。{state.loaded ? '当前保留上次加载的资料。' : '请重试后查看。'}</span><button type="button" disabled={refreshing} onClick={() => void refresh()} className="underline">重新加载</button></div>)}
+            <div id="library-panel" role="tabpanel" aria-labelledby={`library-tab-${tab}`} aria-busy={currentResource.loading}>
+              {!currentResource.loaded ? <div className="px-5 py-14 text-center text-sm text-slate-500">{currentResource.error ? '资料暂时无法加载，请重试' : <><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-slate-400" />加载中…</>}</div> : resultCount === 0 ? <div className="px-5 py-14 text-center"><FileText className="mx-auto mb-3 h-8 w-8 text-slate-300" /><p className="text-sm text-slate-500">{hasFilter ? '没有符合条件的资料' : `暂无${tabs.find((item) => item.id === tab)?.label}`}</p>{hasFilter && <button type="button" onClick={() => changeQuery({ q: '', batch: '', status: '' })} className={`${libraryLink} mt-3 text-sm`}>清除筛选条件</button>}</div> : <>
+                <ul className="min-w-0 divide-y divide-slate-100/80">
+                  {tab === 'resumes' && filtered.resumes.slice(0, limit).map((resume) => <LibraryResumeRow key={resume.id} resume={resume} batch={batchLink(resume.batch_id)} relatedCount={ready('applications') ? counts.related.get(resume.id) || 0 : resourceHint(resources.applications, '关联岗位')} disabled={busy || saving} onOpen={() => openResume(resume.id, resume.batch_id)} onRelated={() => go(`/applications?${new URLSearchParams({ ...(resume.batch_id ? { batch: resume.batch_id } : {}), resumeId: resume.id })}`)} onCopy={() => duplicate(resume)} onDelete={() => protect(() => { setDeleteError(null); setDeleteTarget(resume) })} />)}
+                  {tab === 'applications' && filtered.applications.slice(0, limit).map((app) => <LibraryApplicationRow key={app.id} application={app} batch={batchLink(app.batch_id)} resume={resumeById.get(app.resume_id || '')} missingResume={!ready('resumes') ? resourceHint(resources.resumes, '关联简历') : '关联简历已不存在'} onOpen={() => go(`/applications?${new URLSearchParams({ ...(app.batch_id ? { batch: app.batch_id } : {}), applicationId: app.id })}`)} onResume={() => { if (app.resume_id) openResume(app.resume_id, resumeById.get(app.resume_id)?.batch_id) }} />)}
+                  {tab === 'batches' && filtered.batches.slice(0, limit).map((batch) => <LibraryBatchRow key={batch.id} batch={batch} resumes={ready('resumes') ? counts.batchResumes.get(batch.id) || 0 : resourceHint(resources.resumes, '简历')} jobs={ready('applications') ? counts.batchJobs.get(batch.id) || 0 : resourceHint(resources.applications, '岗位')} onOpen={() => go(`/batches/${encodeURIComponent(batch.id)}`)} />)}
+                </ul>
+                <div className="flex flex-wrap items-center justify-center gap-4 border-t border-slate-100 px-4 py-4 text-xs text-slate-400"><span>已展示 {Math.min(limit, resultCount)} / 共 {resultCount} 条</span>{limit < resultCount && <button type="button" onClick={() => { const next = limit + LIBRARY_PAGE_SIZE; rememberLibraryPosition(viewKey, { limit: next, scroll: mainRef.current?.scrollTop || 0 }); setRange({ key: viewKey, limit: next }) }} className="rounded-lg border border-slate-200/80 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">加载更多</button>}</div>
+              </>}
             </div>
-
-            {/* 账号设置卡片 */}
-            <div className="mt-4 rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur-sm shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100/60 flex items-center justify-between">
-                <h3 className="text-base font-semibold text-slate-800">账号设置</h3>
-                <button
-                  onClick={handleSignOut}
-                  disabled={isSigningOut}
-                  className="px-4 py-2 bg-red-400 text-white text-sm font-medium rounded-xl hover:bg-red-500 transition-colors disabled:bg-red-300 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {isSigningOut ? '退出中...' : '退出'}
-                </button>
-              </div>
-              <div className="px-5 py-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
-                  <User className="w-5 h-5 text-indigo-500" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-slate-800">{accountDisplayName}</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">当前登录账号</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-
-      {/* 删除确认弹窗 */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-800">确认删除</h3>
-            <p className="mt-2 text-sm text-slate-600">确定要删除这份简历吗？此操作无法撤销。</p>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(null)}
-                className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleDeleteResume(showDeleteConfirm)}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-medium rounded-xl hover:from-red-600 hover:to-red-700 transition-all"
-              >
-                删除
-              </button>
-            </div>
-          </div>
+          </section>
+          <AgentHistorySection onOpenResume={(id) => openResume(id, resumeById.get(id)?.batch_id)} />
         </div>
-      )}
+      </main>
     </div>
-  )
+    {confirmSignOut && <BatchSurface title="退出登录" onClose={() => setConfirmSignOut(false)}><p className="text-sm leading-7 text-slate-700">确定退出当前账号吗？</p><p className="mt-2 text-xs leading-6 text-slate-500">退出后需要重新登录才能访问个人资料。{isDirty ? '当前有未保存的修改，确认后将先处理草稿。' : '已保存的资料会保留。'}</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setConfirmSignOut(false)} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">取消</button><button type="button" onClick={confirmLogout} className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600"><LogOut className="h-4 w-4" />确认退出</button></div></BatchSurface>}
+    {deleteTarget && <BatchSurface title="确认删除简历" onClose={() => { if (!busy) setDeleteTarget(null) }}><p className="break-words text-sm text-slate-700">确定删除“{deleteTarget.title || '未命名简历'}”吗？此操作无法撤销。</p><p className="mt-3 text-sm leading-6 text-slate-500">{ready('applications') ? `这份简历关联 ${counts.related.get(deleteTarget.id) || 0} 个岗位。` : '关联岗位数量暂时无法确认。'}岗位记录会保留，与这份简历的关联将解除。</p>{deleteError && <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600">取消</button><button type="button" disabled={busy} onClick={confirmDelete} className="rounded-xl bg-red-500 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? '删除中…' : '删除简历'}</button></div></BatchSurface>}
+    {pendingAction && <BatchSurface title="有未保存的更改" onClose={() => { if (!saving) { setPendingAction(null); setSaveError(null) } }}><p className="break-words text-sm leading-6 text-slate-600">“{draftTitle}”尚未保存，请先处理草稿再继续。</p>{saveError && <p role="alert" className="mt-3 text-sm text-red-600">{saveError}</p>}<div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={saving} className={primaryButton} onClick={async () => { if (await saveDraft()) { setPendingAction(null); pendingAction() } }}>{saving ? '保存中…' : '保存并继续'}</button><button type="button" disabled={saving} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600" onClick={() => { useResumeStore.getState().discardCurrentChanges(); setPendingAction(null); pendingAction() }}>放弃修改并继续</button><button type="button" disabled={saving} className="px-2 py-2 text-sm text-slate-500" onClick={() => setPendingAction(null)}>取消</button></div></BatchSurface>}
+  </div>
 }

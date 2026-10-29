@@ -8,6 +8,19 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 const record = (id: string, resume: string, user = 'u'): JDAnalysisRecord => ({ id, resume_id: resume, user_id: user }) as JDAnalysisRecord
 
 describe('history request ownership', () => {
+  it('evicts a deleted record from visible and cached history and ignores stale responses', async () => {
+    bindJDAnalysisHistoryUser('u')
+    mocks.fetch.mockResolvedValueOnce([record('deleted', 'X'), record('kept', 'X')])
+    await useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    const late = deferred<JDAnalysisRecord[]>(); mocks.fetch.mockReturnValueOnce(late.promise)
+    const pending = useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    useJDAnalysisHistoryStore.getState().removeRecord('deleted')
+    late.resolve([record('deleted', 'X')]); await pending
+    expect(useJDAnalysisHistoryStore.getState().records.map((item) => item.id)).toEqual(['kept'])
+    mocks.fetch.mockReturnValue(new Promise(() => {}))
+    void useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    expect(useJDAnalysisHistoryStore.getState().records.map((item) => item.id)).toEqual(['kept'])
+  })
   it('keeps late resume responses out of the visible history and caches them separately', async () => {
     bindJDAnalysisHistoryUser('u')
     const x = deferred<JDAnalysisRecord[]>(); const z = deferred<JDAnalysisRecord[]>()

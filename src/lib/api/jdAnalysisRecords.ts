@@ -36,6 +36,50 @@ function normalizeJDAnalysisRecord(row: JDAnalysisRecordRow): JDAnalysisRecord {
   }
 }
 
+export type AgentHistorySummary = Pick<JDAnalysisRecord,
+  'id' | 'resume_id' | 'title' | 'resume_title_snapshot' | 'company_snapshot' | 'position_snapshot' | 'status' | 'analyzed_at' | 'created_at'>
+export const AGENT_HISTORY_PAGE_SIZE = 5
+
+export async function fetchAgentHistory(query = '', page = 0) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('未登录')
+  let request = supabase.from('jd_analysis_records')
+    .select('id,resume_id,title,resume_title_snapshot,company_snapshot,position_snapshot,status,analyzed_at,created_at', { count: 'exact' })
+    .eq('user_id', session.user.id)
+    .eq('analysis_result->>kind', 'resume-agent')
+  const term = query.trim()
+  if (term) {
+    // Quote PostgREST values so punctuation in a title cannot change the filter.
+    const pattern = `"%${term.replace(/[\\%_"]/g, '\\$&')}%"`
+    request = request.or(['title', 'resume_title_snapshot', 'company_snapshot', 'position_snapshot'].map((field) => `${field}.ilike.${pattern}`).join(','))
+  }
+  const start = page * AGENT_HISTORY_PAGE_SIZE
+  const { data, error, count } = await request.order('created_at', { ascending: false }).order('id', { ascending: false }).range(start, start + AGENT_HISTORY_PAGE_SIZE - 1)
+  if (error) throw new Error('获取 Agent 分析历史失败，请重试')
+  return { records: (data || []) as AgentHistorySummary[], total: count || 0 }
+}
+
+export async function fetchAgentHistoryDetail(id: string): Promise<JDAnalysisRecord> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('未登录')
+  const { data, error } = await supabase.from('jd_analysis_records').select('*')
+    .eq('user_id', session.user.id).eq('id', id).eq('analysis_result->>kind', 'resume-agent').maybeSingle()
+  if (error) throw new Error('加载分析详情失败，请重试')
+  if (!data) throw new Error('分析记录已不存在或无法访问')
+  return normalizeJDAnalysisRecord(data as JDAnalysisRecordRow)
+}
+
+export async function deleteAgentHistory(id: string, expectedUserId: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('未登录')
+  if (!expectedUserId || session.user.id !== expectedUserId) throw new Error('登录状态已变化，请刷新后重试')
+  const { data, error } = await supabase.from('jd_analysis_records').delete()
+    .eq('id', id).eq('user_id', expectedUserId).eq('analysis_result->>kind', 'resume-agent')
+    .select('id').maybeSingle()
+  if (error) throw new Error('删除分析历史失败，请重试')
+  if (!data) throw new Error('记录已不存在或无法删除，请刷新后重试')
+}
+
 export async function fetchJDAnalysisRecords(resumeId: string): Promise<JDAnalysisRecord[]> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {

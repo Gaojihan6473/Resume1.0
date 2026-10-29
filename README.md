@@ -1,4 +1,4 @@
-﻿# Resume Parser & Editor
+# Resume Parser & Editor
 
 A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracting structured fields, editing content, previewing A4 layout, and exporting to `PDF/Word`.
 
@@ -14,6 +14,9 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Resume cards in the delivery dashboard offer an edit shortcut; JD analysis is accessed inside the resume editor.
 - The signed-in homepage shows recruitment batch cards and two side-by-side white panels of recently edited resumes and jobs, with the latest three items in each list. Visible category headings and subtle dividers organize compact rows; only the jobs heading offers a borderless text-and-arrow link to view all jobs. Narrow screens stack the panels. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
 - Recent rows provide a square-cornered soft blue hover/keyboard-focus background and a right arrow, without edit/view action text. Job status badges align to the right beside the arrow. Batch links have independent hover feedback; clicking the rest of a row opens its resume or job. Motion follows the system's reduced-motion preference.
+- “我的” is a cross-batch library with 简历 / 岗位 / 批次 tabs, keyword and batch filters, job status filtering, and 5-item “加载更多” browsing. Returning from a detail/editor page restores filters, loaded rows and scroll position during the signed-in session; signing out clears that position history. Resume actions remain visible, creation follows the selected batch (or asks for one), and copies retain their original batch without job links.
+- Library search keeps typing responsive and waits for Chinese IME composition to finish before updating filters and the URL. Typing or clearing a keyword preserves the current scroll position and other selected filters.
+- The account section sits above the library. Compact rows use clear title/secondary-text hierarchy using the homepage background, white cards and shared blue accents; batch descriptions and job timestamps remain in detail views or tooltips. Library rows show batch ownership and resume/job associations. Clicking a resume's linked-job count opens its batch on the jobs page and selects that resume for the existing highlight behavior; all jobs in that batch remain visible. Deleting a resume preserves jobs and removes their resume link. Library refresh is independent of saving: only an unsaved draft shows the shared “保存当前草稿” action, and partial loading failures preserve cached data with explicit retry messages.
 - JD analysis runs inside the resume editor with a viewport-height input panel; the editor column stays fixed while long JD content scrolls inside the text area
 - Resume Agent uses a global launcher that expands upward to select a base resume and target job, then creates an independently reviewable job-specific version without overwriting the base resume. It is available to authenticated users by default.
 - The launcher task list uses compact single-line rows with color-coded status badges and scrolls when more tasks are present.
@@ -45,6 +48,8 @@ npm run eval:resume-agent
 npm run preview
 npm run check:encoding
 ```
+
+“我的”页面在账号与资料列表下提供独立的 **Agent 分析** 模块，按时间倒序汇总当前账号已保存的 Agent 分析。支持按简历、公司、岗位搜索；资料列表和分析历史均首次展示 5 条，点击“加载更多”每次追加 5 条；展开记录可查看匹配结果、优化建议、失败原因与当时的职位描述，也可打开关联简历。历史详情按需加载；列表仅显示一次岗位信息，展开后以分析报告的形式按分析摘要、岗位匹配、优化建议分区呈现，通过标题、编号和分隔线组织内容。优化建议可逐项展开，默认展开首项；内部展开使用加减号，与记录层的上下箭头区分。详情区域收窄居中，栏目刻度和实线／虚线区分不同内容层级。每条记录支持通过右侧删除图标确认删除，仅删除该条分析历史，关联简历、岗位及已生成版本保留。普通 JD 分析不混入此列表。
 
 ## Notes
 
@@ -99,3 +104,5 @@ Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; v
 - 刷新时创建中的岗位版按运行标识查找已保存产物，防止重复生成。退出或切换账号会终止本地请求并清除当前账号的任务状态。
 
 相关回归测试：`npm run test -- src/store/resumeAgentIsolation.test.tsx src/store/jdAnalysisHistoryStore.test.ts src/components/Agent`。
+
+退出登录前会弹出确认提示；若有未保存的简历修改，确认后需先保存或放弃草稿再退出。

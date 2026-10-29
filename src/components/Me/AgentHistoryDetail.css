@@ -1,0 +1,52 @@
+/* A quiet page-margin rule; the report remains unframed. */
+.agent-report-node {
+  display: none;
+}
+
+@media (min-width: 1280px) {
+  .agent-history-report::before,
+  .agent-history-report::after {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 32px;
+    bottom: 32px;
+    pointer-events: none;
+  }
+
+  .agent-history-report::before {
+    width: 1px;
+    background: linear-gradient(180deg, transparent, #d6e0ee 8%, #d6e0ee 92%, transparent);
+  }
+
+  .agent-history-report::after {
+    width: 7px;
+    background: repeating-linear-gradient(180deg, transparent 0 23px, #e5ebf3 23px 24px);
+    mask-image: linear-gradient(180deg, transparent, black 10%, black 90%, transparent);
+  }
+
+  .agent-report-node {
+    position: absolute;
+    left: -51px;
+    top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+  }
+
+  .agent-report-node > span {
+    width: 7px;
+    height: 7px;
+    border: 1px solid #a9bbd4;
+    border-radius: 50%;
+    background: white;
+    z-index: 1;
+  }
+
+  .agent-report-node > i {
+    width: 13px;
+    height: 1px;
+    background: linear-gradient(90deg, #c8d5e6, transparent);
+  }
+}

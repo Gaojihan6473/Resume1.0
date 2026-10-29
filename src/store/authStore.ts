@@ -6,6 +6,7 @@ import { useBatchStore } from './batchStore'
 import { useResumeStore } from './resumeStore'
 import { bindJDAnalysisHistoryUser } from './jdAnalysisHistoryStore'
 import { bindResumeAgentUser } from './resumeAgentSessionStore'
+import { clearLibraryPositions } from '../utils/meLibrary'
 
 const AUTHENTICATED_HINT_KEY = 'resume-authenticated'
 let authGeneration = 0
@@ -65,7 +66,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (generation !== authGeneration) return false
 
     if (result.success && result.user) {
-      if (get().user?.id !== result.user.id) { useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
+      if (get().user?.id !== result.user.id) { clearLibraryPositions(); useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
       setAuthenticatedHint(true)
       set({
         user: result.user,
@@ -90,6 +91,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     const generation = ++authGeneration
     set({ isLoading: true })
+    clearLibraryPositions()
     bindResumeAgentUser(null)
     bindJDAnalysisHistoryUser(null)
     useBatchStore.getState().reset()
@@ -122,6 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) {
         if (error.status === 400 || error.status === 401) {
+          clearLibraryPositions()
           bindResumeAgentUser(null)
           bindJDAnalysisHistoryUser(null)
           useBatchStore.getState().reset()
@@ -141,7 +144,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       if (session) {
-        if (get().user?.id !== session.user.id) { useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
+        if (get().user?.id !== session.user.id) { clearLibraryPositions(); useBatchStore.getState().reset(); useResumeStore.getState().resetAll() }
         setAuthenticatedHint(true)
         set({
           user: {
@@ -157,6 +160,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return
       }
 
+      clearLibraryPositions()
       useBatchStore.getState().reset()
       setAuthenticatedHint(false)
       bindResumeAgentUser(null)

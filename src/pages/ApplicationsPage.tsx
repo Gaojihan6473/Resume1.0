@@ -48,7 +48,8 @@ export function ApplicationsPage() {
   const [resumes, setResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(true)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
-  const [hasAppliedQuerySelection, setHasAppliedQuerySelection] = useState(false)
+  const appliedSelectionRef = useRef<string | null>(null)
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
@@ -82,7 +83,7 @@ export function ApplicationsPage() {
   }, [])
 
   useEffect(() => {
-    fetchApplications()
+    void fetchApplications().then(() => setApplicationsLoaded(true))
 
     if (cachedResumes.length > 0) {
       setResumes(cachedResumes)
@@ -121,34 +122,13 @@ export function ApplicationsPage() {
   }, [fetchApplications, cachedResumes, setCachedResumes])
 
   useEffect(() => {
-    if (hasAppliedQuerySelection) return
     const resumeIdFromQuery = searchParams.get('resumeId')
     const applicationIdFromQuery = searchParams.get('applicationId')
-
-    if (applicationIdFromQuery) {
-      const applicationFromQuery = applications.find((app) => app.id === applicationIdFromQuery)
-
-      if (!applicationFromQuery) {
-        if (isLoading) return
-        setHasAppliedQuerySelection(true)
-        return
-      }
-
-      setSelectedResumeId(null)
-      setHasAppliedQuerySelection(true)
-      return
-    }
-
-    if (resumes.length === 0) return
-    if (!resumeIdFromQuery) return
-
-    const exists = resumes.some((resume) => resume.id === resumeIdFromQuery)
-    if (exists) {
-      setSelectedResumeId(resumeIdFromQuery)
-    }
-    setHasAppliedQuerySelection(true)
-  }, [applications, hasAppliedQuerySelection, isLoading, resumes, searchParams])
-
+    const key = JSON.stringify([batchId, resumeIdFromQuery, applicationIdFromQuery])
+    if (appliedSelectionRef.current === key || isLoadingResumes || !applicationsLoaded) return
+    setSelectedResumeId(!applicationIdFromQuery && resumeIdFromQuery && resumes.some((resume) => resume.id === resumeIdFromQuery && (!batchId || resume.batch_id === batchId)) ? resumeIdFromQuery : null)
+    appliedSelectionRef.current = key
+  }, [applicationsLoaded, batchId, isLoadingResumes, resumes, searchParams])
   const handleCreateApplication = async (data: SaveData) => {
     try {
       await createApplication(data as import('../types/application').CreateApplicationInput)
@@ -349,7 +329,7 @@ const handleGoHome = () => {
               applications={scopedApplications}
               resumes={scopedResumes}
               selectedResumeId={selectedResumeId}
-              isLoading={isLoading}
+              isLoading={isLoading || !applicationsLoaded}
               initialExpandedId={searchParams.get('applicationId')}
               pendingDeleteId={showDeleteConfirm}
               headerAction={
