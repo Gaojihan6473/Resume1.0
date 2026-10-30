@@ -43,11 +43,17 @@ npm run lint
 npm run build
 npm test
 npm run test:batches
+npm run test:storage
 npm run test:workspace
 npm run eval:resume-agent
 npm run preview
 npm run check:encoding
+npm run check
+npm run check:core
+npm run check:acceptance
 ```
+
+日常开发、测试与验收遵循 [项目工作流](docs/development-workflow.md)，并由 `AGENTS.md` 引导后续编码代理执行：行为改动先建立失败用例、修复前查根因、交付前以当前验证结果为准。`check` 是日常代码基线，`check:core` 增加数据库/权限/Agent 回归，`check:acceptance` 自动管理本机服务并运行浏览器与 PDF 验收，无需生产凭证或手动启动 Vite。验收使用合成数据；真实模型、生产服务和多设备并发需要另行验证。GitHub CI 配置见 `.github/workflows/quality.yml`，提交推送后运行；分支保护和发布门禁需独立配置。
 
 “我的”页面在账号与资料列表下提供独立的 **Agent 分析** 模块，按时间倒序汇总当前账号已保存的 Agent 分析。支持按简历、公司、岗位搜索；资料列表和分析历史均首次展示 5 条，点击“加载更多”每次追加 5 条；展开记录可查看匹配结果、优化建议、失败原因与当时的职位描述，也可打开关联简历。历史详情按需加载；列表仅显示一次岗位信息，展开后以分析报告的形式按分析摘要、岗位匹配、优化建议分区呈现，通过标题、编号和分隔线组织内容。优化建议可逐项展开，默认展开首项；内部展开使用加减号，与记录层的上下箭头区分。详情区域收窄居中，栏目刻度和实线／虚线区分不同内容层级。每条记录支持通过右侧删除图标确认删除，仅删除该条分析历史，关联简历、岗位及已生成版本保留。普通 JD 分析不混入此列表。
 
@@ -61,6 +67,7 @@ npm run check:encoding
 - Resume Agent uses the separate `resume-agent` Edge Function. The frontend is enabled by default and can be rolled back per environment with `VITE_RESUME_AGENT_ENABLED=false`; keep server-side `RESUME_AGENT_ENABLED=true` after deploying the function. The default Eval command validates 20 synthetic fixtures locally; add `-- --live` only for an explicit local DeepSeek run.
 - Login uses the `auth-sign-in` Supabase Edge Function: it verifies an `sk-...` key against `public.valid_keys`, then exchanges a server-generated magic-link token for a Supabase Auth session. Configure `SUPABASE_SERVICE_ROLE_KEY` for auth and AI Edge Functions.
 - The `resumes` storage bucket is private. The frontend stores object paths in `file_url` / `preview_url` and resolves them to signed URLs when rendering.
+- Apply `supabase/migrations/20261030022811_close_resume_storage_public_access.sql` to remove legacy public/owner-only Storage policies that can bypass account isolation or key revocation. Active owners retain access to versioned assets and legacy `previews/<resume-id>.png` thumbnails. `npm run test:storage` reproduces the old anonymous access and verifies anonymous, cross-account, revoked-key and normal owner operations against the migration. Previously issued signed URLs are bearer links and can remain usable until expiry; changing RLS does not revoke those links.
 - Generated PDFs and thumbnails use a new immutable object path for each version. Copies may share the saved snapshot, while later saves of the original write new objects and leave that snapshot intact. Existing fixed-path snapshots remain readable for their original resume and are no longer overwritten by new saves. Historical copies pointing at another resume's mutable PDF fall back to their own structured content; their next save creates fresh assets.
 - Clearing imported personal-summary text is an explicit edit; saving does not restore the legacy text/highlights fields.
 - The editor preview renders the same A4 HTML document that is sent to Playwright for PDF export. In local `npm run dev`, Vite serves `/render-resume-pdf` directly. On Vercel, `/render-resume-pdf` is rewritten to the Node Function in `api/render-resume-pdf.js`. For a separate render service, set `VITE_PDF_RENDER_URL`.

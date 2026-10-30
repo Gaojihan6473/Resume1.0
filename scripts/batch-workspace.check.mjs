@@ -7,8 +7,11 @@ import { PGlite } from '@electric-sql/pglite'
 import mammoth from 'mammoth'
 
 const origin = process.env.WORKSPACE_TEST_URL || 'http://127.0.0.1:5175'
-const env = await readFile(new URL('../.env', import.meta.url), 'utf8')
-const supabaseUrl = env.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1].trim().replace(/^['"]|['"]$/g, '')
+const env = await readFile(new URL('../.env', import.meta.url), 'utf8').catch((error) => {
+  if (error.code === 'ENOENT') return ''
+  throw error
+})
+const supabaseUrl = process.env.VITE_SUPABASE_URL || env.match(/^VITE_SUPABASE_URL=(.+)$/m)?.[1].trim().replace(/^['"]|['"]$/g, '')
 if (!supabaseUrl) throw new Error('Configure VITE_SUPABASE_URL before running the browser check')
 const user = '00000000-0000-0000-0000-000000000001'
 const db = new PGlite()

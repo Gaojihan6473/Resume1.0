@@ -1,0 +1,65 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_SUPABASE_URL: https://fixture.supabase.co
+  VITE_SUPABASE_ANON_KEY: fixture-anon-key
+  VITE_EDGE_FUNCTIONS_URL: https://fixture.supabase.co/functions/v1
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+jobs:
+  core:
+    name: Core checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:core
+
+  acceptance:
+    name: Browser and export acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - name: Use the installed Playwright browser consistently
+        run: node --input-type=module -e "import { chromium } from 'playwright-core'; import { appendFileSync } from 'node:fs'; appendFileSync(process.env.GITHUB_ENV, 'PDF_CHROMIUM_EXECUTABLE_PATH=' + chromium.executablePath() + '\n')"
+      - run: npm run check:acceptance
+      - name: Keep synthetic acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-evidence
+          path: |
+            .cache/quality/
+            .cache/batch-check/
+            .tmp/pdf-security/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7

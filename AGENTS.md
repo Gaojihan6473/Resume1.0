@@ -32,11 +32,14 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 - Preview production build: `npm run preview`
 
 ## Testing & Validation
-- There is currently no dedicated `test` script in `package.json`.
-- Minimum validation for most changes:
-- Run `npm run lint`
-- Run `npm run build`
-- If UI behavior changed, manually verify in `npm run dev` (upload, edit, preview, export path touched by the change).
+- Follow `docs/development-workflow.md` as the regular development, testing and acceptance workflow. It combines the project's existing regression/acceptance checks with the Superpowers principles of test-first behavioral changes, root-cause debugging and evidence before completion claims.
+- For observable behavior changes and bug fixes, identify acceptance criteria and a focused public-boundary test first. Run it and confirm the intended failure before changing behavior, then make the smallest fix and rerun it. An existing reproducible failing test counts. Do not remove user changes or rewrite working code to manufacture this sequence.
+- Investigate failures before fixing: reproduce, read the actual error, trace UI/API/data boundaries, and test one explanation at a time. Distinguish environment/network failures from product defects. After repeated failed hypotheses, revisit the cause and architecture instead of stacking speculative fixes.
+- Documentation-only or reversible cosmetic changes do not require artificial unit tests; check the affected links/layout. For code changes, run `npm run check` (lint, unit/component tests, build, encoding). Expand to `npm run check:core` for shared core logic, auth, data, import or Agent changes.
+- Run `npm run check:acceptance` for preview/export, cross-module UI flows and release acceptance; use `-- --workspace` or `-- --pdf` for a focused affected path. Add scoped exploratory checks from the risk matrix in the workflow; fixed scripts do not cover every user behavior.
+- Tests must assert observable results, errors or durable effects; mock external boundaries only when needed. Do not weaken assertions, skip failing cases or change product behavior merely to make tests green.
+- Before claiming completion, read fresh command outputs and exit codes after the final relevant change. Report behavior changed, checks/results, environment (isolated vs live), and unresolved risks. Do not describe mocked AI/Storage or local acceptance as production verification. Do not claim release acceptance from a lint/build result alone.
+- CI is defined in `.github/workflows/quality.yml`; required checks/branch protection and deployment gates are separate remote settings, not implied by the workflow file.
 
 ## Working Agreements
 - Keep changes scoped and minimal; do not refactor unrelated parts.
