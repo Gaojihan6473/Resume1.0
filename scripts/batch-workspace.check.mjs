@@ -397,6 +397,12 @@ try {
   await wordFile.saveAs(wordPath)
   const wordText = (await mammoth.extractRawText({ buffer: await readFile(wordPath) })).value
   for (const text of ['学生工作', '修订完整正文', '荣誉奖项', '2023年一等奖学金', '其他补充', '擅长数据分析与沟通']) assert.ok(wordText.includes(text), `DOCX missing ${text}`)
+  // Exercise the actual browser importer after XML parser dependency updates.
+  const roundtripDocxText = await page.evaluate(async (bytes) => {
+    const { extractTextFromDocx } = await import('/src/parsers/docxParser.ts')
+    return extractTextFromDocx(new File([new Uint8Array(bytes)], 'roundtrip.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }))
+  }, Array.from(await readFile(wordPath)))
+  for (const text of ['学生工作', '修订完整正文', '荣誉奖项', '2023年一等奖学金', '其他补充', '擅长数据分析与沟通']) assert.ok(roundtripDocxText.includes(text), `DOCX browser reimport missing ${text}`)
   const importedPdfDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'PDF', exact: true }).click()
   const importedPdfFile = await importedPdfDownload
