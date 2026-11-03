@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Check, CircleDashed, FileText, Loader2, Minus, Plus, Sparkles } from 'lucide-react'
-import { fetchAgentHistoryDetail } from '../../lib/api/jdAnalysisRecords'
+import { fetchAgentHistoryDetail, fetchAgentHistorySources, type AgentHistorySources } from '../../lib/api/jdAnalysisRecords'
+import { useAuthStore } from '../../store/authStore'
 import type { JDAnalysisRecord } from '../../types/jdAnalysisHistory'
 import { isResumeAgentHistoryResult, type ResumeAgentPatch } from '../../types/resumeAgent'
 import './AgentHistoryDetail.css'
@@ -56,13 +57,37 @@ export function AgentHistoryDetail({ id, onOpenResume }: { id: string; onOpenRes
   const [record, setRecord] = useState<JDAnalysisRecord | null>(null)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
+  const [sources, setSources] = useState<AgentHistorySources | null>(null)
+  const [checking, setChecking] = useState(false)
+  const checkingRef = useRef(false)
+  const lifecycle = useRef<AbortController | null>(null)
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
+    lifecycle.current = controller
+    setSources(null)
     fetchAgentHistoryDetail(id).then((data) => {
-      if (active) { setRecord(data); setError('') }
+      if (active) {
+        setRecord(data); setError('')
+        void fetchAgentHistorySources(data).then((value) => { if (active) setSources(value) })
+          .catch(() => { if (active) setSources({ resume: 'unknown', application: 'unknown' }) })
+      }
     }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : '加载分析详情失败') })
-    return () => { active = false }
+    return () => { active = false; controller.abort() }
   }, [id, retry])
+  const verifySources = async (open = false) => {
+    if (!record || checkingRef.current) return
+    const requestLifecycle = lifecycle.current
+    const owner = useAuthStore.getState().user?.id
+    checkingRef.current = true; setChecking(true)
+    try {
+      const value = await fetchAgentHistorySources(record)
+      if (requestLifecycle?.signal.aborted || useAuthStore.getState().user?.id !== owner) return
+      setSources(value)
+      if (open && value.resume === 'available') onOpenResume(record.resume_id)
+    } catch { if (!requestLifecycle?.signal.aborted) setSources({ resume: 'unknown', application: 'unknown' }) }
+    finally { checkingRef.current = false; if (!requestLifecycle?.signal.aborted) setChecking(false) }
+  }
   if (error) return <div role="alert" className="mx-4 my-5 border-l-2 border-rose-200 pl-3 text-sm text-rose-600 sm:mx-6">{error}<button type="button" className="ml-3 underline" onClick={() => { setError(''); setRetry((value) => value + 1) }}>重试详情</button></div>
   if (!record) return <p role="status" className="flex items-center justify-center gap-2 p-8 text-xs text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />正在加载分析详情…</p>
   const result = isResumeAgentHistoryResult(record.analysis_result) ? record.analysis_result : null
@@ -72,6 +97,16 @@ export function AgentHistoryDetail({ id, onOpenResume }: { id: string; onOpenRes
   const completion = { success: '分析完成', partial: '部分完成', no_changes: '无需修改', failed: '分析失败' }
   const covered = proposal?.targetRequirements.filter((item) => item.coverage === 'covered').length || 0
   return <div className="agent-history-report relative mx-auto w-full max-w-[960px] divide-y divide-[#e5ebf2] bg-white px-5 pb-2 sm:px-8">
+    <div className="space-y-2 py-4 text-xs leading-6 text-slate-500">
+      <p>本记录基于分析时的简历与职位描述，后续修改不会更新这份历史结果。</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1" aria-live="polite">
+        {!sources && <span>正在确认关联来源…</span>}
+        {sources?.resume === 'missing' && <span>原简历已删除或不可访问</span>}
+        {sources?.application === 'missing' && <span>原岗位已删除或不可访问</span>}
+        {sources?.application === 'manual' && <span>手工输入的职位描述</span>}
+        {(sources?.resume === 'unknown' || sources?.application === 'unknown') && <><span>暂无法确认关联来源，历史结果仍可查看。</span><button type="button" disabled={checking} onClick={() => void verifySources()} className="underline disabled:opacity-50">重新确认来源</button></>}
+      </div>
+    </div>
     <div className="grid gap-3 py-6 sm:grid-cols-[100px_minmax(0,1fr)] sm:gap-6">
       <ReportLabel title="分析摘要" detail={result ? completion[result.completionStatus] : '暂无分析结果'} failed={result?.completionStatus === 'failed'} />
       <div className="min-w-0">{summary && <p className="whitespace-pre-wrap break-words text-[15px] leading-8 text-slate-700">{summary}</p>}{failure && <p className="mt-2 border-l-2 border-rose-200 pl-3 text-sm leading-7 text-rose-700">{failure}</p>}</div>
@@ -86,6 +121,6 @@ export function AgentHistoryDetail({ id, onOpenResume }: { id: string; onOpenRes
     {proposal && <section aria-label="优化建议" className="grid gap-3 py-6 sm:grid-cols-[100px_minmax(0,1fr)] sm:gap-6"><ReportLabel title="优化建议" detail={`共 ${proposal.patches.length} 项`} />{proposal.patches.length ? <div className="min-w-0 divide-y divide-dashed divide-slate-200/80">{proposal.patches.map((patch, index) => <PatchEntry key={patch.key} patch={patch} index={index} />)}</div> : <p className="py-1 text-sm leading-7 text-slate-500">本次分析没有生成修改建议。</p>}</section>}
 
 
-    <div className="flex flex-wrap items-start justify-between gap-3 py-4 sm:pl-[124px]"><details className="group/jd min-w-0 flex-[1_1_220px]"><summary className="flex w-fit cursor-pointer list-none items-center gap-2 py-2 text-xs text-slate-400 marker:content-none hover:text-[#4b5f83] [&::-webkit-details-marker]:hidden"><FileText aria-hidden="true" className="h-3.5 w-3.5" />查看本次职位描述<DisclosureMark group="jd" /></summary><p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-words border-l border-slate-200 pl-4 text-xs leading-7 text-slate-500">{record.jd_text_snapshot || '未保存职位描述'}</p></details><button type="button" onClick={() => onOpenResume(record.resume_id)} className="inline-flex shrink-0 items-center gap-1.5 py-2 text-xs font-medium text-[#4b5f83] transition hover:text-blue-600">打开关联简历<ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" /></button></div>
+    <div className="flex flex-wrap items-start justify-between gap-3 py-4 sm:pl-[124px]"><details className="group/jd min-w-0 flex-[1_1_220px]"><summary className="flex w-fit cursor-pointer list-none items-center gap-2 py-2 text-xs text-slate-400 marker:content-none hover:text-[#4b5f83] [&::-webkit-details-marker]:hidden"><FileText aria-hidden="true" className="h-3.5 w-3.5" />查看本次职位描述<DisclosureMark group="jd" /></summary><p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-words border-l border-slate-200 pl-4 text-xs leading-7 text-slate-500">{record.jd_text_snapshot || '未保存职位描述'}</p></details>{sources?.resume === 'available' && <button type="button" disabled={checking} onClick={() => void verifySources(true)} className="inline-flex shrink-0 items-center gap-1.5 py-2 text-xs font-medium text-[#4b5f83] transition hover:text-blue-600 disabled:opacity-50">打开关联简历<ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" /></button>}</div>
   </div>
 }

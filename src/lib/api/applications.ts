@@ -191,13 +191,13 @@ export async function updateApplication(
   return normalizeApplication(data as ApplicationRow)
 }
 
-export async function deleteApplication(id: string): Promise<void> {
+export async function deleteApplication(id: string, deleteAgentHistory = false): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
     throw new Error('未登录')
   }
 
-  const { error } = await supabase
+  const { error } = deleteAgentHistory ? await supabase.rpc('delete_application_with_agent_history', { p_application: id }) : await supabase
     .from('applications')
     .delete()
     .eq('id', id)

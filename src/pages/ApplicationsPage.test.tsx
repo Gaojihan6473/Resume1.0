@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApplicationsPage } from './ApplicationsPage'
@@ -10,7 +10,7 @@ import type { Application } from '../types/application'
 import type { Resume } from '../lib/api/resumes'
 
 vi.mock('../lib/api', async (original) => ({ ...await original<typeof import('../lib/api')>(), fetchResumes: vi.fn() }))
-vi.mock('../components/Application/ApplicationList', () => ({ ApplicationList: ({ applications, selectedResumeId, isLoading }: { applications: Application[]; selectedResumeId: string | null; isLoading: boolean }) => <div data-testid="jobs" data-selected={selectedResumeId || ''} data-loading={isLoading}>{applications.map((app) => <span key={app.id}>{app.position}</span>)}</div> }))
+vi.mock('../components/Application/ApplicationList', () => ({ ApplicationList: ({ applications, selectedResumeId, isLoading, onDelete }: { applications: Application[]; selectedResumeId: string | null; isLoading: boolean; onDelete: (id: string) => void }) => <div data-testid="jobs" data-selected={selectedResumeId || ''} data-loading={isLoading}>{applications.map((app) => <span key={app.id}>{app.position}<button onClick={() => onDelete(app.id)}>删除{app.position}</button></span>)}</div> }))
 vi.mock('../components/Application/ResumeSelector', () => ({ ResumeSelector: ({ onSelectResume }: { onSelectResume: (id: string | null) => void }) => <button onClick={() => onSelectResume('r2')}>选择第二份简历</button> }))
 vi.mock('../components/Application/ApplicationModal', () => ({ ApplicationModal: () => null }))
 vi.mock('../components/Application/JDParseModal', () => ({ JDParseModal: () => null }))
@@ -29,6 +29,22 @@ describe('ApplicationsPage linked resume entry', () => {
   })
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
   const mount = (query: string) => render(<MemoryRouter initialEntries={[`/applications?${query}`]}><ApplicationsPage /></MemoryRouter>)
+  it('defaults to retaining history and preserves the cleanup choice after a failed job deletion', async () => {
+    const remove = vi.fn().mockRejectedValueOnce(new Error('删除失败')).mockResolvedValueOnce(undefined)
+    useApplicationStore.setState({ deleteApplication: remove })
+    mount('batch=b1')
+    fireEvent.click(await screen.findByRole('button', { name: '删除岗位一' }))
+    const dialog = screen.getByRole('dialog', { name: '确认删除岗位' })
+    const checkbox = within(dialog).getByRole('checkbox', { name: '同时删除相关 Agent 分析历史' })
+    expect(checkbox).not.toBeChecked()
+    fireEvent.click(checkbox)
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('a1', true))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: '删除' })).not.toBeDisabled())
+    expect(checkbox).toBeChecked()
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
   it('preserves the normal highlight-only entry', async () => {
     mount('batch=b1&resumeId=r1')
     await waitFor(() => expect(screen.getByTestId('jobs')).toHaveAttribute('data-selected', 'r1'))

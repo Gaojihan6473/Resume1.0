@@ -30,6 +30,8 @@ before(async () => {
   `)
   await db.exec(await readFile(new URL('../supabase/migrations/20261007_recruitment_batches.sql', import.meta.url), 'utf8'))
   await db.exec(await readFile(new URL('../supabase/migrations/20261008_batch_card_styles.sql', import.meta.url), 'utf8'))
+  await db.exec((await readFile(new URL('../supabase/migrations/20260628_create_jd_analysis_records.sql', import.meta.url), 'utf8')).replace('create extension if not exists pgcrypto;', ''))
+  await db.exec(await readFile(new URL('../supabase/migrations/20261103024933_agent_history_source_lifecycle.sql', import.meta.url), 'utf8'))
   migrated = (await db.query(`select r.id, r.batch_id, a.resume_id, a.batch_id as application_batch from resumes r join applications a on a.resume_id=r.id`)).rows[0]
   await db.exec(`
     grant usage on schema public,auth to authenticated;
@@ -43,6 +45,7 @@ before(async () => {
 after(async () => { await db.close() })
 beforeEach(async () => {
   await db.exec(`reset role; begin;
+    delete from public.jd_analysis_records;
     delete from public.applications; delete from public.resumes; delete from public.recruitment_batches; delete from public.batch_transfer_receipts;
     insert into recruitment_batches(id,user_id,name,is_default) values('${source}','${user}','默认批次',true),('${target}','${user}','秋招',false);
     insert into resumes(id,user_id,batch_id,title,content,source) values('${resume}','${user}','${source}','基础简历','{"basic":{"name":"小鱼"}}','agent-p0:original-run');
@@ -58,6 +61,92 @@ async function execute(plan, resumeIds = [], applicationIds = [], mode = 'move',
   return db.query('select execute_batch_transfer($1,$2,$3::uuid[],$4::uuid[],$5,$6,$7) as result', [source, destination, resumeIds, applicationIds, mode, plan.fingerprint, requestId])
 }
 async function rows(table) { return (await db.query(`select * from public.${table} order by ${table === 'batch_transfer_receipts' ? 'request_id' : 'id'}`)).rows }
+
+async function seedHistory() {
+  await db.query(`insert into jd_analysis_records(user_id,resume_id,application_id,jd_hash,resume_hash,model,prompt_version,analysis_result,jd_text_snapshot) values
+    ($1,$2,$3,'jd','resume','fixture','v1','{"kind":"resume-agent"}','岗位一快照'),
+    ($1,$2,$4,'jd','resume','fixture','v1','{"kind":"resume-agent"}','岗位二快照'),
+    ($1,$2,$3,'jd','resume','fixture','v1','{}','普通 JD 快照')`, [user, resume, job1, job2])
+}
+
+test('default source deletion preserves snapshots while clearing only the live association', async () => {
+  await seedHistory()
+  await db.query('delete from applications where id=$1', [job1])
+  await db.query('select delete_resume_with_links($1)', [resume])
+  assert.equal((await rows('jd_analysis_records')).length, 3)
+  assert.equal((await rows('applications'))[0].resume_id, null)
+})
+
+test('explicit resume cleanup removes Agent history atomically, retaining jobs and normal JD history', async () => {
+  await seedHistory()
+  await db.query('select delete_resume_with_agent_history($1)', [resume])
+  assert.equal((await rows('resumes')).length, 0)
+  assert.equal((await rows('applications')).length, 2)
+  assert.ok((await rows('applications')).every((job) => job.resume_id === null))
+  assert.equal((await rows('jd_analysis_records')).length, 1)
+  assert.equal((await rows('jd_analysis_records'))[0].jd_text_snapshot, '普通 JD 快照')
+  await db.query('select delete_resume_with_agent_history($1)', [resume])
+  assert.equal((await rows('jd_analysis_records')).length, 1)
+  await assert.rejects(db.query(`insert into jd_analysis_records(user_id,resume_id,jd_hash,resume_hash,model,prompt_version) values($1,$2,'j','r','m','v')`, [user, resume]), /来源简历已不存在/)
+})
+
+test('job cleanup retains other job history and the resume, and rejects late history insertion', async () => {
+  await seedHistory()
+  await db.query('select delete_application_with_agent_history($1)', [job1])
+  assert.equal((await rows('resumes')).length, 1)
+  assert.deepEqual((await rows('applications')).map((job) => job.id), [job2])
+  assert.equal((await rows('jd_analysis_records')).length, 2)
+  assert.ok((await rows('jd_analysis_records')).some((record) => record.jd_text_snapshot === '岗位二快照'))
+  await assert.rejects(db.query(`insert into jd_analysis_records(user_id,resume_id,application_id,jd_hash,resume_hash,model,prompt_version) values($1,$2,$3,'j','r','m','v')`, [user, resume, job1]), /来源岗位已不存在/)
+})
+
+test('cleanup cannot remove another owner data or execute as anonymous', async () => {
+  await seedHistory()
+  await db.exec(`set request.jwt.claim.sub='${otherUser}'`)
+  await db.query('select delete_resume_with_agent_history($1)', [resume])
+  await db.query('select delete_application_with_agent_history($1)', [job1])
+  await db.exec(`set request.jwt.claim.sub='${user}'`)
+  assert.equal((await rows('resumes')).length, 1)
+  assert.equal((await rows('jd_analysis_records')).length, 3)
+  for (const name of ['delete_resume_with_agent_history', 'delete_application_with_agent_history']) {
+    const result = await db.query('select has_function_privilege($1,$2,$3) as allowed', ['anon', `${name}(uuid)`, 'EXECUTE'])
+    assert.equal(result.rows[0].allowed, false)
+  }
+  await db.exec("set request.jwt.claim.sub=''")
+  await assert.rejects(db.query('select delete_resume_with_agent_history($1)', [resume]), /未登录或凭证已停用/)
+})
+
+test('a history deletion failure rolls back the resume deletion and job unlinking', async () => {
+  await seedHistory()
+  await db.exec(`reset role;
+    create function public.fail_history_delete() returns trigger language plpgsql as $$begin raise exception 'fixture delete failure'; end$$;
+    create trigger fail_history_delete before delete on jd_analysis_records for each row execute function fail_history_delete();
+    set role authenticated;`)
+  try {
+    await assert.rejects(db.query('select delete_application_with_agent_history($1)', [job1]), /fixture delete failure/)
+    assert.equal((await rows('applications')).length, 2)
+    await assert.rejects(db.query('select delete_resume_with_agent_history($1)', [resume]), /fixture delete failure/)
+    assert.equal((await rows('resumes')).length, 1)
+    assert.ok((await rows('applications')).every((job) => job.resume_id === resume))
+    assert.equal((await rows('jd_analysis_records')).length, 3)
+  } finally {
+    await db.exec('reset role; drop trigger fail_history_delete on jd_analysis_records; drop function fail_history_delete(); set role authenticated;')
+  }
+})
+
+test('inactive credentials cannot use either explicit cleanup function', async () => {
+  await seedHistory()
+  await db.exec(`reset role; create or replace function public.has_active_key(uuid) returns boolean language sql as $$select false$$; set role authenticated;`)
+  try {
+    await assert.rejects(db.query('select delete_resume_with_agent_history($1)', [resume]), /凭证已停用/)
+    await assert.rejects(db.query('select delete_application_with_agent_history($1)', [job1]), /凭证已停用/)
+  } finally {
+    await db.exec(`reset role; create or replace function public.has_active_key(uuid) returns boolean language sql as $$select true$$; set role authenticated;`)
+  }
+  assert.equal((await rows('resumes')).length, 1)
+  assert.equal((await rows('applications')).length, 2)
+  assert.equal((await rows('jd_analysis_records')).length, 3)
+})
 
 test('migration preserves existing IDs and associations in the default batch', () => {
   assert.equal(migrated.id, resume)

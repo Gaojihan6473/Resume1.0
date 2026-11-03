@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useJDAnalysisHistoryStore } from './jdAnalysisHistoryStore'
 import type {
   Application,
   CreateApplicationInput,
@@ -23,7 +24,7 @@ interface ApplicationState {
   fetchApplications: () => Promise<void>
   createApplication: (data: CreateApplicationInput) => Promise<Application>
   updateApplication: (id: string, data: UpdateApplicationInput) => Promise<void>
-  deleteApplication: (id: string) => Promise<void>
+  deleteApplication: (id: string, deleteAgentHistory?: boolean) => Promise<void>
   clearError: () => void
 
   getApplicationById: (id: string) => Application | undefined
@@ -109,12 +110,13 @@ export const useApplicationStore = create<ApplicationState>((set, get) => ({
     }
   },
 
-  deleteApplication: async (id) => {
+  deleteApplication: async (id, deleteAgentHistory = false) => {
     const generation = requestGeneration
     set({ isLoading: true, error: null })
     try {
-      await apiDeleteApplication(id)
+      await apiDeleteApplication(id, deleteAgentHistory)
       if (generation !== requestGeneration) return
+      if (deleteAgentHistory) useJDAnalysisHistoryStore.getState().removeSourceRecords({ applicationId: id })
       set((state) => ({
         applications: state.applications.filter((app) => app.id !== id),
         isLoading: false,

@@ -40,6 +40,27 @@ export type AgentHistorySummary = Pick<JDAnalysisRecord,
   'id' | 'resume_id' | 'title' | 'resume_title_snapshot' | 'company_snapshot' | 'position_snapshot' | 'status' | 'analyzed_at' | 'created_at'>
 export const AGENT_HISTORY_PAGE_SIZE = 5
 
+export interface AgentHistorySources {
+  resume: 'available' | 'missing' | 'unknown'
+  application: 'available' | 'missing' | 'unknown' | 'manual'
+}
+
+export async function fetchAgentHistorySources(record: Pick<JDAnalysisRecord, 'resume_id' | 'application_id' | 'user_id'>): Promise<AgentHistorySources> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session || session.user.id !== record.user_id) return { resume: 'unknown', application: 'unknown' }
+  const exists = async (table: 'resumes' | 'applications', id: string): Promise<AgentHistorySources['resume']> => {
+    try {
+      const { data, error } = await supabase.from(table).select('id').eq('id', id).eq('user_id', session.user.id).maybeSingle()
+      return error ? 'unknown' : data ? 'available' : 'missing'
+    } catch { return 'unknown' }
+  }
+  const [resume, application] = await Promise.all([
+    exists('resumes', record.resume_id),
+    record.application_id ? exists('applications', record.application_id) : Promise.resolve('manual' as const),
+  ])
+  return { resume, application }
+}
+
 export async function fetchAgentHistory(query = '', page = 0) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error('未登录')

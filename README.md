@@ -9,7 +9,9 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - Edit student work, awards, and other supplementary content as multiline entries in 技能与其他
 - Visual editor + live A4 preview from the same HTML used for PDF export
 - Save/load resumes with Supabase
+- Global new/import actions ask for a recruitment batch when needed, then open the editor or upload dialog once; the destination remains interactive after the handoff.
 - Saving preserves edits made while the request is in flight; responses from another document cannot replace the current editor. Closing an import or switching documents cancels the previous parse.
+- “保存并切换”在新草稿保存并补全编辑器 URL 后仍会前往原目标页面；后台缩略图只发布到对应 PDF 版本，版本已变化时跳过本次更新。
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
 - Resume cards in the delivery dashboard offer an edit shortcut; JD analysis is accessed inside the resume editor.
 - The signed-in homepage shows recruitment batch cards and two side-by-side white panels of recently edited resumes and jobs, with the latest three items in each list. Visible category headings and subtle dividers organize compact rows; only the jobs heading offers a borderless text-and-arrow link to view all jobs. Narrow screens stack the panels. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
@@ -57,6 +59,10 @@ npm run check:acceptance
 
 “我的”页面在账号与资料列表下提供独立的 **Agent 分析** 模块，按时间倒序汇总当前账号已保存的 Agent 分析。支持按简历、公司、岗位搜索；资料列表和分析历史均首次展示 5 条，点击“加载更多”每次追加 5 条；展开记录可查看匹配结果、优化建议、失败原因与当时的职位描述，也可打开关联简历。历史详情按需加载；列表仅显示一次岗位信息，展开后以分析报告的形式按分析摘要、岗位匹配、优化建议分区呈现，通过标题、编号和分隔线组织内容。优化建议可逐项展开，默认展开首项；内部展开使用加减号，与记录层的上下箭头区分。详情区域收窄居中，栏目刻度和实线／虚线区分不同内容层级。每条记录支持通过右侧删除图标确认删除，仅删除该条分析历史，关联简历、岗位及已生成版本保留。普通 JD 分析不混入此列表。
 
+删除简历或岗位时，默认保留 Agent 分析历史及当时的内容快照；删除确认框可勾选“同时删除相关 Agent 分析历史”，通过数据库事务一并清理，失败时不做部分删除。普通 JD 分析历史与已生成的简历版本保留。历史详情明确标注基于分析时的内容，来源删除或不可访问时显示提示，并移除失效的简历入口；来源查询失败可重试，打开简历前会再次确认。数据库也会拒绝来源删除后迟到的分析记录写入。
+
+此功能的发布顺序：先应用 `supabase/migrations/20261103024933_agent_history_source_lifecycle.sql`，再发布前端。新增函数使用调用者权限并校验有效凭证；未应用迁移时，勾选清理会报删除失败，不会退回到只删源数据。
+
 ## Notes
 
 - AI resume import uses DeepSeek `deepseek-flash` through the `deepseek-chat` Edge Function. PDFs send bounded inline page images and positioned text blocks; DOCX/TXT send native content blocks. Model output identifies sections and source block references; the client assembles the original text, checks missing or conflicting blocks, retries the affected region once, and retains uncertain text in 其他补充 with a review warning. Rule parsing remains available if AI fails. Scans that cannot be read show an upload warning. Old `.doc` files require conversion to DOCX or PDF before upload.
@@ -84,6 +90,7 @@ Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; v
 
 ### 批次工作空间与迁移
 
+- 未登录首页采用铺满首屏的浅蓝渐变、居中品牌介绍、导入/空白创建双入口和三步流程，适配桌面、平板与手机。示例采用完整 A4 比例、虚构的工作/项目成果与教育技能信息；手机端将版本切换移至纸张上方。交互示例可切换基础版及岗位版本，只展示合成内容，不创建真实简历；导入与创建沿用登录验证。小鱼气泡与工作台框边缘重叠，轻浮动在悬停或键盘聚焦时暂停；点击小鱼可循环切换简短提示。示例切换同步更新右侧岗位重点，问号说明支持 Esc、点击外部和失焦关闭。密钥登录页与登录提示弹窗统一使用浅蓝色系、简洁线性图标与轻阴影，保留原有密钥验证及登录跳转，返回首页按钮位于登录卡片外左上方，与卡片左边缘对齐，支持明确的悬停、按下和键盘聚焦反馈；登录提示弹窗打开后聚焦登录，焦点限制在弹窗内，支持遮罩/Esc/按钮关闭并返回原入口。按钮支持键盘焦点、触屏操作及减少动态效果设置。
 - 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色，并可独立选择 15 款插画卡面或“纯色”。新建与管理批次都提供缩略图和即时预览；插画半透明展示在卡片右侧，点击区域、文字及菜单保持可用。最近简历和岗位分别按编辑时间倒序展示最近 3 条，不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
 - 首页仅纵向滚动。最近编辑采用双栏白色面板：桌面左侧简历、右侧岗位，各展示最近 3 条，窄屏上下堆叠。分类标题显示图标和当前展示数量，简历不设“查看全部”，岗位右上角提供无底色、无边框的文字加箭头链接进入全部岗位。每类内容共用一个圆角面板，内部通过细分隔线和留白组织紧凑条目，不为每条记录单独设置卡片边框和阴影；条目桌面高度为 100px。简历配缩略图与名称，岗位配统一图标、公司、状态和岗位名称；所属批次与编辑时间紧邻排列，批次可独立点击，条目支持整行打开和键盘焦点。求职方向、地点、投递渠道、关联简历和投递日期可在编辑页或详情查看。
 - 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明，右上角仅保留“管理批次”按钮，不显示批次切换下拉框。岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。

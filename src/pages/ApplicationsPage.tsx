@@ -1,3 +1,4 @@
+import { AgentHistoryDeleteOption } from '../components/Agent/AgentHistoryDeleteOption'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Loader2, ChevronsRight, FilePlus } from 'lucide-react'
@@ -51,6 +52,9 @@ export function ApplicationsPage() {
   const appliedSelectionRef = useRef<string | null>(null)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [deleteHistory, setDeleteHistory] = useState(false)
+  const deleteInFlight = useRef(false)
+  const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [showCreateDropdown, setShowCreateDropdown] = useState(false)
   const [showJDModal, setShowJDModal] = useState(false)
@@ -164,13 +168,15 @@ export function ApplicationsPage() {
   }
 
   const handleDeleteApplication = async (id: string) => {
+    if (deleteInFlight.current) return
+    deleteInFlight.current = true; setDeleting(true)
     try {
-      await deleteApplication(id)
+      await deleteApplication(id, deleteHistory)
       toast('删除成功', 'success')
       setShowDeleteConfirm(null)
     } catch (error) {
       toast(error instanceof Error ? error.message : '删除失败，请重试', 'error')
-    }
+    } finally { deleteInFlight.current = false; setDeleting(false) }
   }
 
   const handleManualCreate = () => {
@@ -344,7 +350,7 @@ const handleGoHome = () => {
                 </button>
               }
               onSave={handleUpdateApplication}
-              onDelete={(id) => setShowDeleteConfirm(id)}
+              onDelete={(id) => { setDeleteHistory(false); setShowDeleteConfirm(id) }}
             />
           </div>
         </main>
@@ -380,17 +386,20 @@ const handleGoHome = () => {
       {/* 删除确认弹窗 */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-xl">
+          <div role="dialog" aria-modal="true" aria-label="确认删除岗位" className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800">确认删除</h3>
-            <p className="mt-2 text-sm text-slate-600">确定要删除这条投递记录吗？此操作无法撤销。</p>
+            <p className="mt-2 text-sm text-slate-600">确定要删除这条投递记录吗？此操作无法撤销。关联简历会保留。</p>
+            <AgentHistoryDeleteOption checked={deleteHistory} onChange={setDeleteHistory} disabled={deleting} />
             <div className="mt-5 flex gap-3">
               <button
+                disabled={deleting}
                 onClick={() => setShowDeleteConfirm(null)}
                 className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors"
               >
                 取消
               </button>
               <button
+                disabled={deleting}
                 onClick={() => handleDeleteApplication(showDeleteConfirm)}
                 className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-sm font-medium rounded-xl hover:from-red-600 hover:to-red-700 transition-all"
               >

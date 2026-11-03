@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isResumeAgentHistoryResult } from '../types/resumeAgent'
 import type {
   CreateJDAnalysisRecordInput,
   JDAnalysisRecord,
@@ -17,6 +18,7 @@ interface JDAnalysisHistoryState {
   createRecord: (input: CreateJDAnalysisRecordInput) => Promise<JDAnalysisRecord>
   clearRecords: () => void
   removeRecord: (id: string) => void
+  removeSourceRecords: (source: { resumeId?: string; applicationId?: string }) => void
 }
 
 let ownerId: string | null = null
@@ -72,5 +74,12 @@ export const useJDAnalysisHistoryStore = create<JDAnalysisHistoryState>((set, ge
     epoch++ // Prevent in-flight reads from restoring a deleted record.
     for (const [resumeId, records] of cache) cache.set(resumeId, records.filter((record) => record.id !== id))
     set((state) => ({ records: state.records.filter((record) => record.id !== id), isLoading: false }))
+  },
+  removeSourceRecords: ({ resumeId, applicationId }) => {
+    epoch++
+    const keep = (record: JDAnalysisRecord) => !isResumeAgentHistoryResult(record.analysis_result)
+      || !((resumeId && record.resume_id === resumeId) || (applicationId && record.application_id === applicationId))
+    for (const [id, records] of cache) cache.set(id, records.filter(keep))
+    set((state) => ({ records: state.records.filter(keep), isLoading: false }))
   },
 }))

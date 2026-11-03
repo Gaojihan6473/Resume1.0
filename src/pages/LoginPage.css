@@ -1,0 +1,50 @@
+.key-login-page { position: relative; display: flex; flex-direction: column; width: 100%; height: 100dvh; overflow-y: auto; background: radial-gradient(ellipse at 50% 38%, #e5efff80, transparent 60%), linear-gradient(150deg, #f4f8ff, #fbfcff 70%); color: #2b4265; }
+.key-login-page::before { content: ''; position: fixed; inset: 0; pointer-events: none; background-image: radial-gradient(#8ba8d21c .8px, transparent .8px); background-size: 24px 24px; mask-image: radial-gradient(ellipse at center, black, transparent 72%); }
+.key-login-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 20px; height: 64px; flex-shrink: 0; padding: 0 30px; }
+.key-login-brand { display: flex; align-items: center; gap: 10px; min-height: 44px; color: #243958; font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 8px; }
+.key-login-brand svg { width: 28px; height: 24px; }
+.key-login-panel { width: 100%; max-width: 420px; }
+.key-login-back { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 12px; padding: 0 11px; border: 1px solid transparent; border-radius: 10px; color: #5879aa; background: transparent; cursor: pointer; font-size: 12px; transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.key-login-back svg { transition: transform 160ms ease; }
+.key-login-back:active { transform: translateX(-1px); color: #245bd4; }
+.key-login-main { position: relative; display: grid; flex: 1; place-items: center; padding: 40px 24px 54px; }
+.key-login-card { width: 100%; max-width: 420px; padding: 33px 32px 27px; border: 1px solid #e1e9f5; border-radius: 20px; background: #fffffff5; box-shadow: 0 18px 55px #3456810c, 0 2px 8px #34568103; }
+.key-login-heading { min-width: 0; }
+.key-login-card h1 { margin: 0; color: #2c4263; font-size: 25px; font-weight: 650; line-height: 1.5; letter-spacing: -.03em; }
+.key-login-description { margin-top: 12px; color: #7185a1; font-size: 12px; line-height: 1.8; }
+.key-login-card form { margin-top: 27px; }
+.key-login-card input { display: block; width: 100%; min-height: 49px; padding: 12px 14px; border: 1px solid #dce5f2; border-radius: 11px; background: #fbfcff; color: #344e76; font-family: inherit; font-size: 14px; line-height: 1.6; outline: none; transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+.key-login-card input::placeholder { color: #9aabc2; font-size: 12px; }
+.key-login-card input:focus { border-color: #7ca4e9; background: white; box-shadow: 0 0 0 3px #eaf1ff; }
+.key-login-card input[aria-invalid=true] { border-color: #df9da6; box-shadow: 0 0 0 3px #fff0f2; }
+.key-login-card input:disabled { color: #91a2bb; background: #f5f8fd; }
+.key-login-error { display: flex; align-items: flex-start; gap: 7px; margin-top: 11px; color: #b76373; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.key-login-error svg { flex-shrink: 0; margin-top: 3px; }
+.key-login-submit { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 47px; margin-top: 23px; padding: 12px 18px; border: 1px solid transparent; border-radius: 11px; background: #326bed; color: white; cursor: pointer; font-size: 13px; font-weight: 600; box-shadow: 0 4px 12px #326bed12; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.key-login-submit:disabled { background: #a0bbed; cursor: not-allowed; box-shadow: none; }
+.key-login-submit svg:not(.key-login-spinner) { transition: transform 160ms ease; }
+.key-login-help { padding-top: 19px; margin-top: 21px; border-top: 1px solid #ecf0f7; color: #7f92ae; font-size: 11px; line-height: 1.8; }
+.key-login-footer { position: relative; padding: 12px 24px 25px; color: #7e92af; text-align: center; font-size: 10px; line-height: 1.8; }
+.key-login-footer span { padding: 0 10px; color: #adbed5; }
+.key-login-page button:focus-visible { outline: 3px solid #89b0f4; outline-offset: 3px; }
+.key-login-spinner { animation: key-login-spin 1s linear infinite; }
+@keyframes key-login-spin { to { transform: rotate(360deg); } }
+@media (hover: hover) and (pointer: fine) {
+  .key-login-back:hover { color: #326bed; }
+  .key-login-back:hover svg { transform: translateX(-3px); }
+  .key-login-back:active { transform: translateX(-1px); color: #245bd4; }
+  .key-login-submit:not(:disabled):hover { background: #245bd4; box-shadow: 0 5px 14px #326bed18; }
+  .key-login-submit:not(:disabled):hover svg:not(.key-login-spinner) { transform: translateX(3px); }
+  .key-login-submit:not(:disabled):active { transform: translateY(1px); box-shadow: none; }
+}
+@media (max-width: 480px) {
+  .key-login-header { height: 60px; padding: 0 20px; }
+  .key-login-brand { font-size: 15px; gap: 8px; }
+  .key-login-main { padding: 22px 20px 35px; }
+  .key-login-card { padding: 28px 24px 24px; border-radius: 19px; }
+  .key-login-card h1 { font-size: 23px; }
+  .key-login-description { font-size: 11px; }
+  .key-login-card input { font-size: 16px; }
+  .key-login-footer { font-size: 9px; padding-bottom: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .key-login-page *, .key-login-page *::before { animation: none !important; transition: none !important; } .key-login-submit:hover svg:not(.key-login-spinner), .key-login-submit:active, .key-login-back:hover svg, .key-login-back:active { transform: none; } }

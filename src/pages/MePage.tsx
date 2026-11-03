@@ -16,6 +16,8 @@ import { FishLogo } from '../components/Brand/FishLogo'
 import { CustomSelect } from '../components/Application/CustomSelect'
 import { BatchSurface } from '../components/Batch/BatchControls'
 import { useLibraryData, type ResourceState } from '../components/Me/useLibraryData'
+import { AgentHistoryDeleteOption } from '../components/Agent/AgentHistoryDeleteOption'
+import { useJDAnalysisHistoryStore } from '../store/jdAnalysisHistoryStore'
 import { AgentHistorySection } from '../components/Me/AgentHistorySection'
 import { LibraryResumeRow, LibraryApplicationRow, LibraryBatchRow, LibraryBatchLink, libraryLink } from '../components/Me/LibraryRows'
 import { toast } from '../components/Toast'
@@ -56,6 +58,8 @@ function MePageContent({ accountId }: { accountId: string }) {
   const [saving, setSaving] = useState(false)
   const saveInFlight = useRef(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleteHistory, setDeleteHistory] = useState(false)
+  const [historyVersion, setHistoryVersion] = useState(0)
   const [deleteTarget, setDeleteTarget] = useState<Resume | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
@@ -188,13 +192,15 @@ function MePageContent({ accountId }: { accountId: string }) {
   }) }
   const confirmDelete = () => { if (!deleteTarget) return; void mutate(async () => {
     setDeleteError(null)
-    const result = await deleteResume(deleteTarget.id)
+    const result = await deleteResume(deleteTarget.id, deleteHistory)
     if (useAuthStore.getState().user?.id !== accountId) return
     if (!result.success) { setDeleteError(result.error || '删除失败'); return }
     const store = useResumeStore.getState()
     store.setCachedResumes(store.cachedResumes.filter((item) => item.id !== deleteTarget.id), Date.now())
     useApplicationStore.setState((state) => ({ applications: state.applications.map((app) => app.resume_id === deleteTarget.id ? { ...app, resume_id: null } : app) }))
     if (store.currentResumeId === deleteTarget.id) store.resetAll()
+    if (deleteHistory) useJDAnalysisHistoryStore.getState().removeSourceRecords({ resumeId: deleteTarget.id })
+    setHistoryVersion((value) => value + 1)
     setDeleteTarget(null); toast('删除成功，岗位记录已保留', 'success'); await refresh()
   }) }
   const batchLink = (id?: string) => <LibraryBatchLink batch={batchById.get(id || '')} onOpen={go} fallback={!ready('batches') ? resourceHint(resources.batches, '批次') : id ? '批次已不存在' : '未归属批次'} />
@@ -244,7 +250,7 @@ function MePageContent({ accountId }: { accountId: string }) {
             <div id="library-panel" role="tabpanel" aria-labelledby={`library-tab-${tab}`} aria-busy={currentResource.loading}>
               {!currentResource.loaded ? <div className="px-5 py-14 text-center text-sm text-slate-500">{currentResource.error ? '资料暂时无法加载，请重试' : <><Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-slate-400" />加载中…</>}</div> : resultCount === 0 ? <div className="px-5 py-14 text-center"><FileText className="mx-auto mb-3 h-8 w-8 text-slate-300" /><p className="text-sm text-slate-500">{hasFilter ? '没有符合条件的资料' : `暂无${tabs.find((item) => item.id === tab)?.label}`}</p>{hasFilter && <button type="button" onClick={() => changeQuery({ q: '', batch: '', status: '' })} className={`${libraryLink} mt-3 text-sm`}>清除筛选条件</button>}</div> : <>
                 <ul className="min-w-0 divide-y divide-slate-100/80">
-                  {tab === 'resumes' && filtered.resumes.slice(0, limit).map((resume) => <LibraryResumeRow key={resume.id} resume={resume} batch={batchLink(resume.batch_id)} relatedCount={ready('applications') ? counts.related.get(resume.id) || 0 : resourceHint(resources.applications, '关联岗位')} disabled={busy || saving} onOpen={() => openResume(resume.id, resume.batch_id)} onRelated={() => go(`/applications?${new URLSearchParams({ ...(resume.batch_id ? { batch: resume.batch_id } : {}), resumeId: resume.id })}`)} onCopy={() => duplicate(resume)} onDelete={() => protect(() => { setDeleteError(null); setDeleteTarget(resume) })} />)}
+                  {tab === 'resumes' && filtered.resumes.slice(0, limit).map((resume) => <LibraryResumeRow key={resume.id} resume={resume} batch={batchLink(resume.batch_id)} relatedCount={ready('applications') ? counts.related.get(resume.id) || 0 : resourceHint(resources.applications, '关联岗位')} disabled={busy || saving} onOpen={() => openResume(resume.id, resume.batch_id)} onRelated={() => go(`/applications?${new URLSearchParams({ ...(resume.batch_id ? { batch: resume.batch_id } : {}), resumeId: resume.id })}`)} onCopy={() => duplicate(resume)} onDelete={() => protect(() => { setDeleteError(null); setDeleteHistory(false); setDeleteTarget(resume) })} />)}
                   {tab === 'applications' && filtered.applications.slice(0, limit).map((app) => <LibraryApplicationRow key={app.id} application={app} batch={batchLink(app.batch_id)} resume={resumeById.get(app.resume_id || '')} missingResume={!ready('resumes') ? resourceHint(resources.resumes, '关联简历') : '关联简历已不存在'} onOpen={() => go(`/applications?${new URLSearchParams({ ...(app.batch_id ? { batch: app.batch_id } : {}), applicationId: app.id })}`)} onResume={() => { if (app.resume_id) openResume(app.resume_id, resumeById.get(app.resume_id)?.batch_id) }} />)}
                   {tab === 'batches' && filtered.batches.slice(0, limit).map((batch) => <LibraryBatchRow key={batch.id} batch={batch} resumes={ready('resumes') ? counts.batchResumes.get(batch.id) || 0 : resourceHint(resources.resumes, '简历')} jobs={ready('applications') ? counts.batchJobs.get(batch.id) || 0 : resourceHint(resources.applications, '岗位')} onOpen={() => go(`/batches/${encodeURIComponent(batch.id)}`)} />)}
                 </ul>
@@ -252,12 +258,12 @@ function MePageContent({ accountId }: { accountId: string }) {
               </>}
             </div>
           </section>
-          <AgentHistorySection onOpenResume={(id) => openResume(id, resumeById.get(id)?.batch_id)} />
+          <AgentHistorySection key={historyVersion} onOpenResume={(id) => openResume(id, resumeById.get(id)?.batch_id)} />
         </div>
       </main>
     </div>
     {confirmSignOut && <BatchSurface title="退出登录" onClose={() => setConfirmSignOut(false)}><p className="text-sm leading-7 text-slate-700">确定退出当前账号吗？</p><p className="mt-2 text-xs leading-6 text-slate-500">退出后需要重新登录才能访问个人资料。{isDirty ? '当前有未保存的修改，确认后将先处理草稿。' : '已保存的资料会保留。'}</p><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setConfirmSignOut(false)} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">取消</button><button type="button" onClick={confirmLogout} className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600"><LogOut className="h-4 w-4" />确认退出</button></div></BatchSurface>}
-    {deleteTarget && <BatchSurface title="确认删除简历" onClose={() => { if (!busy) setDeleteTarget(null) }}><p className="break-words text-sm text-slate-700">确定删除“{deleteTarget.title || '未命名简历'}”吗？此操作无法撤销。</p><p className="mt-3 text-sm leading-6 text-slate-500">{ready('applications') ? `这份简历关联 ${counts.related.get(deleteTarget.id) || 0} 个岗位。` : '关联岗位数量暂时无法确认。'}岗位记录会保留，与这份简历的关联将解除。</p>{deleteError && <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600">取消</button><button type="button" disabled={busy} onClick={confirmDelete} className="rounded-xl bg-red-500 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? '删除中…' : '删除简历'}</button></div></BatchSurface>}
+    {deleteTarget && <BatchSurface title="确认删除简历" onClose={() => { if (!busy) setDeleteTarget(null) }}><p className="break-words text-sm text-slate-700">确定删除“{deleteTarget.title || '未命名简历'}”吗？此操作无法撤销。</p><p className="mt-3 text-sm leading-6 text-slate-500">{ready('applications') ? `这份简历关联 ${counts.related.get(deleteTarget.id) || 0} 个岗位。` : '关联岗位数量暂时无法确认。'}岗位记录会保留，与这份简历的关联将解除。</p><AgentHistoryDeleteOption checked={deleteHistory} onChange={setDeleteHistory} disabled={busy} />{deleteError && <p role="alert" className="mt-3 text-sm text-red-600">{deleteError}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600">取消</button><button type="button" disabled={busy} onClick={confirmDelete} className="rounded-xl bg-red-500 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? '删除中…' : '删除简历'}</button></div></BatchSurface>}
     {pendingAction && <BatchSurface title="有未保存的更改" onClose={() => { if (!saving) { setPendingAction(null); setSaveError(null) } }}><p className="break-words text-sm leading-6 text-slate-600">“{draftTitle}”尚未保存，请先处理草稿再继续。</p>{saveError && <p role="alert" className="mt-3 text-sm text-red-600">{saveError}</p>}<div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={saving} className={primaryButton} onClick={async () => { if (await saveDraft()) { setPendingAction(null); pendingAction() } }}>{saving ? '保存中…' : '保存并继续'}</button><button type="button" disabled={saving} className="rounded-xl border border-slate-200/80 px-4 py-2 text-sm text-slate-600" onClick={() => { useResumeStore.getState().discardCurrentChanges(); setPendingAction(null); pendingAction() }}>放弃修改并继续</button><button type="button" disabled={saving} className="px-2 py-2 text-sm text-slate-500" onClick={() => setPendingAction(null)}>取消</button></div></BatchSurface>}
   </div>
 }

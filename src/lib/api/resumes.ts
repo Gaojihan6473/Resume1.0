@@ -112,7 +112,6 @@ export async function updateResumePreviewUrl(
   options: { touchUpdatedAt?: boolean; expectedFileUrl?: string | null } = {}
 ): Promise<ResumesResponse> {
   try {
-    console.log('[updateResumePreviewUrl] Updating resume', id, 'with URL:', previewUrl)
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       return { success: false, error: '未登录' }
@@ -135,14 +134,15 @@ export async function updateResumePreviewUrl(
       const expectedPath = getResumeAssetPath(options.expectedFileUrl)
       query = expectedPath === null ? query.is('file_url', null) : query.eq('file_url', expectedPath)
     }
-    const { data: resume, error } = await query.select().single()
+    // A conditional update can legitimately match no rows when the PDF changed.
+    const { data: resume, error } = await query.select().maybeSingle()
 
     if (error) {
       console.error('[updateResumePreviewUrl] Error:', error)
       return { success: false, error: '更新预览失败' }
     }
 
-    console.log('[updateResumePreviewUrl] Success:', resume)
+    if (!resume) return { success: false, error: '预览未更新：简历已变化或不可访问' }
     return { success: true, resume: await resolveResumeAssetUrls(resume) }
   } catch (error) {
     console.error('[updateResumePreviewUrl] Exception:', error)
@@ -222,14 +222,14 @@ export async function updateResume(
   }
 }
 
-export async function deleteResume(id: string): Promise<ResumesResponse> {
+export async function deleteResume(id: string, deleteAgentHistory = false): Promise<ResumesResponse> {
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       return { success: false, error: '未登录' }
     }
 
-    const { error } = await supabase.rpc('delete_resume_with_links', { p_resume: id })
+    const { error } = await supabase.rpc(deleteAgentHistory ? 'delete_resume_with_agent_history' : 'delete_resume_with_links', { p_resume: id })
 
     if (error) {
       return { success: false, error: '删除简历失败' }

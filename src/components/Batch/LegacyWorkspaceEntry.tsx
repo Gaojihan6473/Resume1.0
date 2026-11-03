@@ -27,7 +27,13 @@ export function LegacyWorkspaceEntry({ children }: { children: ReactNode }) {
         try {
           const id = useBatchStore.getState().draftBatchId || await selectBatchForCreation()
           if (!cancelled) navigate(`/batches/${id}?action=${action}`, { replace: true })
-        } catch (error) { if (!cancelled) { toast(error instanceof Error ? error.message : '已取消', 'error'); navigate('/', { replace: true }) } }
+        } catch (error) {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : '已取消'
+            toast(message, message === '已取消批次选择' || message === '已取消' ? 'info' : 'error')
+            navigate('/', { replace: true })
+          }
+        }
       })
     }
     return () => { cancelled = true }

@@ -8,6 +8,21 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 const record = (id: string, resume: string, user = 'u'): JDAnalysisRecord => ({ id, resume_id: resume, user_id: user }) as JDAnalysisRecord
 
 describe('history request ownership', () => {
+  it('evicts only matching Agent snapshots from every cache and ignores reads started before source cleanup', async () => {
+    bindJDAnalysisHistoryUser('u')
+    const agent = { ...record('agent', 'X'), application_id: 'job', analysis_result: { kind: 'resume-agent', schemaVersion: 1 } } as JDAnalysisRecord
+    const normal = record('normal', 'X')
+    mocks.fetch.mockResolvedValueOnce([agent, normal])
+    await useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    const late = deferred<JDAnalysisRecord[]>(); mocks.fetch.mockReturnValueOnce(late.promise)
+    const pending = useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    useJDAnalysisHistoryStore.getState().removeSourceRecords({ applicationId: 'job' })
+    late.resolve([agent, normal]); await pending
+    expect(useJDAnalysisHistoryStore.getState().records.map((item) => item.id)).toEqual(['normal'])
+    mocks.fetch.mockReturnValue(new Promise(() => {}))
+    void useJDAnalysisHistoryStore.getState().fetchRecords('X')
+    expect(useJDAnalysisHistoryStore.getState().records.map((item) => item.id)).toEqual(['normal'])
+  })
   it('evicts a deleted record from visible and cached history and ignores stale responses', async () => {
     bindJDAnalysisHistoryUser('u')
     mocks.fetch.mockResolvedValueOnce([record('deleted', 'X'), record('kept', 'X')])

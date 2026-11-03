@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { Loader2, Key, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Loader2, AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react'
+import { FishLogo } from '../components/Brand/FishLogo'
+import './LoginPage.css'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -51,74 +53,41 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center justify-center p-4">
-      {/* 返回按钮 */}
-      <div className="w-full max-w-md mb-4">
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>返回首页</span>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Key className="w-8 h-8 text-indigo-600" />
+    <div className="key-login-page">
+      <header className="key-login-header">
+        <button type="button" className="key-login-brand" onClick={() => navigate('/')} aria-label="小鱼简历，返回首页"><FishLogo /><span>小鱼简历</span></button>
+      </header>
+      <main className="key-login-main">
+        <div className="key-login-panel">
+          <button type="button" className="key-login-back" onClick={() => navigate('/')}><ArrowLeft size={17} aria-hidden="true" />返回首页</button>
+        <section className="key-login-card" aria-labelledby="key-login-title">
+          <div className="key-login-heading">
+            <h1 id="key-login-title">密钥登录</h1>
+            <p className="key-login-description">输入密钥，继续准备你的下一次机会。</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">密钥登录</h1>
-          <p className="text-gray-500 mt-2">输入您的密钥以访问简历服务</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="key" className="block text-sm font-medium text-gray-700 mb-2">
-              密钥
-            </label>
+          <form onSubmit={handleSubmit}>
+            <label htmlFor="key" className="sr-only">登录密钥</label>
             <input
               type="password"
               id="key"
               value={key}
-              onChange={(e) => {
-                setKey(e.target.value)
-                if (error) clearError()
-              }}
-              placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+              onChange={(e) => { setKey(e.target.value); if (error) clearError() }}
+              placeholder="输入你的 sk- 密钥"
+              aria-describedby={error ? 'key-error' : undefined}
+              aria-invalid={Boolean(error)}
               disabled={isLoading}
               autoFocus
             />
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 text-red-600 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={isLoading || !key.trim()}
-            className="w-full py-3 px-4 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                验证中...
-              </>
-            ) : (
-              '登录'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>如无密钥请联系管理员获取</p>
+            {error && <div id="key-error" role="alert" className="key-login-error"><AlertCircle size={15} aria-hidden="true" /><span>{error}</span></div>}
+            <button type="submit" className="key-login-submit" disabled={isLoading || !key.trim()}>
+              {isLoading ? <><Loader2 size={17} className="key-login-spinner" aria-hidden="true" />验证中...</> : <>登录<ArrowRight size={17} aria-hidden="true" /></>}
+            </button>
+          </form>
+          <p className="key-login-help">暂无密钥？请联系管理员获取。</p>
+        </section>
         </div>
-      </div>
+      </main>
+      <footer className="key-login-footer">小鱼简历<span aria-hidden="true"> / </span>让经历更好地被看见</footer>
     </div>
   )
 }

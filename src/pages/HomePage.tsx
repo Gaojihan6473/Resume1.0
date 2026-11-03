@@ -1,3 +1,5 @@
+import { AgentHistoryDeleteOption } from '../components/Agent/AgentHistoryDeleteOption'
+import { useJDAnalysisHistoryStore } from '../store/jdAnalysisHistoryStore'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
@@ -9,16 +11,15 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsRight,
-  GitBranch,
   Loader2,
   Plus,
-  Target,
   Pencil,
   AlertCircle,
   RefreshCw,
 } from 'lucide-react'
+import { UnauthenticatedLanding } from '../components/Home/UnauthenticatedLanding'
 import { FishLogo } from '../components/Brand/FishLogo'
-import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams, useParams } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
@@ -71,6 +72,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [showBatchManager, setShowBatchManager] = useState(false)
   const parseStatus = useResumeStore((state) => state.parseStatus)
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [allResumes, setAllResumes] = useState<Resume[]>([])
@@ -80,6 +82,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const [resumeRetryToken, setResumeRetryToken] = useState(0)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [openResumeMenuId, setOpenResumeMenuId] = useState<string | null>(null)
+  const [deleteHistory, setDeleteHistory] = useState(false)
   const [deleteResumeId, setDeleteResumeId] = useState<string | null>(null)
   const [resumeActionLoadingId, setResumeActionLoadingId] = useState<string | null>(null)
   const [resumePage, setResumePage] = useState(0)
@@ -92,7 +95,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const homeContentRef = useRef<HTMLDivElement | null>(null)
   const createApplicationButtonRef = useRef<HTMLButtonElement | null>(null)
   const closeCreateApplicationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const consumedPostLoginActionRef = useRef<string | null>(null)
+  const consumedCreationActionRef = useRef<string | null>(null)
 
   useEffect(() => {
     setShowBatchManager(false)
@@ -353,41 +356,26 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   }, [isAuthenticated, onAuthRequired, batchId])
 
   useEffect(() => {
-    const postLoginAction = searchParams.get('postLoginAction')
-    if (!postLoginAction || !isAuthenticated) return
-    if (consumedPostLoginActionRef.current === postLoginAction) return
-    consumedPostLoginActionRef.current = postLoginAction
-
-    const nextSearchParams = new URLSearchParams(searchParams)
-    nextSearchParams.delete('postLoginAction')
-    setSearchParams(nextSearchParams, { replace: true })
-
-    if (postLoginAction === 'new') {
+    if (!isAuthenticated) return
+    const key = ['postLoginAction', 'agentAction', 'action'].find((key) => {
+      const value = searchParams.get(key)
+      return value === 'new' || value === 'upload'
+    })
+    if (!key || (key === 'action' && (!batchId || !batch))) return
+    const request = `${location.key}:${key}`
+    if (consumedCreationActionRef.current === request) return
+    // Store updates can rerender the parent before the router commits the new URL.
+    consumedCreationActionRef.current = request
+    if (searchParams.get(key) === 'new') {
+      // Creating already navigates to the editor; avoid a competing query cleanup.
       handleNewResume()
-    } else if (postLoginAction === 'upload') {
+    } else {
+      const next = new URLSearchParams(searchParams)
+      next.delete(key)
+      setSearchParams(next, { replace: true })
       handleOpenUpload()
     }
-  }, [handleNewResume, handleOpenUpload, isAuthenticated, searchParams, setSearchParams])
-
-  useEffect(() => {
-    const agentAction = searchParams.get('agentAction')
-    if (agentAction !== 'new' && agentAction !== 'upload') return
-    const nextSearchParams = new URLSearchParams(searchParams)
-    nextSearchParams.delete('agentAction')
-    setSearchParams(nextSearchParams, { replace: true })
-    if (agentAction === 'new') handleNewResume()
-    else handleOpenUpload()
-  }, [handleNewResume, handleOpenUpload, searchParams, setSearchParams])
-
-  useEffect(() => {
-    if (!batchId || !batch) return
-    const action = searchParams.get('action')
-    if (action !== 'new' && action !== 'upload') return
-    const next = new URLSearchParams(searchParams)
-    next.delete('action')
-    setSearchParams(next, { replace: true })
-    if (action === 'new') handleNewResume(); else handleOpenUpload()
-  }, [batchId, batch, searchParams, setSearchParams, handleNewResume, handleOpenUpload])
+  }, [batchId, batch, location.key, isAuthenticated, searchParams, setSearchParams, handleNewResume, handleOpenUpload])
 
   const handleDuplicateResume = async (resume: Resume) => {
     if (resumeActionLoadingId) return
@@ -424,6 +412,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const handleRequestDeleteResume = (resume: Resume) => {
     if (resumeActionLoadingId) return
     setOpenResumeMenuId(null)
+    setDeleteHistory(false)
     setDeleteResumeId(resume.id)
   }
 
@@ -431,9 +420,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
     if (!deleteResumeId || resumeActionLoadingId) return
 
     setResumeActionLoadingId(deleteResumeId)
-    const result = await deleteResume(deleteResumeId)
+    const result = await deleteResume(deleteResumeId, deleteHistory)
 
     if (result.success) {
+      if (deleteHistory) useJDAnalysisHistoryStore.getState().removeSourceRecords({ resumeId: deleteResumeId })
       syncResumeList(getResumeListForAction().filter((resume) => resume.id !== deleteResumeId), cachedResumesLastFetched ?? 0)
       setDeleteResumeId(null)
       toast('删除成功', 'success')
@@ -445,9 +435,9 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   }
 
   return (
-    <div className={`h-full flex flex-col text-slate-900 ${isAuthenticated ? 'bg-[#eef4ff]' : 'bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_48%,#f3f5ff_100%)]'}`}>
+    <div className={`h-full flex flex-col text-slate-900 ${isAuthenticated ? 'bg-[#eef4ff]' : 'bg-white'}`}>
       {/* 顶部栏 */}
-      <header className="app-topbar h-14 shrink-0 flex items-center px-4">
+      <header className={`app-topbar h-14 shrink-0 flex items-center px-4 ${isAuthenticated ? '' : 'landing-topbar'}`}>
         <div
           ref={sidebarTriggerRef}
           onMouseEnter={onOpenSidebar}
@@ -461,6 +451,11 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
         </div>
         <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
+        {!isAuthenticated && (
+          <button type="button" onClick={() => navigate('/login')} className="ml-auto inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+            登录<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
       </header>
 
       {/* 主体 */}
@@ -488,14 +483,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
         />
 
         {/* 主视觉区域 */}
-        <main className={`relative flex-1 overflow-y-auto overflow-x-hidden px-5 py-8 sm:px-8 lg:px-12 ${isAuthenticated ? 'home-login-bg' : ''}`}>
-          {!isAuthenticated && (
-            <>
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top,#dbeafe_0%,rgba(219,234,254,0.55)_34%,rgba(219,234,254,0)_72%)] opacity-70" />
-              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.72)_0%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.62)_72%,rgba(255,255,255,0)_100%)]" />
-            </>
-          )}
-          <div ref={homeContentRef} className="relative mx-auto w-full max-w-[1180px]">
+        <main className={`relative flex-1 overflow-y-auto overflow-x-hidden ${isAuthenticated ? 'px-5 py-8 sm:px-8 lg:px-12 home-login-bg' : 'landing-main'}`}>
+          <div ref={homeContentRef} className={`relative mx-auto w-full ${isAuthenticated ? 'max-w-[1180px]' : 'landing-content'}`}>
             {isAuthenticated ? (
               <>
                 {batchId && (
@@ -688,8 +677,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
               </>
             ) : (
               <UnauthenticatedLanding
-                onCreateBaseResume={handleNewResume}
-                onAuthRequired={onAuthRequired}
+                onCreate={handleNewResume}
+                onImport={() => onAuthRequired?.('upload')}
               />
             )}
 
@@ -704,6 +693,8 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       />
       {showBatchManager && batch && <BatchManager key={batch.id} batch={batch} onClose={() => setShowBatchManager(false)} onDeleted={() => navigate('/')} />}
       <DeleteResumeConfirmModal
+        deleteHistory={deleteHistory}
+        onDeleteHistoryChange={setDeleteHistory}
         open={Boolean(deleteResumeId)}
         isLoading={Boolean(deleteResumeId && resumeActionLoadingId === deleteResumeId)}
         onClose={() => setDeleteResumeId(null)}
@@ -925,176 +916,6 @@ function HomeEmptyActionState({
   )
 }
 
-function UnauthenticatedLanding({
-  onCreateBaseResume,
-  onAuthRequired,
-}: {
-  onCreateBaseResume: () => void
-  onAuthRequired?: HomePageProps['onAuthRequired']
-}) {
-  return (
-    <>
-      <section className="relative mb-7 grid items-center gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0 pt-2 text-center lg:text-left">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/70 px-3 py-1 text-xs font-medium text-blue-600 shadow-sm shadow-blue-100/50 backdrop-blur">
-            <Target className="h-3.5 w-3.5" />
-            JD 定制简历工作台
-          </div>
-          <h1 className="mx-auto max-w-3xl text-[38px] font-extrabold leading-tight tracking-normal text-slate-900 sm:text-5xl lg:mx-0 lg:max-w-none lg:whitespace-nowrap">
-            每个 <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500 bg-clip-text text-transparent">JD</span>，都有一版更匹配的简历
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base font-medium leading-8 text-slate-500 lg:mx-0 lg:max-w-none lg:truncate">
-            先建立一份基础简历，再围绕不同岗位复制、调整和分析匹配点，让每次投递都有对应版本。
-          </p>
-        </div>
-
-        <LandingWorkflowMockup />
-      </section>
-
-      <section className="relative mb-7">
-        <div className="mb-4 flex flex-col gap-2 text-center sm:text-left">
-          <p className="text-xs font-semibold text-blue-600">从基础版开始</p>
-          <h2 className="text-2xl font-bold text-slate-900">选择一种方式建立基础版</h2>
-        </div>
-        <div className="grid items-stretch gap-5 lg:grid-cols-2">
-          <section className="flex min-h-[190px] min-w-0">
-            <Upload
-              embedded
-              compact
-              showBottomHint={false}
-              onAuthRequired={() => onAuthRequired?.('upload')}
-              emptyTitle="导入现有简历"
-              emptyActiveTitle="松开即可导入"
-              emptyDescription="上传 PDF、DOCX、TXT，解析成可编辑的基础版。"
-              emptyActionLabel="选择文件导入"
-              emptyBadge="开始入口"
-              emphasizeAction
-            />
-          </section>
-
-          <section className="flex min-h-[190px] min-w-0">
-            <button
-              type="button"
-              onClick={onCreateBaseResume}
-              className="group relative flex min-h-[190px] min-w-0 flex-1 cursor-pointer overflow-hidden rounded-[28px] border border-violet-200/70 bg-[linear-gradient(135deg,rgba(250,245,255,0.96),rgba(255,255,255,0.82)_55%,rgba(237,233,254,0.9))] p-5 text-left shadow-[0_18px_55px_rgba(124,58,237,0.13)] ring-1 ring-violet-300/70 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-violet-300 hover:shadow-[0_24px_70px_rgba(124,58,237,0.18)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-200 btn-press"
-            >
-              <div className="absolute left-5 top-5 z-[2] rounded-full border border-violet-200 bg-white/85 px-3 py-1 text-[11px] font-semibold text-violet-600 shadow-sm shadow-violet-100 backdrop-blur">
-                开始入口
-              </div>
-              <div className="pointer-events-none absolute right-9 top-7 grid grid-cols-5 gap-2 opacity-35">
-                {Array.from({ length: 25 }).map((_, index) => (
-                  <span key={index} className="h-1.5 w-1.5 rounded-full bg-violet-300" />
-                ))}
-              </div>
-              <div className="pointer-events-none absolute -right-8 bottom-0 h-24 w-32 rotate-[-18deg] rounded-[40px] border-4 border-violet-100/70" />
-
-              <div className="relative z-[1] grid min-w-0 flex-1 items-center gap-5 md:grid-cols-[minmax(104px,140px)_minmax(0,1fr)]">
-                <div className="flex items-center justify-center">
-                  <div className="relative">
-                    <div className="absolute -bottom-4 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] bg-violet-200/45 blur-sm" />
-                    <div className="absolute -bottom-5 left-1/2 h-9 w-24 -translate-x-1/2 rounded-[50%] border border-violet-200 bg-white/45" />
-                    <div className="relative flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-xl shadow-violet-300/80 transition-transform duration-300 group-hover:scale-105">
-                      <FilePlus className="h-8 w-8" />
-                    </div>
-                  </div>
-                </div>
-                <div className="relative z-[1] min-w-0 text-center md:text-left">
-                  <h2 className="text-lg font-bold text-slate-900">创建基础版简历</h2>
-                  <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
-                    从空白开始搭建主简历，之后可复制成不同岗位版本。
-                  </p>
-                  <span className="mt-5 inline-flex h-10 min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-6 text-sm font-semibold text-white shadow-xl shadow-violet-300 ring-4 ring-violet-100/80 transition-all duration-300 group-hover:from-violet-600 group-hover:to-purple-700 group-hover:ring-violet-200/80">
-                    开始创建基础版
-                  </span>
-                </div>
-              </div>
-            </button>
-          </section>
-        </div>
-      </section>
-
-      <LandingFlowStrip />
-    </>
-  )
-}
-
-function LandingWorkflowMockup() {
-  return (
-    <div className="pointer-events-none relative mx-auto w-full max-w-[420px] select-none px-2 py-4">
-      <div className="absolute inset-x-6 top-8 bottom-8 rounded-[36px] bg-[radial-gradient(circle_at_50%_15%,rgba(219,234,254,0.62),rgba(255,255,255,0)_68%)] blur-2xl" />
-      <div className="absolute right-8 top-8 grid grid-cols-5 gap-2 opacity-18">
-        {Array.from({ length: 25 }).map((_, index) => (
-          <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
-        ))}
-      </div>
-      <div className="relative z-[1] space-y-3">
-        <div className="flex items-center gap-3 rounded-[22px] border border-white/70 bg-white/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/92 to-indigo-500/92 text-white shadow-md shadow-blue-200/70">
-            <FilePlus className="h-4.5 w-4.5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">创建简历</p>
-            <p className="mt-1 truncate text-xs font-medium text-slate-400">导入或新建基础版</p>
-          </div>
-        </div>
-
-        <div className="ml-8 h-5 w-px bg-gradient-to-b from-blue-200 to-indigo-200" />
-
-        <div className="flex items-center gap-3 rounded-[22px] border border-blue-100/80 bg-blue-50/56 px-4 py-3 shadow-sm shadow-blue-100/50 backdrop-blur">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-blue-600 shadow-sm">
-            <Plus className="h-4.5 w-4.5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">添加岗位</p>
-            <p className="mt-1 truncate text-xs font-medium text-blue-500">录入目标岗位 JD</p>
-          </div>
-        </div>
-
-        <div className="ml-8 h-5 w-px bg-gradient-to-b from-indigo-200 to-violet-200" />
-
-        <div className="flex items-center gap-3 rounded-[22px] border border-violet-100/80 bg-violet-50/50 px-4 py-3 shadow-sm shadow-violet-100/50 backdrop-blur">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/80 text-violet-600 shadow-sm">
-            <Target className="h-4.5 w-4.5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-900">JD分析</p>
-            <p className="mt-1 truncate text-xs font-medium text-violet-500">提炼匹配重点，生成多版本</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LandingFlowStrip() {
-  const items = [
-    { icon: <FileText className="h-3.5 w-3.5" />, label: '保留基础版' },
-    { icon: <GitBranch className="h-3.5 w-3.5" />, label: '复制岗位版本' },
-    { icon: <Sparkles className="h-3.5 w-3.5" />, label: '按 JD 优化' },
-  ]
-
-  return (
-    <section className="pb-8">
-      <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200/60 pt-5 text-center sm:flex-row sm:text-left">
-        <p className="text-sm font-medium leading-6 text-slate-500">
-          建立基础版后，可以继续复制成不同岗位版本，再用 JD 分析找到改写重点。
-        </p>
-        <div className="flex shrink-0 flex-wrap justify-center gap-2">
-          {items.map((item) => (
-            <span
-              key={item.label}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-100 bg-white/60 px-3 text-xs font-semibold text-blue-600 shadow-sm shadow-blue-100/40 backdrop-blur"
-            >
-              {item.icon}
-              {item.label}
-            </span>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
 function HomeSectionTitle({
   label,
   count,
@@ -1181,6 +1002,8 @@ function HomeLoadingState({ text, compact = false }: { text: string; compact?: b
 }
 
 function DeleteResumeConfirmModal({
+  deleteHistory,
+  onDeleteHistoryChange,
   open,
   isLoading,
   onClose,
@@ -1190,6 +1013,8 @@ function DeleteResumeConfirmModal({
   isLoading: boolean
   onClose: () => void
   onConfirm: () => void
+  deleteHistory: boolean
+  onDeleteHistoryChange: (checked: boolean) => void
 }) {
   if (!open) return null
 
@@ -1205,7 +1030,8 @@ function DeleteResumeConfirmModal({
         onClick={(event) => event.stopPropagation()}
       >
         <h3 className="text-lg font-semibold text-slate-800">确认删除</h3>
-        <p className="mt-2 text-sm text-slate-600">确定要删除这份简历吗？此操作无法撤销。</p>
+        <p className="mt-2 text-sm text-slate-600">确定要删除这份简历吗？此操作无法撤销。关联岗位会保留并解除关联。</p>
+        <AgentHistoryDeleteOption checked={deleteHistory} onChange={onDeleteHistoryChange} disabled={isLoading} />
         <div className="mt-5 flex gap-3">
           <button
             type="button"

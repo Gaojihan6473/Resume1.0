@@ -26,7 +26,7 @@ import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLaunche
 
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
-function AppContent() {
+export function AppContent() {
   const { isDirty, currentResumeId, cachedResumes } = useResumeStore()
   const location = useLocation()
   const draftBatchId = useBatchStore((state) => state.draftBatchId)
@@ -250,7 +250,9 @@ function AppContent() {
         onSaveAndNavigateToPath={(path) => {
           setShowDirtyModal(false)
           setDirtyNavTarget(null)
-          if (blocker.state === 'blocked') blocker.proceed(); else navigate(path)
+          // Saving a draft can replace its URL and clear the original blocker.
+          // The modal has verified the current document is saved; navigate afresh.
+          navigate(path)
         }}
         onDiscardAndNavigateToPath={(path) => {
           setShowDirtyModal(false)

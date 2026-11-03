@@ -24,6 +24,9 @@ await db.exec(`create schema auth; create role authenticated; create role anon; 
   insert into auth.users values('${user}');`)
 await db.exec(await readFile(new URL('../supabase/migrations/20261007_recruitment_batches.sql', import.meta.url), 'utf8'))
 await db.exec(await readFile(new URL('../supabase/migrations/20261008_batch_card_styles.sql', import.meta.url), 'utf8'))
+await db.exec('drop table jd_analysis_records')
+await db.exec((await readFile(new URL('../supabase/migrations/20260628_create_jd_analysis_records.sql', import.meta.url), 'utf8')).replace('create extension if not exists pgcrypto;', ''))
+await db.exec(await readFile(new URL('../supabase/migrations/20261103024933_agent_history_source_lifecycle.sql', import.meta.url), 'utf8'))
 const source = (await db.query('select id from recruitment_batches')).rows[0].id
 const target = crypto.randomUUID()
 await db.query(`insert into recruitment_batches(id,user_id,name,color,description) values($1,$2,'2027届金融秋招','violet','金融机构与国企岗位'),(gen_random_uuid(),$2,'2027年暑期实习','teal','实习机会与岗位准备')`, [target, user])
@@ -55,7 +58,7 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
   const request = route.request(), url = new URL(request.url())
   const path = url.pathname.split('/').at(-1)
   const body = request.headers()['content-type']?.includes('application/json') ? request.postDataJSON() : null
-  const respond = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data), headers: { 'Access-Control-Allow-Origin': '*' } })
+  const respond = (data, status = 200, headers = {}) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data), headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range', ...headers } })
   if (request.method() === 'OPTIONS') return respond({})
   if (url.pathname.startsWith('/auth/')) return respond({ user: { id: user, email: 'fixture@example.test' } })
   if (url.pathname.endsWith('/minimax-chat')) return respond({ choices: [{ message: { content: JSON.stringify({ basic: { name: '上传测试', targetTitle: '产品经理' }, education: [{ school: '测试大学', degree: '本科' }], internships: [], projects: [], summary: '', skills: '' }) } }] })
@@ -79,6 +82,8 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
         preview_batch_transfer: ['p_source', 'p_target', 'p_resumes', 'p_applications', 'p_mode'],
         execute_batch_transfer: ['p_source', 'p_target', 'p_resumes', 'p_applications', 'p_mode', 'p_fingerprint', 'p_request_id'],
         delete_resume_with_links: ['p_resume'],
+        delete_resume_with_agent_history: ['p_resume'],
+        delete_application_with_agent_history: ['p_application'],
       }[path]
       if (!names) throw new Error(`Unexpected RPC: ${path}`)
       const result = await db.query(`select ${path}(${names.map((_, index) => '$' + (index + 1)).join(',')}) as result`, names.map((name) => body[name]))
@@ -86,7 +91,7 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
     }
     if (!allowedTables.has(path)) throw new Error(`Unexpected fixture request: ${url.pathname}`)
     let records = (await db.query(`select * from ${path}`)).rows
-    for (const [column, value] of url.searchParams) if (value.startsWith('eq.')) records = records.filter((row) => String(row[column]) === value.slice(3))
+    for (const [column, value] of url.searchParams) if (value.startsWith('eq.')) records = records.filter((row) => String(column === 'analysis_result->>kind' ? row.analysis_result?.kind : row[column]) === value.slice(3))
     if (request.method() === 'POST') {
       const values = Array.isArray(body) ? body[0] : body
       const columns = Object.keys(values)
@@ -97,13 +102,19 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
       if (columns.some((column) => !/^[a-z_]+$/.test(column))) throw new Error('Invalid fixture column')
       const ids = records.map((row) => row.id)
       records = (await db.query(`update ${path} set ${columns.map((column, i) => `${column}=$${i + 1}`).join(',')} where id=any($${columns.length + 1}::uuid[]) returning *`, [...columns.map((column) => typeof body[column] === 'object' && body[column] !== null ? JSON.stringify(body[column]) : body[column]), ids])).rows
+    } else if (request.method() === 'DELETE') {
+      records = (await db.query(`delete from ${path} where id=any($1::uuid[]) returning *`, [records.map((row) => row.id)])).rows
     }
     const orders = url.searchParams.get('order')?.split(',') || []
     records.sort((a, b) => {
       for (const order of orders) { const [column, direction] = order.split('.'); const cmp = String(a[column]).localeCompare(String(b[column])); if (cmp) return direction === 'desc' ? -cmp : cmp }
       return 0
     })
-    return respond(request.headers().accept?.includes('vnd.pgrst.object') ? records[0] : records)
+    const count = records.length
+    const offset = Number(url.searchParams.get('offset') || 0)
+    const limit = Number(url.searchParams.get('limit') || count)
+    records = records.slice(offset, offset + limit)
+    return respond(request.headers().accept?.includes('vnd.pgrst.object') ? records[0] : records, 200, { 'Content-Range': `${offset}-${offset + records.length - 1}/${count}` })
   } catch (error) { return respond({ message: error.message, code: 'TEST_FIXTURE_ERROR' }, 400) }
 })
 await mkdir(new URL('../.cache/batch-check/', import.meta.url), { recursive: true })
@@ -113,6 +124,28 @@ try {
   await page.getByRole('heading', { name: /^求职空间\s*3$/ }).waitFor()
   await page.locator('article').getByRole('button', { name: '默认批次', exact: true }).waitFor()
   await screenshot('homepage-desktop')
+  // Global creation must hand off the batch picker without leaving the UI blocked.
+  await page.goto(`${origin}/?postLoginAction=new`)
+  const creationPicker = page.getByRole('dialog', { name: '选择内容所属批次' })
+  await creationPicker.getByRole('button', { name: '默认批次', exact: true }).click()
+  await page.waitForURL('**/editor?batch=*', { timeout: 15000 })
+  await page.getByRole('button', { name: '保存', exact: true }).waitFor({ timeout: 15000 })
+  assert.equal(await creationPicker.count(), 0)
+  await page.getByRole('combobox', { name: '上下页边距', exact: true }).click()
+  await page.getByRole('option', { name: '24', exact: true }).waitFor()
+  await page.keyboard.press('Escape')
+  await screenshot('picker-to-editor')
+  await page.goto(`${origin}/?agentAction=upload`)
+  await creationPicker.getByRole('button', { name: '默认批次', exact: true }).click()
+  await page.getByRole('heading', { name: '上传简历', exact: true }).waitFor()
+  // Use the backdrop to dismiss the upload modal, then exercise the underlying page.
+  await page.locator('.fixed.inset-0.z-50').click({ position: { x: 5, y: 5 } })
+  await page.getByRole('button', { name: '管理批次', exact: true }).click()
+  await page.getByRole('dialog', { name: '管理批次 · 默认批次', exact: true }).waitFor()
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  assert.equal(errors.length, 0, errors.join('\n'))
+  await page.goto(origin)
+  await page.locator('article').getByRole('button', { name: '默认批次', exact: true }).waitFor()
   // Illustration selection -> PostgreSQL -> reload -> rendered card -> clickable menu.
   await page.getByRole('button', { name: '管理默认批次', exact: true }).click()
   await page.getByRole('menuitem', { name: '管理批次', exact: true }).click()
@@ -336,14 +369,24 @@ try {
   await page.getByRole('button', { name: '添加荣誉奖项条目', exact: true }).click()
   await page.getByRole('textbox', { name: '荣誉奖项第2条' }).fill('临时奖项，验证逐条删除')
   await page.getByRole('button', { name: '删除荣誉奖项第2条' }).click()
-  await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.waitForURL((url) => url.searchParams.has('resumeId'))
-  const uploaded = (await db.query('select * from resumes where id=$1', [new URL(page.url()).searchParams.get('resumeId')])).rows[0]
+  // First save assigns a draft URL while the pending navigation is blocked.
+  // The original target must still be reached after that URL replacement.
+  await page.getByText('小鱼简历', { exact: true }).hover()
+  await page.getByRole('button', { name: '首页', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await page.getByRole('heading', { name: '有未保存的更改' }).waitFor()
+  await page.getByRole('button', { name: '保存并切换', exact: true }).click()
+  await page.waitForURL((url) => url.pathname === '/')
+  await page.getByRole('heading', { name: /^求职空间/ }).waitFor()
+  const uploadedRows = (await db.query("select * from resumes where content->'basic'->>'name'=$1", ['上传测试'])).rows
+  assert.equal(uploadedRows.length, 1, 'Save and leave must create exactly one saved draft')
+  const uploaded = uploadedRows[0]
   assert.equal(uploaded.batch_id, source)
   assert.equal(uploaded.content.basic.name, '上传测试')
   assert.deepEqual(uploaded.content.skills.studentWork, ['2024年 学生会组织5场活动\n修订完整正文'])
   assert.deepEqual(uploaded.content.skills.awards, ['2023年一等奖学金'])
   assert.ok(uploaded.content.skills.other.includes('擅长数据分析与沟通'))
+  await page.goto(`${origin}/editor?resumeId=${uploaded.id}`)
   await page.reload()
   await page.getByRole('button', { name: '技能与其他', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '学生工作第1条' }).inputValue(), '2024年 学生会组织5场活动\n修订完整正文')
@@ -436,8 +479,39 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Analytics page must fit a narrow viewport')
   await screenshot('analytics-mobile')
   assert.equal(await page.getByText('Unexpected Application Error!', { exact: true }).count(), 0)
+  // A retained report stays readable after source deletion; cleanup is an explicit user choice.
+  const historyResume = crypto.randomUUID(), historyJob = crypto.randomUUID(), historyId = crypto.randomUUID()
+  await db.query(`insert into resumes(id,user_id,batch_id,title,content) values($1,$2,$3,'历史来源测试','{}')`, [historyResume, user, target])
+  await db.query(`insert into applications(id,user_id,batch_id,resume_id,company,position,channel,status) values($1,$2,$3,$4,'历史来源公司','历史来源岗位','官网','applied')`, [historyJob, user, target, historyResume])
+  await db.query(`insert into jd_analysis_records(id,user_id,resume_id,application_id,title,resume_title_snapshot,jd_hash,resume_hash,model,prompt_version,jd_text_snapshot,analysis_result)
+    values($1,$2,$3,$4,'来源删除验收','历史来源测试','j','r','fixture','v1','保留的历史职位描述','{"kind":"resume-agent","schemaVersion":1,"completionStatus":"no_changes","plan":{"goalSummary":"保留的历史分析结果"}}')`, [historyId, user, historyResume, historyJob])
+  await page.goto(`${origin}/me?tab=resumes&q=${encodeURIComponent('历史来源测试')}`)
+  await page.getByRole('button', { name: '删除 历史来源测试', exact: true }).click()
+  const deleteResumeDialog = page.getByRole('dialog', { name: '确认删除简历' })
+  assert.equal(await deleteResumeDialog.getByRole('checkbox', { name: '同时删除相关 Agent 分析历史' }).isChecked(), false)
+  await deleteResumeDialog.getByRole('button', { name: '删除简历', exact: true }).click()
+  await deleteResumeDialog.waitFor({ state: 'hidden' })
+  assert.equal((await db.query('select count(*)::int as n from jd_analysis_records where id=$1', [historyId])).rows[0].n, 1)
+  await page.getByRole('button', { name: /来源删除验收/, expanded: false }).click()
+  await page.getByText('原简历已删除或不可访问', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '打开关联简历' }).count(), 0)
+  await page.getByText('保留的历史分析结果', { exact: true }).waitFor()
+  await page.getByText('查看本次职位描述', { exact: true }).click()
+  await page.getByText('保留的历史职位描述', { exact: true }).waitFor()
+  await page.getByText('已展示 1 / 共 1 条', { exact: true }).waitFor()
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Historical reports must fit mobile viewports')
+  await screenshot('agent-history-deleted-source-mobile')
+  await page.setViewportSize({ width: 1440, height: 1050 })
+  await page.goto(`${origin}/applications?batch=${target}&applicationId=${historyJob}`)
+  await page.getByRole('button', { name: '删除岗位', exact: true }).click()
+  const deleteJobDialog = page.getByRole('dialog', { name: '确认删除岗位' })
+  await deleteJobDialog.getByRole('checkbox', { name: '同时删除相关 Agent 分析历史' }).check()
+  await deleteJobDialog.getByRole('button', { name: '删除', exact: true }).click()
+  await deleteJobDialog.waitFor({ state: 'hidden' })
+  assert.equal((await db.query('select count(*)::int as n from jd_analysis_records where id=$1', [historyId])).rows[0].n, 0)
+  assert.equal((await db.query('select count(*)::int as n from applications where id=$1', [historyJob])).rows[0].n, 0)
   assert.equal(errors.length, 0, errors.join('\n'))
-  console.log(JSON.stringify({ passed: true, checks: ['overview', '15 transparent illustrations load', 'illustration selection and independent theme persist across reload', 'plain style restoration', 'illustration picker at 320px', 'decorative layer does not intercept clicks', 'membership transfer through RPC and PostgreSQL', 'counts refresh', 'batch creation', 'desktop/mobile layout', 'drawer', 'editor reload', 'Chromium PDF export with embedded fonts and no batch metadata', 'dirty navigation', 'upload, multiline edit, save, reload, PDF and DOCX categories', 'multi-page preview, PDF and DOCX with serif font, line height and anchors', 'JD entry filters jobs by batch'], apiRequests: requests.length, previewPages, pdfPages: pdfDetails.count, screenshots: '.cache/batch-check' }, null, 2))
+  console.log(JSON.stringify({ passed: true, checks: ['history snapshots survive source deletion', 'deleted-source reports fit mobile viewports', 'explicit job/history cleanup is atomic', 'overview', '15 transparent illustrations load', 'illustration selection and independent theme persist across reload', 'plain style restoration', 'illustration picker at 320px', 'decorative layer does not intercept clicks', 'membership transfer through RPC and PostgreSQL', 'counts refresh', 'batch creation', 'desktop/mobile layout', 'drawer', 'editor reload', 'Chromium PDF export with embedded fonts and no batch metadata', 'dirty navigation', 'upload, multiline edit, save, reload, PDF and DOCX categories', 'multi-page preview, PDF and DOCX with serif font, line height and anchors', 'JD entry filters jobs by batch'], apiRequests: requests.length, previewPages, pdfPages: pdfDetails.count, screenshots: '.cache/batch-check' }, null, 2))
 } catch (error) {
   await screenshot('failure')
   console.error(JSON.stringify({ url: page.url(), errors, requests: requests.slice(-15), alerts: await page.locator('[role="alert"]').allTextContents(), buttons: await page.getByRole('button').allTextContents() }, null, 2))

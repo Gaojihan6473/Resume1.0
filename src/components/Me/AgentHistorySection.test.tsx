@@ -1,16 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHistorySection } from './AgentHistorySection'
-import { deleteAgentHistory, fetchAgentHistory, fetchAgentHistoryDetail, type AgentHistorySummary } from '../../lib/api/jdAnalysisRecords'
+import { deleteAgentHistory, fetchAgentHistory, fetchAgentHistoryDetail, fetchAgentHistorySources, type AgentHistorySummary } from '../../lib/api/jdAnalysisRecords'
 import type { JDAnalysisRecord } from '../../types/jdAnalysisHistory'
 import { useAuthStore } from '../../store/authStore'
 
-vi.mock('../../lib/api/jdAnalysisRecords', () => ({ deleteAgentHistory: vi.fn(), fetchAgentHistory: vi.fn(), fetchAgentHistoryDetail: vi.fn() }))
+vi.mock('../../lib/api/jdAnalysisRecords', () => ({ deleteAgentHistory: vi.fn(), fetchAgentHistory: vi.fn(), fetchAgentHistoryDetail: vi.fn(), fetchAgentHistorySources: vi.fn() }))
 const summary: AgentHistorySummary = { id: 'analysis', resume_id: 'resume', title: '小鱼科技 · 产品经理', resume_title_snapshot: '产品简历', company_snapshot: '小鱼科技', position_snapshot: '产品经理', status: 'success', analyzed_at: '2026-10-29T01:00:00Z', created_at: '2026-10-29T01:00:00Z' }
 
 describe('Agent history section', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(fetchAgentHistorySources).mockResolvedValue({ resume: 'available', application: 'available' })
     useAuthStore.setState({ user: { id: 'owner', email: '', keyName: '' } })
     vi.mocked(fetchAgentHistory).mockResolvedValue({ records: [summary], total: 1 })
     vi.mocked(fetchAgentHistoryDetail).mockResolvedValue({ ...summary, jd_text_snapshot: '负责产品规划', analysis_result: { kind: 'resume-agent', schemaVersion: 1, completionStatus: 'no_changes', proposal: null, plan: { goalSummary: '当前简历已覆盖核心要求' } } } as JDAnalysisRecord)
@@ -53,8 +54,8 @@ describe('Agent history section', () => {
     fireEvent.click(row)
     expect(await screen.findByText('无需修改')).toBeInTheDocument()
     expect(screen.getByText('当前简历已覆盖核心要求')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '打开关联简历' }))
-    expect(open).toHaveBeenCalledWith('resume')
+    fireEvent.click(await screen.findByRole('button', { name: '打开关联简历' }))
+    await waitFor(() => expect(open).toHaveBeenCalledWith('resume'))
     expect(fetchAgentHistoryDetail).toHaveBeenCalledWith('analysis')
   })
   it('groups the saved proposal into matching and readable before/after suggestions', async () => {

@@ -1,0 +1,30 @@
+.auth-prompt-overlay { position: fixed; inset: 0; z-index: 150; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; overscroll-behavior: contain; background: #23395840; backdrop-filter: blur(5px); animation: auth-prompt-fade 160ms ease-out; }
+.auth-prompt { position: relative; width: 100%; max-width: 420px; max-height: calc(100dvh - 48px); overflow-y: auto; padding: 30px; border: 1px solid #ffffffdc; border-radius: 20px; background: linear-gradient(160deg, #f7faff, white 65%); color: #2b4265; text-align: left; box-shadow: 0 24px 75px #1e3b6b20; animation: auth-prompt-arrive 180ms ease-out; }
+.auth-prompt-close { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #8a9db9; cursor: pointer; transition: background-color 160ms ease, color 160ms ease, transform 160ms ease; }
+.auth-prompt-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 20px; border: 1px solid #e0e9f8; border-radius: 12px; background: #edf3ff; color: #517ac0; }
+.auth-prompt h2 { margin: 0; color: #2c4263; font-size: 20px; font-weight: 650; letter-spacing: -.02em; line-height: 1.5; }
+.auth-prompt-description { margin-top: 10px; color: #7185a1; font-size: 13px; line-height: 1.9; }
+.auth-prompt-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 25px; }
+.auth-prompt-actions button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 46px; padding: 12px 18px; border: 1px solid transparent; border-radius: 11px; cursor: pointer; font-size: 13px; font-weight: 600; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
+.auth-prompt-login { color: white; background: #326bed; box-shadow: 0 4px 12px #326bed12; }
+.auth-prompt-login svg { transition: transform 160ms ease; }
+.auth-prompt-actions .auth-prompt-cancel { color: #7186a5; background: #f7faff; border-color: #e2eaf6; }
+.auth-prompt button:focus-visible { outline: 3px solid #89b0f4; outline-offset: 3px; }
+.auth-prompt-actions button:active { transform: translateY(1px); box-shadow: none; }
+@keyframes auth-prompt-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes auth-prompt-arrive { from { opacity: 0; transform: translateY(9px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (hover: hover) and (pointer: fine) {
+  .auth-prompt-close:hover { color: #4b72ae; background: #eaf2ff; }
+  .auth-prompt-login:hover { background: #245bd4; box-shadow: 0 5px 14px #326bed18; }
+  .auth-prompt-login:hover svg { transform: translateX(3px); }
+  .auth-prompt-actions .auth-prompt-cancel:hover { color: #456caa; border-color: #cbdcf5; background: #eff5ff; }
+  .auth-prompt-actions button:active { transform: translateY(1px); box-shadow: none; }
+}
+@media (max-width: 480px) {
+  .auth-prompt-overlay { padding: 20px; }
+  .auth-prompt { padding: 27px 24px 24px; border-radius: 19px; max-height: calc(100dvh - 40px); }
+  .auth-prompt h2 { font-size: 20px; }
+  .auth-prompt-description { font-size: 12px; }
+}
+@media (max-height: 520px) { .auth-prompt-icon { margin-bottom: 14px; } .auth-prompt-actions { margin-top: 18px; } }
+@media (prefers-reduced-motion: reduce) { .auth-prompt-overlay, .auth-prompt, .auth-prompt * { animation: none !important; transition: none !important; } .auth-prompt button:hover, .auth-prompt button:active, .auth-prompt button:hover svg { transform: none; } }

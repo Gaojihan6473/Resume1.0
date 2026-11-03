@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ session: vi.fn(), from: vi.fn() }))
 vi.mock('../supabase', () => ({ supabase: { auth: { getSession: mocks.session }, from: mocks.from } }))
-import { deleteAgentHistory, fetchAgentHistory, fetchAgentHistoryDetail } from './jdAnalysisRecords'
+import { deleteAgentHistory, fetchAgentHistory, fetchAgentHistoryDetail, fetchAgentHistorySources } from './jdAnalysisRecords'
 
 const query = { delete: vi.fn(), select: vi.fn(), eq: vi.fn(), or: vi.fn(), order: vi.fn(), range: vi.fn(), maybeSingle: vi.fn() }
 beforeEach(() => {
@@ -13,6 +13,16 @@ beforeEach(() => {
   query.maybeSingle.mockResolvedValue({ data: null, error: null })
 })
 describe('Agent history queries', () => {
+  it('checks source ownership and distinguishes missing sources from query failures and manual JD', async () => {
+    query.maybeSingle.mockResolvedValueOnce({ data: null, error: null }).mockResolvedValueOnce({ data: null, error: { message: 'offline' } })
+    expect(await fetchAgentHistorySources({ user_id: 'owner', resume_id: 'resume', application_id: 'job' })).toEqual({ resume: 'missing', application: 'unknown' })
+    expect(query.eq).toHaveBeenCalledWith('user_id', 'owner')
+    query.maybeSingle.mockResolvedValueOnce({ data: { id: 'resume' }, error: null })
+    expect(await fetchAgentHistorySources({ user_id: 'owner', resume_id: 'resume', application_id: null })).toEqual({ resume: 'available', application: 'manual' })
+    mocks.from.mockClear()
+    expect(await fetchAgentHistorySources({ user_id: 'other', resume_id: 'resume', application_id: 'job' })).toEqual({ resume: 'unknown', application: 'unknown' })
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
   it('deletes exactly one owned Agent record and verifies a row was actually removed', async () => {
     query.maybeSingle.mockResolvedValueOnce({ data: { id: 'record' }, error: null })
     await deleteAgentHistory('record', 'owner')
