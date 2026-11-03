@@ -120,7 +120,28 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
 await mkdir(new URL('../.cache/batch-check/', import.meta.url), { recursive: true })
 const screenshot = (name) => page.screenshot({ path: new URL(`../.cache/batch-check/${name}.png`, import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'), fullPage: true })
 try {
+  const guestContext = await browser.newContext()
+  try {
+    const guest = await guestContext.newPage()
+    await guest.goto(origin)
+    await guest.getByRole('button', { name: '登录', exact: true }).waitFor()
+    for (const width of [1440, 375]) {
+      await guest.setViewportSize({ width, height: 900 })
+      await guest.locator('header').getByText('小鱼简历', { exact: true }).hover()
+      assert.equal(await guest.getByTitle('返回首页', { exact: true }).count(), 0, 'Signed-out homepage must not mount sidebar navigation')
+      assert.equal(await guest.locator('header .lucide-chevrons-right').count(), 0, 'Signed-out brand must not offer sidebar expansion')
+    }
+    await guest.waitForTimeout(1000)
+    assert.equal(await guest.getByRole('note').count(), 0, 'Signed-out visitors must not see the navigation hint')
+    assert.equal(await guest.evaluate(() => localStorage.getItem('sidebar-trigger-hint-dismissed')), null, 'Guest visits must preserve the first login hint')
+  } finally { await guestContext.close() }
   await page.goto(origin)
+  await page.getByRole('note').filter({ hasText: '打开导航' }).waitFor()
+  await page.getByRole('button', { name: '关闭导航提示' }).click()
+  await page.reload()
+  await page.getByRole('heading', { name: /^求职空间\s*3$/ }).waitFor()
+  await page.waitForTimeout(1000)
+  assert.equal(await page.getByRole('note').count(), 0, 'Dismissed navigation hints must remain dismissed after reload')
   await page.getByRole('heading', { name: /^求职空间\s*3$/ }).waitFor()
   await page.locator('article').getByRole('button', { name: '默认批次', exact: true }).waitFor()
   await screenshot('homepage-desktop')

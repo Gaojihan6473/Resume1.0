@@ -1,5 +1,5 @@
 import { createRef } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchResumes } from '../lib/api'
@@ -42,6 +42,7 @@ describe('HomePage initial data loading', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -70,5 +71,27 @@ describe('HomePage initial data loading', () => {
 
     await waitFor(() => expect(screen.getByText('还没有简历')).toBeInTheDocument())
     expect(fetchResumes).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not expose or open sidebar navigation on the signed-out homepage', () => {
+    useAuthStore.setState({ isAuthenticated: false })
+    const onOpenSidebar = vi.fn()
+    const triggerRef = createRef<HTMLDivElement>()
+    render(
+      <MemoryRouter>
+        <HomePage
+          sidebarOpen={true}
+          sidebarTriggerRef={triggerRef}
+          sidebarRef={createRef<HTMLDivElement>()}
+          onOpenSidebar={onOpenSidebar}
+          onScheduleCloseSidebar={vi.fn()}
+          onCloseSidebar={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    fireEvent.mouseEnter(triggerRef.current!)
+    expect(onOpenSidebar).not.toHaveBeenCalled()
+    expect(screen.queryByTitle('返回首页')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^登录$/ })).toBeInTheDocument()
   })
 })

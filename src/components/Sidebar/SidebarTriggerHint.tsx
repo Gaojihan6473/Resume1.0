@@ -34,6 +34,7 @@ function markHintSeen() {
 
 export function SidebarTriggerHint({ triggerRef }: SidebarTriggerHintProps) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const authInitializing = useAuthStore((state) => state.authInitializing)
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
 
@@ -59,7 +60,7 @@ export function SidebarTriggerHint({ triggerRef }: SidebarTriggerHintProps) {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || authInitializing) {
       setVisible(false)
       return
     }
@@ -72,7 +73,7 @@ export function SidebarTriggerHint({ triggerRef }: SidebarTriggerHintProps) {
     }, SHOW_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [isAuthenticated, updatePosition])
+  }, [isAuthenticated, authInitializing, updatePosition])
 
   useEffect(() => {
     if (!isAuthenticated || !visible) return
@@ -87,7 +88,7 @@ export function SidebarTriggerHint({ triggerRef }: SidebarTriggerHintProps) {
     }
   }, [isAuthenticated, updatePosition, visible])
 
-  if (!isAuthenticated || !visible || !position || typeof document === 'undefined') return null
+  if (!isAuthenticated || authInitializing || !visible || !position || typeof document === 'undefined') return null
 
   return createPortal((
     <div

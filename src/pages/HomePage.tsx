@@ -440,17 +440,17 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       <header className={`app-topbar h-14 shrink-0 flex items-center px-4 ${isAuthenticated ? '' : 'landing-topbar'}`}>
         <div
           ref={sidebarTriggerRef}
-          onMouseEnter={onOpenSidebar}
-          onMouseLeave={onScheduleCloseSidebar}
+          onMouseEnter={isAuthenticated ? onOpenSidebar : undefined}
+          onMouseLeave={isAuthenticated ? onScheduleCloseSidebar : undefined}
           className="flex items-center gap-2 px-2 py-1.5"
         >
           <div className="flex h-8 w-8 items-center justify-center text-black">
             <FishLogo className="h-6 w-7" />
           </div>
           <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
+          {isAuthenticated && <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />}
         </div>
-        <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
+        {isAuthenticated && <SidebarTriggerHint triggerRef={sidebarTriggerRef} />}
         {!isAuthenticated && (
           <button type="button" onClick={() => navigate('/login')} className="ml-auto inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
             登录<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -461,7 +461,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
       {/* 主体 */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* 左侧边栏 */}
-        <Sidebar
+        {isAuthenticated && <Sidebar
           open={sidebarOpen}
           sidebarRef={sidebarRef}
           onClose={onCloseSidebar}
@@ -480,7 +480,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
           onNavigateToApplications={() => navigate(batchPath('/applications', batchId))}
           onNavigateToAnalytics={() => navigate(batchPath('/analytics', batchId))}
           onNavigateToLogin={() => navigate('/login')}
-        />
+        />}
 
         {/* 主视觉区域 */}
         <main className={`relative flex-1 overflow-y-auto overflow-x-hidden ${isAuthenticated ? 'px-5 py-8 sm:px-8 lg:px-12 home-login-bg' : 'landing-main'}`}>
