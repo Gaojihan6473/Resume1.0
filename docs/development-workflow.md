@@ -24,6 +24,8 @@
 
 ## 可重复命令
 
+依赖变更必须在不含既有 `node_modules` 的隔离目录进行一次实际 `npm ci`，使用 CI 固定的 npm `11.21.1`；同时用 Linux 安装参数检查锁文件的跨平台可选依赖完整性。已有安装目录下的 `npm install`、构建或功能验收，不能替代干净安装验证。若本机默认 npm 版本不同，可通过 `npm exec --yes --package=npm@11.21.1 -- npm ci` 在隔离目录验证，无需修改全局 npm。Linux 参数下的 dry-run 只验证安装计划，不能声称已完成真实 Linux 运行验收。
+
 ```bash
 # 先跑单个行为用例（示例），观察正确的失败，再修改
 npm test -- src/utils/saveResume.test.ts

@@ -31,6 +31,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Use the validated npm version for clean-install checks
+        run: npm install --global npm@11.21.1 --ignore-scripts --no-audit --no-fund
       - run: npm ci
       - run: npm run check:core
 
@@ -46,6 +48,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Use the validated npm version for clean-install checks
+        run: npm install --global npm@11.21.1 --ignore-scripts --no-audit --no-fund
       - run: npm ci
       - run: node node_modules/playwright-core/cli.js install --with-deps chromium
       - name: Use the installed Playwright browser consistently
