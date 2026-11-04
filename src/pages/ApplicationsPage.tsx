@@ -21,6 +21,7 @@ import { selectBatchForCreation } from '../lib/api/batches'
 import { useBatchStore } from '../store/batchStore'
 import { batchPath } from '../utils/batchWorkspace'
 import type { JDParsedResult } from '../types/application'
+import '../components/Application/ApplicationsWorkspace.css'
 
 export function ApplicationsPage() {
   const navigate = useNavigate()
@@ -261,7 +262,7 @@ const handleGoHome = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col text-slate-900 bg-[#eef4ff]">
+    <div className="applications-page h-screen flex flex-col text-slate-900">
       {/* 顶部栏 */}
       <header className="app-topbar h-14 shrink-0 flex items-center px-4">
         <div
@@ -299,15 +300,19 @@ const handleGoHome = () => {
         />
 
         {/* 主内容区 - 左右分栏 */}
-        <main className="relative flex-1 flex flex-col overflow-auto md:flex-row md:overflow-hidden home-login-bg">
+        <main className="applications-workspace">
           {/* 左侧：简历选择区域 */}
-          <div className="h-64 max-h-64 w-full shrink-0 border-b border-slate-200/80 bg-white/50 p-4 overflow-y-auto md:h-auto md:max-h-none md:w-[35%] md:border-b-0 md:border-r hide-scrollbar">
+          <section className="application-panel application-resumes-panel" aria-labelledby="application-resumes-title">
+            <div className="application-panel-heading">
+              <div className="application-panel-title"><h2 id="application-resumes-title">我的简历</h2><span className="application-count" aria-label={`${scopedResumes.length} 份简历`}>{scopedResumes.length}</span></div>
+              <button type="button" className="application-new-resume" aria-label="新建简历" title="新建简历" onClick={handleNewResume}><Plus size={16} aria-hidden="true" /></button>
+            </div>
             {isLoadingResumes ? (
               <div className="h-64 flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
               </div>
             ) : scopedResumes.length === 0 ? (
-              <div className="flex min-h-full flex-col items-center justify-center text-center">
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center">
                 <p className="text-sm text-slate-500">暂无简历</p>
                 <p className="text-xs text-slate-400 mt-1">点击上方按钮创建第一个简历</p>
                 <button
@@ -316,7 +321,7 @@ const handleGoHome = () => {
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-400 to-indigo-400 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500"
                 >
                   <FilePlus className="h-4 w-4" />
-                  新建简历
+                  创建第一份简历
                 </button>
               </div>
             ) : (
@@ -327,10 +332,10 @@ const handleGoHome = () => {
                 onEditResume={handleEditResume}
               />
             )}
-          </div>
+          </section>
 
           {/* 右侧：投递记录列表 */}
-          <div className="min-h-96 flex-1 p-4 md:min-h-0 md:overflow-hidden">
+          <section className="application-panel application-jobs-panel" aria-labelledby="application-jobs-title">
             <ApplicationList
               applications={scopedApplications}
               resumes={scopedResumes}
@@ -340,10 +345,13 @@ const handleGoHome = () => {
               pendingDeleteId={showDeleteConfirm}
               headerAction={
                 <button
+                  type="button"
                   ref={createButtonRef}
+                  onClick={() => setShowCreateDropdown(true)}
+                  aria-expanded={showCreateDropdown}
                   onMouseEnter={handleButtonMouseEnter}
                   onMouseLeave={handleButtonMouseLeave}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-400 to-indigo-400 text-white text-sm font-medium rounded-xl hover:from-blue-500 hover:to-indigo-500 transition-all duration-200 shadow-sm shadow-blue-200 flex items-center gap-2"
+                  className="application-new-job"
                 >
                   <Plus className="w-4 h-4" />
                   新建岗位
@@ -352,7 +360,7 @@ const handleGoHome = () => {
               onSave={handleUpdateApplication}
               onDelete={(id) => { setDeleteHistory(false); setShowDeleteConfirm(id) }}
             />
-          </div>
+          </section>
         </main>
       </div>
 

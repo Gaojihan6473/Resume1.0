@@ -49,6 +49,7 @@ describe('ApplicationsPage linked resume entry', () => {
     mount('batch=b1&resumeId=r1')
     await waitFor(() => expect(screen.getByTestId('jobs')).toHaveAttribute('data-selected', 'r1'))
     expect(screen.getByTestId('jobs')).toHaveTextContent('岗位二')
+    expect(screen.getByLabelText('1 份简历')).toHaveTextContent('1')
     expect(screen.queryByRole('button', { name: '清除关联筛选' })).not.toBeInTheDocument()
   })
   it('waits for asynchronous resume and job loading before applying the selection', async () => {

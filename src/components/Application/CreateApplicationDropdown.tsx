@@ -75,7 +75,7 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
       ref={dropdownRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="dropdown-panel fixed overflow-hidden py-1"
+      className="dropdown-panel application-create-menu fixed overflow-hidden py-1"
       style={{
         top: buttonRect.bottom + 6,
         left: dropdownLeft,
@@ -92,9 +92,9 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
           onAICreate()
           onClose()
         }}
-        className="flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        className="application-create-menu-item flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
-        <FileText className="h-4 w-4 shrink-0 text-blue-500" />
+        <FileText className="h-4 w-4 shrink-0 text-blue-500" aria-hidden="true" />
         图文解析
       </button>
       <button
@@ -102,9 +102,9 @@ export function CreateApplicationDropdown({ visible, onManualCreate, onAICreate,
           onManualCreate()
           onClose()
         }}
-        className="flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        className="application-create-menu-item flex h-11 w-full items-center gap-2 whitespace-nowrap px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
-        <Pencil className="h-4 w-4 shrink-0 text-indigo-500" />
+        <Pencil className="h-4 w-4 shrink-0 text-indigo-500" aria-hidden="true" />
         手动填写
       </button>
     </div>

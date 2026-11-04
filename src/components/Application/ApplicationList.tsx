@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Briefcase, Loader2 } from 'lucide-react'
+import { Briefcase, Grid2X2, List, Loader2, Search } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
 import type { Resume } from '../../lib/api'
 import { toast } from '../Toast'
 import { ApplicationCard } from './ApplicationCard'
+import { useAutoHideScrollbar } from './useAutoHideScrollbar'
 import {
   ApplicationFilterToolbar,
   type ApplicationSortDirection,
@@ -52,6 +53,10 @@ export function ApplicationList({
   onDelete,
 }: Props) {
   const [selectedStatuses, setSelectedStatuses] = useState<ApplicationStatus[]>([])
+  const [query, setQuery] = useState('')
+  const { onScroll, isScrolling } = useAutoHideScrollbar()
+  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const normalizedQuery = query.trim().toLocaleLowerCase('zh-CN')
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [timeFilter, setTimeFilter] = useState<ApplicationTimeFilter>({ kind: 'all' })
   const [sortField, setSortField] = useState<ApplicationSortField>('time')
@@ -89,6 +94,7 @@ export function ApplicationList({
 
     return applications
       .filter((application) => {
+        if (normalizedQuery && !`${application.company} ${application.position}`.toLocaleLowerCase('zh-CN').includes(normalizedQuery)) return false
         if (statusSet.size > 0 && !statusSet.has(application.status)) return false
         if (!matchesTimeFilter(application.appliedAt, timeFilter)) return false
         if (companySet.size > 0 && !companySet.has(application.company)) return false
@@ -97,7 +103,7 @@ export function ApplicationList({
       .sort((left, right) =>
         compareApplications(left, right, sortField, sortDirection),
       )
-  }, [applications, selectedCompanies, selectedStatuses, sortDirection, sortField, timeFilter])
+  }, [applications, normalizedQuery, selectedCompanies, selectedStatuses, sortDirection, sortField, timeFilter])
 
   const editingApplication = editingId
     ? applications.find((application) => application.id === editingId) || null
@@ -122,6 +128,7 @@ export function ApplicationList({
   const isInitialLoading = isLoading && applications.length === 0
   const showFloatingLoading = isLoading && applications.length > 0
   const hasActiveFilter =
+    normalizedQuery.length > 0 ||
     selectedStatuses.length > 0 ||
     selectedCompanies.length > 0 ||
     timeFilter.kind !== 'all'
@@ -137,6 +144,7 @@ export function ApplicationList({
   }
 
   const handleResetFilters = () => {
+    setQuery('')
     setSelectedStatuses([])
     setSelectedCompanies([])
     setTimeFilter({ kind: 'all' })
@@ -145,7 +153,7 @@ export function ApplicationList({
   }
 
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto pr-1">
+    <div className="application-jobs-content">
       {showFloatingLoading ? (
         <div className="pointer-events-none fixed right-4 top-4 z-[9999] flex flex-col gap-2">
           <div className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-slate-100/80 bg-white px-4 py-3 shadow-lg backdrop-blur animate-slide-in">
@@ -155,7 +163,16 @@ export function ApplicationList({
         </div>
       ) : null}
 
-      <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
+      <div className="application-panel-heading">
+        <div className="application-panel-title"><h1 id="application-jobs-title">我的岗位</h1><span className="application-count" aria-label={`${sortedApplications.length} 个岗位`}>{sortedApplications.length}</span></div>
+        {headerAction}
+      </div>
+      <div className="application-job-toolbar">
+        <label className="application-resume-search application-job-search">
+          <Search size={15} aria-hidden="true" />
+          <input type="search" aria-label="搜索岗位或公司" placeholder="搜索岗位或公司" value={query} onChange={event => setQuery(event.target.value)} />
+        </label>
+        <div className="application-job-filters">
         <ApplicationFilterToolbar
           applications={applications}
           selectedStatuses={selectedStatuses}
@@ -170,10 +187,14 @@ export function ApplicationList({
           onSortChange={handleSortChange}
           onReset={handleResetFilters}
         />
-        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+        </div>
+        <div className="application-view-switch" role="group" aria-label="岗位视图">
+          <button type="button" aria-label="卡片视图" title="卡片视图" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><Grid2X2 size={15} aria-hidden="true" /></button>
+          <button type="button" aria-label="列表视图" title="列表视图" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={16} aria-hidden="true" /></button>
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="application-jobs-scroll application-scroll-auto-hide" role="region" aria-label="岗位列表" tabIndex={0} onScroll={onScroll} data-scrolling={isScrolling || undefined}>
         {isInitialLoading ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-500" />
@@ -185,7 +206,7 @@ export function ApplicationList({
               <Briefcase className="h-8 w-8 text-slate-400" />
             </div>
             <p className="mt-4 text-sm text-slate-500">
-              {selectedStatuses.length === 1 &&
+              {normalizedQuery ? '没有找到匹配的岗位' : selectedStatuses.length === 1 &&
               selectedCompanies.length === 0 &&
               timeFilter.kind === 'all'
                 ? `暂无“${APPLICATION_STATUS_LABELS[selectedStatuses[0]]}”的记录`
@@ -196,7 +217,7 @@ export function ApplicationList({
             ) : null}
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+          <div className="application-jobs-grid" data-view={view}>
             {sortedApplications.map((application) => (
               <ApplicationCard
                 key={application.id}
