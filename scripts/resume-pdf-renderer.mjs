@@ -389,7 +389,7 @@ function renderEducation(data) {
     const tags = edu.schoolTags
       .map((tag) => `<span class="school-tag">${escapeHtml(tag)}</span>`)
       .join('')
-    const details = [edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).map(escapeHtml).join(' | ')
+    const details = [edu.college, edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).map(escapeHtml).join(' | ')
     return `
       <div class="resume-item education-item" data-pagination-item="education">
         <div class="item-header pagination-keep-with-next">

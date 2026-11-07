@@ -5,10 +5,95 @@ import { documentFromText } from './sourceDocument'
 import { normalizeResumeData } from '../utils/resumeData'
 import { applyReferenceTemplate } from '../utils/template'
 import { buildResumePdfHtml } from '../utils/resumeHtmlRenderer'
+import { preserveFallback } from './index'
+import { parseByRules } from './ruleParser'
 
 const group = (kind: ImportGroup['kind'], blockIds: string[], fields = {}, bodyIds = blockIds, entryId = blockIds[0]): ImportGroup => ({ kind, blockIds, fields, bodyIds, entryId })
 
 describe('source-backed resume import', () => {
+  it('shows imported college details and retains hidden supplemental fields with a warning', () => {
+    const source = documentFromText('张三 | 数据分析\n示例大学 | 软件学院 | 计算机科学 | 北京')
+    const result = assembleImport(source, [
+      group('basic', ['p1-b1'], { name: '张三', summaryTags: ['数据分析'] }, []),
+      group('education', ['p1-b2'], { school: '示例大学', college: '软件学院', major: '计算机科学', location: '北京' }, []),
+    ])
+    const data = retainUnresolved(result)
+    const html = buildResumePdfHtml(data)
+    expect(html).toContain('软件学院 | 计算机科学')
+    expect(html).toContain('北京')
+    expect(html).toContain('数据分析')
+    expect(result.issues.join('')).toContain('补充字段')
+  })
+
+  it('keeps import dates on the right even when source dates are at the left', () => {
+    const source = documentFromText('2024.01 示例公司\n2025.01 示例项目')
+    source.pages[0].width = 600
+    source.pages[0].blocks.forEach((block, index) => { block.box = [24, 760 - index * 30, 200, 10] })
+    expect(assembleImport(source, []).data.style.datePlacement).toBe('right')
+    const data = normalizeResumeData({ basic: { name: '张三', summaryTags: ['数据分析'] }, style: { datePlacement: 'left' } })
+    const fallback = preserveFallback({ data, rawText: source.rawText, parseLog: [] }, source, 'fallback')
+    expect(fallback.data.style.datePlacement).toBe('right')
+    expect(fallback.data.skills.other.join('')).toContain('数据分析')
+    expect(fallback.warnings?.join('')).toContain('补充字段')
+  })
+
+  it('does not duplicate visible supplements on repeated fallback normalization', () => {
+    const source = documentFromText('张三 | 数据分析\n示例大学 北京')
+    const data = normalizeResumeData({ basic: { name: '张三', summaryTags: ['数据分析'] }, education: [{ school: '示例大学', location: '北京' }] })
+    const once = preserveFallback({ data, rawText: source.rawText, parseLog: [] }, source, 'fallback')
+    const twice = preserveFallback(once, source, 'fallback')
+    expect(twice.data.skills.other).toEqual(once.data.skills.other)
+    expect(twice.warnings).toEqual(once.warnings)
+  })
+
+  it.each(['pdf-small', 'pdf-large', 'scan', 'text'])('uses fixed default font sizes for %s imports', (format) => {
+    const source = documentFromText('张三\n示例公司\n工作内容\n示例项目\n项目内容\n个人总结\n总结内容\nPython')
+    if (format !== 'text') {
+      source.pages[0].width = 600
+      source.pages[0].height = 800
+      source.pages[0].blocks.forEach((block, index) => {
+        block.origin = format === 'scan' ? 'vision' : 'native'
+        block.box = [24, 760 - index * 30, 200, format === 'pdf-small' ? 8 : 12]
+      })
+    }
+    const result = assembleImport(source, [
+      group('basic', ['p1-b1'], { name: '张三' }),
+      group('internships', ['p1-b2', 'p1-b3'], { company: '示例公司' }, ['p1-b3']),
+      group('projects', ['p1-b4', 'p1-b5'], { name: '示例项目' }, ['p1-b5']),
+      group('summary', ['p1-b6', 'p1-b7'], {}, ['p1-b7']),
+      group('technical', ['p1-b8']),
+    ])
+    const data = applyReferenceTemplate(retainUnresolved(result))
+    expect([data.style.fontSize, data.internships[0].contentFontSize, data.projects[0].contentFontSize, data.summary.contentFontSize]).toEqual([9, 9, 9, 9])
+    expect(data.internships[0].content).toContain('工作内容')
+    expect(data.projects[0].content).toContain('项目内容')
+  })
+
+  it('uses the same default sizes for rule and legacy fallback imports', () => {
+    const source = documentFromText('张三\n实习经历\n示例公司\n项目经历\n示例项目\n个人总结\n总结内容')
+    const rules = parseByRules(source.rawText)
+    const legacy = normalizeResumeData({ ...rules, style: { ...rules.style, fontSize: 12 }, internships: [{ company: '示例公司', contentFontSize: 14 }], projects: [{ name: '示例项目', contentFontSize: 16 }], summary: { content: '<p>总结内容</p>', contentFontSize: 13 } })
+    for (const parsed of [rules, legacy]) {
+      const data = preserveFallback({ data: parsed, rawText: source.rawText, parseLog: [] }, source, 'fallback').data
+      expect(data.style.fontSize).toBe(9)
+      expect(data.summary.contentFontSize).toBe(9)
+      expect(data.internships.every((item) => item.contentFontSize === 9)).toBe(true)
+      expect(data.projects.every((item) => item.contentFontSize === 9)).toBe(true)
+    }
+  })
+
+  it.each(['native', 'vision'] as const)('left-aligns basic info even when the %s source name is centered', (origin) => {
+    const source = documentFromText('张三')
+    source.pages[0].width = 600
+    source.pages[0].height = 800
+    source.pages[0].blocks[0] = { ...source.pages[0].blocks[0], origin, box: [280, 760, 40, 20] }
+    const result = assembleImport(source, [group('basic', ['p1-b1'], { name: '张三' })])
+    const data = applyReferenceTemplate(retainUnresolved(result))
+    expect(data.basic.name).toBe('张三')
+    expect(data.style.headerAlign).toBe('left')
+    expect(buildResumePdfHtml(data)).not.toContain('class="resume-preview header-centered')
+  })
+
   it('keeps course supplements with education and moves explicitly labelled awards', () => {
     const source = documentFromText('示例大学\n竞赛奖项：2023年建模二等奖\n；2024年创业金奖\n关键课程：数据库、运筹学')
     const result = assembleImport(source, [group('education', ['p1-b1', 'p1-b2', 'p1-b3'], { school: '示例大学' }, ['p1-b2', 'p1-b3']), group('education', ['p1-b4'])])

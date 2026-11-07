@@ -14,13 +14,14 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - “保存并切换”在新草稿保存并补全编辑器 URL 后仍会前往原目标页面；后台缩略图只发布到对应 PDF 版本，版本已变化时跳过本次更新。
 - Track applications in a delivery dashboard with shareable URL filters and switchable detail, status-distribution, and resume-job relationship views
 - The jobs page uses two soft white panels: 我的简历 initially shows only a searchable thumbnail list; selecting a resume reveals its preview and separate edit button below the list. Selecting it again or using 取消选择 hides the preview and returns the space to the list. 我的岗位 keeps compact cards, job/company search, filters, card/list switching and creation inside its panel. Switching views preserves the search, filters and selected resume. Selection gently highlights linked jobs without hiding other jobs. Narrow screens stack the panels and job cards. JD analysis remains inside the resume editor.
-- The jobs page panels use fine borders without outer shadows, keeping the background continuous between the panels and around their bottom corners.
+- The jobs page panels use fine borders without outer shadows. When a resume is selected, its preview and guidance share a near-white gradient across the bottom of 我的简历, with a soft shadow along the top edge.
 - On wide desktop screens, the jobs workspace expands with the viewport instead of stopping at 1480px. Outer spacing is a compact 28–48px; space recovered by narrowing both margins goes entirely to the left resume panel, preserving the jobs panel's width at the same viewport. Tablet and phone layouts stay the same.
 - 我的简历 shows the number of resumes in the current batch scope. Both lists keep native scrolling and a stable scrollbar gutter; scrollbar thumbs appear while scrolling and fade after one second of inactivity, without shifting the content.
 - Clicking the selected resume's preview opens an enlarged, centered image overlay. Close it with the top-right button, by clicking outside the image, or with Escape; the current resume selection is preserved and keyboard focus returns to the preview.
 - Job cards use a compact “公司 - 岗位” title, with a semibold company name and a readable muted-blue role; the second line shows the location with a pin icon, resume/channel association and application date. Full titles remain available on hover when truncated.
 - The jobs panel's list view uses borderless rows with faint inset separators and a square-cornered soft blue hover background extending 10px beyond each separator endpoint and meeting the separators above and below; keyboard focus remains visible.
 - The “新建岗位” menu matches its trigger's 12px text, 15px icons and compact spacing for “图文解析” and “手动填写”.
+- 岗位表单中，点击「关联简历」旁的问号可查看提示：岗位与简历需属于同一批次才能建立关联。
 - The signed-in homepage shows recruitment batch cards and two side-by-side white panels of recently edited resumes and jobs, with the latest three items in each list. Visible category headings and subtle dividers organize compact rows; only the jobs heading offers a borderless text-and-arrow link to view all jobs. Narrow screens stack the panels. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
 - Recent rows provide a square-cornered soft blue hover/keyboard-focus background and a right arrow, without edit/view action text. Job status badges align to the right beside the arrow. Batch links have independent hover feedback; clicking the rest of a row opens its resume or job. Motion follows the system's reduced-motion preference.
 - “我的” is a cross-batch library with 简历 / 岗位 / 批次 tabs, keyword and batch filters, job status filtering, and 5-item “加载更多” browsing. Returning from a detail/editor page restores filters, loaded rows and scroll position during the signed-in session; signing out clears that position history. Resume actions remain visible, creation follows the selected batch (or asks for one), and copies retain their original batch without job links.
@@ -31,7 +32,12 @@ A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracti
 - The launcher task list uses compact single-line rows with color-coded status badges and scrolls when more tasks are present.
 - Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
 - Dropdowns share one visual style across job forms, batch controls, the editor toolbar, font sizes, and JD history, with keyboard selection and menus that stay above scroll containers.
+- Imported resumes default to left-aligned basic information, regardless of the name's position in the source file.
+- 批次删除确认按钮在请求准备、删除和列表刷新期间显示“删除中”并保持禁用；失败后恢复“确认删除”，可重试。
+- Imported dates default to the right. Education details include college, major, degree and GPA in preview, PDF and DOCX. Personal tags and school locations without a direct output slot are retained in “其他补充” with a review warning; unmatched source content continues to be retained for review.
+- PDF, DOCX, TXT and scanned imports use a fixed 9px body size (10px section headings and 15.3px name), including rule/legacy fallbacks. Body sizes remain manually editable after import; saved resumes keep their existing sizes.
 - Export vector PDF / DOCX
+- Education school tags use a compact row with 985/211 shortcuts and custom labels such as “QS 前 50”. Click + to open the inline input, confirm with Enter or ✓, click a custom tag to rename it, and remove it with ×. The input collapses after saving or cancelling; custom tags persist in saved resumes, previews, PDF and DOCX exports.
 
 ## Tech Stack
 
@@ -66,7 +72,7 @@ npm run check:acceptance
 
 “我的”页面在账号与资料列表下提供独立的 **Agent 分析** 模块，按时间倒序汇总当前账号已保存的 Agent 分析。支持按简历、公司、岗位搜索；资料列表和分析历史均首次展示 5 条，点击“加载更多”每次追加 5 条；展开记录可查看匹配结果、优化建议、失败原因与当时的职位描述，也可打开关联简历。历史详情按需加载；列表仅显示一次岗位信息，展开后以分析报告的形式按分析摘要、岗位匹配、优化建议分区呈现，通过标题、编号和分隔线组织内容。优化建议可逐项展开，默认展开首项；内部展开使用加减号，与记录层的上下箭头区分。详情区域收窄居中，栏目刻度和实线／虚线区分不同内容层级。每条记录支持通过右侧删除图标确认删除，仅删除该条分析历史，关联简历、岗位及已生成版本保留。普通 JD 分析不混入此列表。
 
-删除简历或岗位时，默认保留 Agent 分析历史及当时的内容快照；删除确认框可勾选“同时删除相关 Agent 分析历史”，通过数据库事务一并清理，失败时不做部分删除。普通 JD 分析历史与已生成的简历版本保留。历史详情明确标注基于分析时的内容，来源删除或不可访问时显示提示，并移除失效的简历入口；来源查询失败可重试，打开简历前会再次确认。数据库也会拒绝来源删除后迟到的分析记录写入。
+删除简历或岗位时，默认保留 Agent 分析历史及当时的内容快照；删除确认框可勾选“同时删除相关 Agent 分析历史”，通过数据库事务一并清理，失败时不做部分删除。没有相关 Agent 历史时，勾选后仍可正常删除。此功能依赖 `supabase/migrations/20261103024933_agent_history_source_lifecycle.sql`，缺少迁移时界面会提示分析历史删除服务暂不可用。确认框仅显示勾选项和勾选后的永久删除提示。普通 JD 分析历史与已生成的简历版本保留。历史详情明确标注基于分析时的内容，来源删除或不可访问时显示提示，并移除失效的简历入口；来源查询失败可重试，打开简历前会再次确认。数据库也会拒绝来源删除后迟到的分析记录写入。
 
 此功能的发布顺序：先应用 `supabase/migrations/20261103024933_agent_history_source_lifecycle.sql`，再发布前端。新增函数使用调用者权限并校验有效凭证；未应用迁移时，勾选清理会报删除失败，不会退回到只删源数据。
 
@@ -106,7 +112,8 @@ Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; v
 - `/batches/:batchId` 展示该批次的简历和岗位，正文标题使用“求职空间 > 当前批次”面包屑；点击“求职空间”返回首页，支持悬停、按下和键盘聚焦反馈，顶部品牌旁不显示导航。新建、上传和岗位解析自动使用当前批次。`/editor?resumeId=...` 支持直接打开、刷新恢复及未保存修改保护。岗位页、面板使用 `?batch=...` 统一范围，省略时查看全部批次。
 - 批次详情中的岗位卡片按最近修改时间倒序排列，先排序再分页；修改岗位信息或状态后，返回批次详情或刷新页面时，最近修改的岗位排在最前。
 - 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；侧栏在“首页”和“岗位”之间显示“空间”，点击返回当前简历所属批次的详情页，其他页面不显示此入口。未保存修改仍需确认。
-- 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。确认前展示完整影响清单。
+- 简历工具栏的“重置”会先打开确认弹窗。确认后将字体、行高、间距和页边距恢复为默认值，简历内容会保留。点击“取消”或按 Esc 可保留当前样式。
+- 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。选好来源/目标批次与内容后，点击“移动”直接执行，不再展示移动预览确认页；后台仍校验关联内容，复制简历保留影响清单确认；“删除批次”以红色描边按钮与“保存修改”并列；首页卡片菜单点击“删除批次”直接弹出确认窗口，不打开管理侧栏；侧栏内点击“删除批次”也使用同一弹窗，不再展开下方的删除区域或展示预览页。有内容时在弹窗中选择接收批次，确认后整体迁移并删除；空批次确认后直接删除。
 - 简历副本使用新的 ID 和来源标记独立编辑，不复制 JD 分析和 Agent 历史；复制时可引用同一份不可变 PDF/缩略图快照，后续保存写入新的资源路径，不改变其他副本。已有记录移动保留 ID 和历史。删除非空批次必须整体迁移到另一个批次，不生成副本；空的最后一个批次可直接删除。
 - 迁移脚本为 `supabase/migrations/20261007_recruitment_batches.sql`。为每个已有用户创建“默认批次”并回填已有内容，保留原 ID 与关联。新用户仅初始化一次；主动删除后不会自动重建。旧客户端未传 `batch_id` 的创建请求优先沿用关联简历批次，否则使用现存默认/最早批次；没有批次时明确报错。
 - 插画卡面上线前需应用 `supabase/migrations/20261008_batch_card_styles.sql`，为批次增加 `card_style` 字段；已有批次默认“纯色”，选项随批次同步保存。生成素材位于 `public/batch-covers/`，采用带透明通道的 WebP；生成提示词和风格清单见该目录的 `prompts.json`。

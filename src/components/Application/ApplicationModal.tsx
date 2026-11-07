@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, Save, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { CircleHelp, Loader2, Save, Trash2, X } from 'lucide-react'
 import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
 import type { Application, ApplicationChannel, ApplicationStatus } from '../../types/application'
 import type { Resume } from '../../lib/api'
@@ -396,7 +396,7 @@ export function ApplicationModal({
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <FieldLabel>关联简历</FieldLabel>
+                    <ResumeLinkLabel />
                     <CustomSelect
                       ariaLabel="关联简历"
                       value={data.resume_id || ''}
@@ -486,6 +486,61 @@ export function ApplicationModal({
           </footer>
         </form>
       </section>
+    </div>
+  )
+}
+
+function ResumeLinkLabel() {
+  const [open, setOpen] = useState(false)
+  const hintId = useId()
+  const labelRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const dismissOutside = (event: PointerEvent) => {
+      if (!labelRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
+      buttonRef.current?.focus()
+    }
+
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissEscape, true)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissEscape, true)
+    }
+  }, [open])
+
+  return (
+    <div ref={labelRef} className="relative mb-1.5 flex items-center gap-1">
+      <span className="text-xs font-semibold text-slate-600">关联简历</span>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label="查看关联简历说明"
+        aria-expanded={open}
+        aria-controls={open ? hintId : undefined}
+        aria-describedby={open ? hintId : undefined}
+        onClick={() => setOpen((current) => !current)}
+        className="-my-1 inline-flex size-6 items-center justify-center rounded-full text-slate-500 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-blue-500 aria-expanded:bg-blue-50 aria-expanded:text-blue-600"
+      >
+        <CircleHelp aria-hidden="true" className="size-3.5" />
+      </button>
+      {open && (
+        <p
+          id={hintId}
+          className="absolute bottom-full left-0 z-10 mb-2 w-max max-w-[min(14rem,calc(100vw-5rem))] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-700 shadow-md after:absolute after:-bottom-1 after:left-15 after:size-2 after:rotate-45 after:border-r after:border-b after:border-slate-200 after:bg-white"
+        >
+          岗位与简历需属于同一批次才能建立关联。
+        </p>
+      )}
     </div>
   )
 }

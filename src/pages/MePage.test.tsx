@@ -238,7 +238,7 @@ describe('MePage library', () => {
     const dialog = screen.getByRole('dialog', { name: '确认删除简历' })
     const checkbox = within(dialog).getByRole('checkbox', { name: '同时删除相关 Agent 分析历史' })
     expect(checkbox).not.toBeChecked()
-    expect(within(dialog).getByText(/内容快照仍会保留/)).toBeInTheDocument()
+    expect(within(dialog).queryByText(/内容快照仍会保留/)).not.toBeInTheDocument()
     fireEvent.click(checkbox)
     fireEvent.click(within(dialog).getByRole('button', { name: '删除简历' }))
     await waitFor(() => expect(deleteResume).toHaveBeenCalledWith('r1', true))

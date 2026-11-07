@@ -204,6 +204,9 @@ export async function deleteApplication(id: string, deleteAgentHistory = false):
     .eq('user_id', session.user.id)
 
   if (error) {
+    if (deleteAgentHistory && error.code === 'PGRST202') {
+      throw new Error('分析历史删除服务暂不可用，请稍后重试或联系管理员')
+    }
     throw new Error('删除投递记录失败')
   }
 }

@@ -71,6 +71,7 @@ try {
   const avatar = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="65" height="81"><rect width="65" height="81" fill="#bfdbfe"/></svg>')}`
   const data = {
     basic: { name: '安全回归中文简历', phone: '13800000000', avatarUrl: avatar },
+    education: [{ school: '示例大学', college: '软件学院', major: '计算机科学', degree: '本科' }],
     projects: [{ id: 'long-project', name: '长文分页项目', role: '研发工程师', content: Array.from({ length: 120 }, (_, index) => `<p>第${index + 1}条：负责简历解析、编辑和服务端导出，验证中文字体、分页与正文完整性。</p>`).join('') }],
     style: { fontFamily: 'serif', fontSize: 10, lineHeight: 1.4 },
   }
@@ -81,6 +82,7 @@ try {
   const baseline = await describePdf(await baselinePage.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } }))
   await baselinePage.close()
   const fallback = await render({ resumeData: data }, 'fallback-long-chinese.pdf')
+  assert.ok(fallback.map((page) => page.text).join('').includes('软件学院'), 'Server PDF must retain college details')
   assert.deepEqual(fallback, baseline, 'Isolating the document must preserve the existing fallback pagination and text')
   assert.ok(fallback.length > 1)
   assert.ok(fallback.at(-1).text.includes('第120条'))

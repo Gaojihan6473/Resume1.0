@@ -4,6 +4,8 @@ import { buildRichHtmlFromLines } from '../utils/richText'
 import { normalizeResumeData } from '../utils/resumeData'
 import { checkAbort, compactSource, isSectionHeading } from './sourceDocument'
 import type { SourceBlock, SourceDocument } from './sourceDocument'
+import { applyDefaultImportStyle } from './importStyle'
+import { retainImportSupplements } from './importCompleteness'
 
 export const GROUP_KINDS = ['basic', 'education', 'internships', 'projects', 'campus', 'studentWork', 'awards', 'technical', 'languages', 'certificates', 'interests', 'summary', 'other', 'heading'] as const
 export type GroupKind = typeof GROUP_KINDS[number]
@@ -240,28 +242,9 @@ export function assembleImport(document: SourceDocument, groups: ImportGroup[], 
     ...[...sectionPositions].sort((a, b) => a[1] - b[1]).map(([section]) => section),
     ...defaultOrder.filter((section) => !sectionPositions.has(section)),
   ]
-  const firstPage = document.pages[0]
-  const nativeHeights = document.pages.flatMap((page) => page.blocks.flatMap((block) => block.origin === 'native' && block.box && block.box[3] >= 7 && block.box[3] <= 13 ? [block.box[3]] : [])).sort((a, b) => a - b)
-  if (nativeHeights.length >= 8) {
-    const bodySize = Math.max(8, Math.min(12, Math.round(nativeHeights[Math.floor(nativeHeights.length / 2)])))
-    data.style.fontSize = bodySize
-    data.internships.forEach((item) => { item.contentFontSize = bodySize })
-    data.projects.forEach((item) => { item.contentFontSize = bodySize })
-    data.summary.contentFontSize = bodySize
-  }
-  if (firstPage?.width) {
-    const name = headerToken(data.basic.name)
-    const nameBlock = name ? firstPage.blocks.find((block) => block.box && headerToken(block.text).includes(name)) : undefined
-    if (nameBlock?.box) {
-      const center = nameBlock.box[0] + nameBlock.box[2] / 2
-      if (Math.abs(center - firstPage.width / 2) < firstPage.width * 0.1) data.style.headerAlign = 'center'
-    }
-  }
-  const datePatterns = /^\s*(?:19|20)\d{2}[./年-]\s*\d{1,2}/
-  const leftDates = document.pages.flatMap((page) => page.blocks.filter((block) => block.box && page.width && datePatterns.test(block.text) && block.box[0] < page.width * 0.28))
-  const rightDates = document.pages.flatMap((page) => page.blocks.filter((block) => block.box && page.width && datePatterns.test(block.text) && block.box[0] > page.width * 0.55))
-  if (leftDates.length >= 2 && leftDates.length > rightDates.length) data.style.datePlacement = 'left'
-  return { data: normalizeResumeData(data), unresolved, issues: [...issues], problemIds: [...problemIds] }
+  const checked = retainImportSupplements(normalizeResumeData(applyDefaultImportStyle(data)))
+  checked.warnings.forEach((warning) => issues.add(warning))
+  return { data: checked.data, unresolved, issues: [...issues], problemIds: [...problemIds] }
 }
 
 export function retainUnresolved(result: MappingResult): ResumeData {

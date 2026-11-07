@@ -264,7 +264,7 @@ export function CustomSelect({
             </Fragment>
           ))}
         </div>,
-        document.body,
+        triggerRef.current?.closest('dialog') || document.body,
       )}
     </div>
   )

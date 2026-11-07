@@ -10,7 +10,6 @@ function normalizePdfFileName(fileName: string): string {
 }
 
 const PREVIEW_A4_WIDTH_PX = 595
-const SCHOOL_TAG_OPTIONS = ['985', '211']
 
 function richTextToLines(html: string): string[] {
   if (isRichHtmlEmpty(html)) return []
@@ -156,11 +155,13 @@ export async function exportToWord(
     children.push(new Paragraph({ text: '教育经历', heading: HeadingLevel.HEADING_2 }))
     for (const edu of education) {
       const schoolTags = (edu.schoolTags || [])
-        .filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
+        .map((tag) => tag.trim())
+        .filter(Boolean)
         .join('/')
       const schoolName = schoolTags ? `${edu.school} ${schoolTags}` : edu.school
       const eduLine = joinParts([
         schoolName,
+        edu.college,
         edu.major,
         edu.degree,
         edu.gpa ? `GPA: ${edu.gpa}` : '',

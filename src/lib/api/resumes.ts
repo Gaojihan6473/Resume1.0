@@ -232,7 +232,8 @@ export async function deleteResume(id: string, deleteAgentHistory = false): Prom
     const { error } = await supabase.rpc(deleteAgentHistory ? 'delete_resume_with_agent_history' : 'delete_resume_with_links', { p_resume: id })
 
     if (error) {
-      return { success: false, error: '删除简历失败' }
+      return { success: false, error: deleteAgentHistory && error.code === 'PGRST202'
+        ? '分析历史删除服务暂不可用，请稍后重试或联系管理员' : '删除简历失败' }
     }
 
     return { success: true }

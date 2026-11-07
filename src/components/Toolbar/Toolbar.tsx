@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { batchPath } from '../../utils/batchWorkspace'
@@ -175,6 +175,8 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
   const [isSaving, setIsSaving] = useState(false)
   const [zoomInput, setZoomInput] = useState(() => `${Math.round(zoom * 100)}%`)
   const [isZoomInputFocused, setIsZoomInputFocused] = useState(false)
+  const resetStyleDialogRef = useRef<HTMLDialogElement>(null)
+  const resetStyleDialogId = useId()
 
   useEffect(() => {
     if (!isZoomInputFocused) {
@@ -362,7 +364,7 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
 
       {/* 右侧操作区 - 固定不滚动 */}
       <div className="flex items-center gap-1 px-3 border-l border-slate-200 shrink-0">
-        <CardButton onClick={resetStyle} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
+        <CardButton onClick={() => resetStyleDialogRef.current?.showModal()} icon={<RotateCcw className={iconSize} />} label="重置" title="重置样式" />
         <CardButton
           onClick={handleSaveDraft}
           disabled={isSaving || isAgentDraftVisible}
@@ -405,6 +407,37 @@ export function Toolbar({ sidebarTriggerRef, onOpenSidebar, onScheduleCloseSideb
           {isDirty ? '未保存' : parseStatus === 'idle' ? '未解析' : '已就绪'}
         </div>
       </div>
+
+      <dialog
+        ref={resetStyleDialogRef}
+        aria-labelledby={resetStyleDialogId}
+        aria-describedby={`${resetStyleDialogId}-description`}
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-xl backdrop:bg-slate-950/30"
+      >
+        <h2 id={resetStyleDialogId} className="text-lg font-semibold text-slate-900">重置简历样式？</h2>
+        <p id={`${resetStyleDialogId}-description`} className="mt-2 text-sm leading-6 text-slate-600">
+          字体、行高、间距和页边距将恢复默认值，简历内容会保留。
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => resetStyleDialogRef.current?.close()}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resetStyle()
+              resetStyleDialogRef.current?.close()
+            }}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            确认重置
+          </button>
+        </div>
+      </dialog>
     </div>
   )
 }

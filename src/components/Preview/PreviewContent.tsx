@@ -119,9 +119,7 @@ export function PreviewContent({
               <span className="shrink-0" style={{ lineHeight: `${bodyLineHeightPx}px`, order: style.datePlacement === 'left' ? -1 : 0 }}>{edu.startDate} - {edu.endDate}</span>
             </div>
             <div>
-              {edu.major}
-              {edu.degree && ` | ${edu.degree}`}
-              {edu.gpa && ` | GPA: ${edu.gpa}`}
+              {[edu.college, edu.major, edu.degree, edu.gpa ? `GPA: ${edu.gpa}` : ''].filter(Boolean).join(' | ')}
             </div>
             {edu.description && <div style={{ marginTop: `${tightSpacingPx}px`, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: textToSafeHtml(edu.description) }} />}
           </div>

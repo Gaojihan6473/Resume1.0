@@ -100,6 +100,17 @@ test('job cleanup retains other job history and the resume, and rejects late his
   await assert.rejects(db.query(`insert into jd_analysis_records(user_id,resume_id,application_id,jd_hash,resume_hash,model,prompt_version) values($1,$2,$3,'j','r','m','v')`, [user, resume, job1]), /来源岗位已不存在/)
 })
 
+test('explicit cleanup succeeds with no Agent history, including repeated deletion', async () => {
+  assert.equal((await rows('jd_analysis_records')).length, 0)
+  await db.query('select delete_application_with_agent_history($1)', [job1])
+  await db.query('select delete_application_with_agent_history($1)', [job1])
+  assert.deepEqual((await rows('applications')).map((job) => job.id), [job2])
+  assert.equal((await rows('resumes')).length, 1)
+  await db.query('select delete_resume_with_agent_history($1)', [resume])
+  assert.equal((await rows('resumes')).length, 0)
+  assert.equal((await rows('applications'))[0].resume_id, null)
+})
+
 test('cleanup cannot remove another owner data or execute as anonymous', async () => {
   await seedHistory()
   await db.exec(`set request.jwt.claim.sub='${otherUser}'`)

@@ -40,17 +40,19 @@ export function ResumeSelector({ resumes, selectedResumeId, onSelectResume, onEd
       </button>)}
       {visibleResumes.length === 0 && <p className="application-resume-no-results">没有找到匹配的简历</p>}
     </div>
-    {previewResume && <section className="application-resume-preview" aria-label="简历预览">
-      <div className="application-resume-preview-heading"><span>简历预览</span>{selectedResume && <button type="button" aria-label="取消简历选择" onClick={() => onSelectResume('')}>取消选择</button>}</div>
-      <div className="application-resume-preview-body">
-        <ZoomableResumePreview key={previewResume.id} resume={previewResume} />
-        <div className="application-resume-preview-actions">
-          <p title={previewResume.title}>{previewResume.title || '未命名简历'}</p>
-          {onEditResume && <button type="button" className="application-button-secondary" aria-label={`编辑简历：${previewResume.title || '未命名简历'}`} onClick={() => onEditResume(previewResume)}><SquarePen size={14} aria-hidden="true" />编辑简历</button>}
+    <div className="application-resume-footer">
+      {previewResume && <section className="application-resume-preview" aria-label="简历预览">
+        <div className="application-resume-preview-heading"><span>简历预览</span>{selectedResume && <button type="button" aria-label="取消简历选择" onClick={() => onSelectResume('')}>取消选择</button>}</div>
+        <div className="application-resume-preview-body">
+          <ZoomableResumePreview key={previewResume.id} resume={previewResume} />
+          <div className="application-resume-preview-actions">
+            <p title={previewResume.title}>{previewResume.title || '未命名简历'}</p>
+            {onEditResume && <button type="button" className="application-button-secondary" aria-label={`编辑简历：${previewResume.title || '未命名简历'}`} onClick={() => onEditResume(previewResume)}><SquarePen size={14} aria-hidden="true" />编辑简历</button>}
+          </div>
         </div>
-      </div>
-    </section>}
-    <div className="application-resume-hint"><FishMascot /><p>点击简历，看看它关联的岗位。</p></div>
+      </section>}
+      <div className="application-resume-hint"><FishMascot /><p>点击简历，看看它关联的岗位。</p></div>
+    </div>
   </div>
 }
 

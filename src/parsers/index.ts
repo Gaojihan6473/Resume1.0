@@ -5,9 +5,12 @@ import { checkAbort, compactSource, documentFromText } from './sourceDocument'
 import type { ParseProgress, SourceDocument } from './sourceDocument'
 import { parseVisualDocument } from './visualImport'
 import { hasResumeContent } from './importMapping'
+import { applyDefaultImportStyle } from './importStyle'
+import { retainImportSupplements } from './importCompleteness'
 
 export function preserveFallback(result: ParsedResult, document: SourceDocument, warning: string): ParsedResult {
-  const data = normalizeResumeData(applyReferenceTemplate(normalizeResumeData(result.data)))
+  const checked = retainImportSupplements(normalizeResumeData(applyReferenceTemplate(applyDefaultImportStyle(normalizeResumeData(result.data)))))
+  const data = checked.data
   const serialized = compactSource(JSON.stringify(data).replace(/\\n/g, ''))
   const fieldValues = [
     ...Object.values(data.basic),
@@ -25,7 +28,7 @@ export function preserveFallback(result: ParsedResult, document: SourceDocument,
     if (residue) data.skills.other.push(`第${block.page}页：${block.text}`)
   }
   if (!hasResumeContent(data)) throw new Error('未识别到有效简历内容，请检查文件后重试')
-  return { ...result, data, rawText: document.rawText, warnings: [...new Set([...(result.warnings || []), warning])] }
+  return { ...result, data, rawText: document.rawText, warnings: [...new Set([...(result.warnings || []), ...checked.warnings, warning])] }
 }
 
 export async function parseFile(file: File, useAI = false, signal?: AbortSignal, progress?: ParseProgress): Promise<ParsedResult> {

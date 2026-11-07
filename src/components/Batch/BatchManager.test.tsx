@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { BatchManager } from './BatchManager'
 import { useBatchStore } from '../../store/batchStore'
 import { useResumeStore } from '../../store/resumeStore'
@@ -10,6 +10,11 @@ import type { Resume } from '../../lib/api/resumes'
 import type { Application } from '../../types/application'
 
 vi.mock('../../lib/api/batches', async (original) => ({ ...await original<typeof import('../../lib/api/batches')>(), previewBatchTransfer: vi.fn(), executeBatchTransfer: vi.fn(), saveBatch: vi.fn() }))
+// jsdom does not implement the browser's modal dialog methods.
+Object.defineProperties(HTMLDialogElement.prototype, {
+  showModal: { configurable: true, value: function (this: HTMLDialogElement) { this.setAttribute('open', '') } },
+  close: { configurable: true, value: function (this: HTMLDialogElement) { this.removeAttribute('open') } },
+})
 const batch: RecruitmentBatch = { id: 'a', user_id: 'u', name: '互联网秋招', description: '', color: 'blue', created_at: '', updated_at: '' }
 const other: RecruitmentBatch = { ...batch, id: 'b', name: '金融秋招' }
 const resume: Resume = { id: 'r', batch_id: 'a', user_id: 'u', title: '基础版', content: {}, source: 'blank', file_url: null, preview_url: null, created_at: '', updated_at: '' }
@@ -24,6 +29,41 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe('batch management', () => {
+  it('shows deletion progress through preparation, deletion and list refresh', async () => {
+    useResumeStore.setState({ cachedResumes: [] })
+    useApplicationStore.setState({ applications: [] })
+    let finishPreview!: (value: Awaited<ReturnType<typeof previewBatchTransfer>>) => void
+    let finishDelete!: () => void
+    let finishRefresh!: () => void
+    vi.mocked(previewBatchTransfer).mockImplementationOnce(() => new Promise((resolve) => { finishPreview = resolve }))
+    vi.mocked(executeBatchTransfer).mockImplementationOnce(() => new Promise((resolve) => { finishDelete = resolve }))
+    useBatchStore.setState({ refreshWorkspace: vi.fn(() => new Promise<void>((resolve) => { finishRefresh = resolve })) })
+    const onClose = vi.fn()
+    render(<BatchManager batch={batch} initialDelete onClose={onClose} />)
+    const dialog = await screen.findByRole('dialog', { name: '确认删除批次' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认删除' }))
+    expect(within(dialog).getByRole('button', { name: '删除中' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeDisabled()
+    await act(async () => finishPreview({ resumes: [], applications: [], copies: [], fingerprint: 'confirmed' }))
+    expect(executeBatchTransfer).toHaveBeenCalledOnce()
+    expect(within(dialog).getByRole('button', { name: '删除中' })).toBeDisabled()
+    await act(async () => finishDelete())
+    expect(within(dialog).getByRole('button', { name: '删除中' })).toBeDisabled()
+    expect(onClose).not.toHaveBeenCalled()
+    await act(async () => finishRefresh())
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('opens only the confirmation modal from the homepage delete entry', async () => {
+    const onClose = vi.fn()
+    render(<BatchManager batch={batch} initialDelete onClose={onClose} />)
+    const dialog = await screen.findByRole('dialog', { name: '确认删除批次' })
+    expect(screen.queryByRole('dialog', { name: `管理批次 · ${batch.name}` })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(executeBatchTransfer).not.toHaveBeenCalled()
+  })
   it('saves the selected illustration independently of the theme and restores it when reopened', async () => {
     const onClose = vi.fn()
     const saved: RecruitmentBatch = { ...batch, color: 'teal', card_style: 'moon-garden' }
@@ -65,26 +105,27 @@ describe('batch management', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('保存失败，请重试')
     expect(onClose).not.toHaveBeenCalled()
   })
-  it('previews the actual impacted records before executing and refreshes after success', async () => {
+  it('moves the selected content directly and refreshes without an intermediate confirmation', async () => {
     render(<BatchManager batch={batch} initialTab="content" initialApplicationIds={['j']} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
     fireEvent.click(screen.getByRole('option', { name: '金融秋招' }))
-    fireEvent.click(screen.getByText('预览移动 (1)'))
-    expect(await screen.findByText('在目标批次生成的独立简历副本 · 1')).toBeInTheDocument()
-    expect(executeBatchTransfer).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByText('确认执行'))
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
     await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledWith({ sourceId: 'a', targetId: 'b', resumeIds: [], applicationIds: ['j'], mode: 'move' }, 'confirmed', expect.any(String)))
     await waitFor(() => expect(useBatchStore.getState().refreshWorkspace).toHaveBeenCalled())
+    expect(screen.queryByText('确认移动内容')).not.toBeInTheDocument()
+    expect(screen.queryByText('确认执行')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '移动 (0)' })).toBeDisabled()
   })
   it('invalidates confirmation when the server reports a concurrent association change', async () => {
     vi.mocked(executeBatchTransfer).mockRejectedValue(new Error('关联内容已变化，请重新预览并确认'))
     render(<BatchManager batch={batch} initialTab="content" initialApplicationIds={['j']} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
     fireEvent.click(screen.getByRole('option', { name: '金融秋招' }))
-    fireEvent.click(screen.getByText('预览移动 (1)'))
-    fireEvent.click(await screen.findByText('确认执行'))
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('关联内容已变化')
     expect(screen.queryByText('确认执行')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
+    await waitFor(() => expect(previewBatchTransfer).toHaveBeenCalledTimes(2))
   })
   it('uses an explicit source batch when importing and keeps selections across content tabs', async () => {
     useResumeStore.setState({ cachedResumes: [{ ...resume, batch_id: 'b' }] })
@@ -96,13 +137,107 @@ describe('batch management', () => {
     fireEvent.click(screen.getByLabelText('基础版'))
     fireEvent.click(screen.getByText('岗位'))
     fireEvent.click(screen.getByLabelText('公司一 · 产品经理'))
-    fireEvent.click(screen.getByText('预览移动 (2)'))
+    fireEvent.click(screen.getByRole('button', { name: '移动 (2)' }))
     await waitFor(() => expect(previewBatchTransfer).toHaveBeenCalledWith({ sourceId: 'b', targetId: 'a', resumeIds: ['r'], applicationIds: ['j'], mode: 'move' }))
+    await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledWith({ sourceId: 'b', targetId: 'a', resumeIds: ['r'], applicationIds: ['j'], mode: 'move' }, 'confirmed', expect.any(String)))
   })
-  it('requires a receiving batch before deleting occupied batches', () => {
+  it('requires a receiving batch in the modal before deleting occupied batches', async () => {
     useBatchStore.setState({ batches: [batch] })
     render(<BatchManager batch={batch} initialDelete onClose={vi.fn()} />)
-    expect(screen.getByText('预览并确认删除')).toBeDisabled()
-    expect(screen.getByText('请先关闭此面板并创建一个接收批次。')).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: '确认删除批次' })
+    expect(within(dialog).getByRole('button', { name: '确认删除' })).toBeDisabled()
+    expect(dialog).toHaveTextContent('请先创建一个接收批次')
+  })
+  it('keeps selections after a preview failure and allows a direct retry', async () => {
+    vi.mocked(previewBatchTransfer).mockRejectedValueOnce(new Error('网络错误'))
+    render(<BatchManager batch={batch} initialTab="content" initialResumeIds={['r']} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
+    fireEvent.click(screen.getByRole('option', { name: '金融秋招' }))
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('网络错误')
+    expect(executeBatchTransfer).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
+    await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledOnce())
+  })
+  it('blocks duplicate moves and reuses the request ID after an uncertain execution failure', async () => {
+    let rejectMove!: (error: Error) => void
+    vi.mocked(executeBatchTransfer).mockImplementationOnce(() => new Promise((_, reject) => { rejectMove = reject }))
+    render(<BatchManager batch={batch} initialTab="content" initialResumeIds={['r']} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
+    fireEvent.click(screen.getByRole('option', { name: '金融秋招' }))
+    const move = screen.getByRole('button', { name: '移动 (1)' })
+    fireEvent.click(move)
+    fireEvent.click(move)
+    await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: '处理中…' })).toBeDisabled()
+    expect(screen.queryByText('确认执行')).not.toBeInTheDocument()
+    rejectMove(new Error('请求超时'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('请求超时')
+    fireEvent.click(screen.getByRole('button', { name: '移动 (1)' }))
+    await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(executeBatchTransfer).mock.calls[1]).toEqual(vi.mocked(executeBatchTransfer).mock.calls[0])
+    expect(previewBatchTransfer).toHaveBeenCalledOnce()
+  })
+  it('still previews copying before execution', async () => {
+    render(<BatchManager batch={batch} initialTab="content" initialResumeIds={['r']} onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
+    fireEvent.click(screen.getByRole('option', { name: '金融秋招' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制所选简历' }))
+    expect(await screen.findByText('确认复制简历')).toBeInTheDocument()
+    expect(executeBatchTransfer).not.toHaveBeenCalled()
+  })
+  it('confirms deletion without a preview page and preserves the receiving batch when cancelled', async () => {
+    const onClose = vi.fn(), onDeleted = vi.fn()
+    render(<BatchManager batch={batch} onClose={onClose} onDeleted={onDeleted} />)
+    fireEvent.click(screen.getByRole('button', { name: '删除批次' }))
+    expect(saveBatch).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: '确认删除批次' })
+    fireEvent.click(screen.getByRole('combobox', { name: '选择批次' }))
+    fireEvent.click(within(dialog).getByRole('option', { name: '金融秋招' }))
+    expect(dialog).toHaveTextContent('互联网秋招')
+    expect(dialog).toHaveTextContent('金融秋招')
+    expect(screen.queryByText('确认迁移并删除批次')).not.toBeInTheDocument()
+    expect(previewBatchTransfer).not.toHaveBeenCalled()
+    expect(executeBatchTransfer).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog', { name: '确认删除批次' })).not.toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '删除批次' }))
+    expect(screen.getByRole('combobox', { name: '选择批次' })).toHaveTextContent('金融秋招')
+    fireEvent.click(within(screen.getByRole('dialog', { name: '确认删除批次' })).getByRole('button', { name: '确认删除' }))
+    await waitFor(() => expect(executeBatchTransfer).toHaveBeenCalledWith({ sourceId: 'a', targetId: 'b', resumeIds: [], applicationIds: [], mode: 'delete' }, 'confirmed', expect.any(String)))
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('a'))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(useBatchStore.getState().refreshWorkspace).toHaveBeenCalledOnce()
+  })
+  it('requires confirmation even for the final empty batch and keeps the drawer open on failure', async () => {
+    useBatchStore.setState({ batches: [batch] })
+    useResumeStore.setState({ cachedResumes: [] })
+    useApplicationStore.setState({ applications: [] })
+    vi.mocked(executeBatchTransfer).mockRejectedValueOnce(new Error('删除失败，请重试'))
+    const onClose = vi.fn()
+    render(<BatchManager batch={batch} onClose={onClose} />)
+    fireEvent.click(screen.getByRole('button', { name: '删除批次' }))
+    expect(executeBatchTransfer).not.toHaveBeenCalled()
+    fireEvent.click(within(screen.getByRole('dialog', { name: '确认删除批次' })).getByRole('button', { name: '确认删除' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('删除失败，请重试')
+    expect(executeBatchTransfer).toHaveBeenCalledWith({ sourceId: 'a', targetId: null, resumeIds: [], applicationIds: [], mode: 'delete' }, 'confirmed', expect.any(String))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.queryByText('确认迁移并删除批次')).not.toBeInTheDocument()
+  })
+  it('keeps a failed homepage deletion in the modal and reuses the request on retry', async () => {
+    useResumeStore.setState({ cachedResumes: [] })
+    useApplicationStore.setState({ applications: [] })
+    vi.mocked(executeBatchTransfer).mockRejectedValueOnce(new Error('请求超时'))
+    const onClose = vi.fn()
+    render(<BatchManager batch={batch} initialDelete onClose={onClose} />)
+    const dialog = await screen.findByRole('dialog', { name: '确认删除批次' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认删除' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('请求超时')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(dialog).toHaveAttribute('open')
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认删除' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+    expect(vi.mocked(executeBatchTransfer).mock.calls[1]).toEqual(vi.mocked(executeBatchTransfer).mock.calls[0])
   })
 })

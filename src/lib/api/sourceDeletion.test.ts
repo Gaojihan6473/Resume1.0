@@ -19,9 +19,15 @@ it('keeps history by default and requests atomic cleanup only when explicitly se
   expect(mocks.from).not.toHaveBeenCalled()
 })
 it('does not fall back to partial deletion if cleanup fails or its migration is absent', async () => {
-  mocks.rpc.mockResolvedValue({ error: { code: 'PGRST202' } })
+  mocks.rpc.mockResolvedValue({ error: { code: '42501' } })
   expect((await deleteResume('resume', true)).success).toBe(false)
   await expect(deleteApplication('job', true)).rejects.toThrow('删除投递记录失败')
+  expect(mocks.from).not.toHaveBeenCalled()
+})
+it('explains unavailable history cleanup without silently deleting only the source', async () => {
+  mocks.rpc.mockResolvedValue({ error: { code: 'PGRST202' } })
+  expect(await deleteResume('resume', true)).toEqual({ success: false, error: '分析历史删除服务暂不可用，请稍后重试或联系管理员' })
+  await expect(deleteApplication('job', true)).rejects.toThrow('分析历史删除服务暂不可用，请稍后重试或联系管理员')
   expect(mocks.from).not.toHaveBeenCalled()
 })
 it('uses the ordinary owned job deletion when cleanup is not selected', async () => {

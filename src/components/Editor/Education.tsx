@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { SortableModuleWrapper } from './SortableModuleWrapper'
-import { Plus, Trash2, ChevronUp, ChevronDown, GraduationCap } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, ChevronDown, GraduationCap, X, Check } from 'lucide-react'
 import type { EducationItem } from '../../types/resume'
 
 const SCHOOL_TAG_OPTIONS = ['985', '211']
@@ -24,7 +24,29 @@ function EducationCard({
   onMoveDown: () => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const schoolTags = (item.schoolTags || []).filter((tag) => SCHOOL_TAG_OPTIONS.includes(tag))
+  const schoolTags = item.schoolTags || []
+  const [tagDraft, setTagDraft] = useState('')
+  const [editingTag, setEditingTag] = useState<string | null>(null)
+  const [tagEditorOpen, setTagEditorOpen] = useState(false)
+  const tagInputRef = useRef<HTMLInputElement>(null)
+  const addTagRef = useRef<HTMLButtonElement>(null)
+
+  const cancelTagEdit = () => {
+    setTagDraft('')
+    setEditingTag(null)
+    setTagEditorOpen(false)
+    addTagRef.current?.focus()
+  }
+
+  const saveTag = () => {
+    const tag = tagDraft.trim()
+    if (!tag) return
+    const nextTags = editingTag === null
+      ? [...schoolTags, tag]
+      : schoolTags.map((current) => current === editingTag ? tag : current)
+    onUpdate(item.id, { schoolTags: [...new Set(nextTags)] })
+    cancelTagEdit()
+  }
 
   const inputClass = `
     w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
@@ -155,7 +177,7 @@ function EducationCard({
 
         <div className="col-span-2">
           <label className="block text-xs text-gray-500 mb-1.5">院校标签</label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {SCHOOL_TAG_OPTIONS.map((tag) => {
               const selected = schoolTags.includes(tag)
 
@@ -163,8 +185,9 @@ function EducationCard({
                 <button
                   key={tag}
                   type="button"
+                  aria-pressed={selected}
                   onClick={() => toggleSchoolTag(tag)}
-                  className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-all duration-200 btn-press ${
+                  className={`px-2 py-1 rounded-md border text-xs font-medium transition-all duration-200 btn-press ${
                     selected
                       ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
                       : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
@@ -174,6 +197,71 @@ function EducationCard({
                 </button>
               )
             })}
+            {schoolTags.filter((tag) => !SCHOOL_TAG_OPTIONS.includes(tag)).map((tag) => (
+              <span key={tag} className="inline-flex min-w-0 max-w-full items-center rounded-md border border-blue-200 bg-blue-50 text-xs text-blue-700">
+                <button
+                  type="button"
+                  aria-label={`编辑院校标签：${tag}`}
+                  title="点击编辑标签"
+                  className="min-w-0 break-all rounded-l-md py-1 pl-2 pr-1 text-left hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-blue-500"
+                  onClick={() => {
+                    setEditingTag(tag)
+                    setTagDraft(tag)
+                    setTagEditorOpen(true)
+                    tagInputRef.current?.focus()
+                  }}
+                >{tag}</button>
+                <button
+                  type="button"
+                  aria-label={`删除院校标签：${tag}`}
+                  className="shrink-0 rounded-r-md p-1 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-blue-500"
+                  onClick={() => {
+                    onUpdate(item.id, { schoolTags: schoolTags.filter((current) => current !== tag) })
+                    if (editingTag === tag) cancelTagEdit()
+                  }}
+                ><X className="h-3 w-3" /></button>
+              </span>
+            ))}
+            <button
+              ref={addTagRef}
+              type="button"
+              aria-label="新增院校标签"
+              aria-expanded={tagEditorOpen}
+              title="新增院校标签"
+              onClick={() => {
+                setEditingTag(null)
+                setTagDraft('')
+                setTagEditorOpen(true)
+                tagInputRef.current?.focus()
+              }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-gray-300 text-gray-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+            ><Plus className="h-3.5 w-3.5" /></button>
+            {tagEditorOpen && <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
+            <input
+              ref={tagInputRef}
+              autoFocus
+              type="text"
+              aria-label="自定义院校标签"
+              value={tagDraft}
+              onChange={(event) => setTagDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  saveTag()
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelTagEdit()
+                }
+              }}
+              placeholder="如 QS 前 50"
+              className="h-7 w-32 min-w-0 max-w-full rounded-md border border-blue-300 bg-white px-2 text-xs outline-none focus:ring-2 focus:ring-blue-100"
+            />
+            <button type="button" aria-label={editingTag === null ? '添加标签' : '保存标签'} title="确认标签" onClick={saveTag} disabled={!tagDraft.trim()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" aria-label="取消标签编辑" title="取消" onClick={cancelTagEdit} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100"><X className="h-3.5 w-3.5" /></button>
+            </div>}
           </div>
         </div>
 
