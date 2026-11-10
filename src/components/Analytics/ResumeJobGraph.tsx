@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
+import { useChartResize } from './useChartResize'
 import { Maximize2, Network } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -324,15 +325,17 @@ export function ResumeJobGraph({
 
     return {
       backgroundColor: 'transparent',
+      textStyle: { fontFamily: "system-ui, 'Segoe UI', Roboto, sans-serif", color: '#536d90' },
       tooltip: {
         show: !isTooltipSuppressed,
         trigger: 'item' as const,
         backgroundColor: 'white',
         borderWidth: 1,
-        borderColor: '#e2e8f0',
-        borderRadius: 12,
-        padding: [12, 16],
-        textStyle: { color: '#334155', fontSize: 13 },
+        borderColor: '#dce6f6',
+        borderRadius: 10,
+        padding: [10, 12],
+        textStyle: { color: '#536d90', fontSize: 12 },
+        extraCssText: 'box-shadow:0 6px 18px #284a7b12;',
         formatter: renderTooltip,
       },
       series: [
@@ -422,13 +425,7 @@ export function ResumeJobGraph({
     })
   }, [])
 
-  useEffect(() => {
-    if (!active) return
-    const frame = window.requestAnimationFrame(() => {
-      chartRef.current?.getEchartsInstance()?.resize()
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [active, graphData.nodes.length])
+  const containerRef = useChartResize(chartRef, active, graphData.nodes.length > 0)
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(handleFitView)
@@ -461,7 +458,7 @@ export function ResumeJobGraph({
 
   if (graphData.nodes.length === 0) {
     return (
-      <div className="flex h-[clamp(400px,calc(100dvh-390px),680px)] items-center justify-center">
+      <div className="analytics-chart analytics-chart-empty">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
             <Network className="w-8 h-8 text-slate-300" />
@@ -474,7 +471,7 @@ export function ResumeJobGraph({
 
   return (
     <div
-      className="relative h-[clamp(400px,calc(100dvh-390px),680px)] min-h-[400px]"
+      ref={containerRef} className="analytics-chart"
       onMouseDownCapture={suppressTooltip}
       onMouseMoveCapture={() => {
         if (isTooltipSuppressed) hideTooltip()
@@ -493,7 +490,7 @@ export function ResumeJobGraph({
         role="list"
         aria-label="关系图谱图例"
         onMouseLeave={() => setFocusedCategory(null)}
-        className="absolute right-2 top-1 z-10 flex items-center gap-3 rounded-lg bg-white/72 px-2.5 py-1.5 text-xs text-slate-500 backdrop-blur-md"
+        className="analytics-chart-legend"
       >
         <span
           role="listitem"
@@ -527,8 +524,9 @@ export function ResumeJobGraph({
       <button
         type="button"
         title="适应视图"
+        aria-label="适应视图"
         onClick={handleFitView}
-        className="absolute right-3 bottom-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white/90 text-slate-500 shadow-sm backdrop-blur transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+        className="analytics-fit-view"
       >
         <Maximize2 className="h-4 w-4" />
       </button>

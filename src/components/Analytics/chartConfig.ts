@@ -10,10 +10,10 @@ export const STATUS_ORDER: ApplicationStatus[] = [
 ]
 
 export const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  interested: '#94a3b8',
-  applied: '#3b82f6',
-  assessing: '#06b6d4',
-  interviewing: '#f59e0b',
-  offered: '#10b981',
-  rejected: '#ef4444',
+  interested: '#91a6c4',
+  applied: '#4f80ed',
+  assessing: '#38a6c4',
+  interviewing: '#9775dc',
+  offered: '#e5a63b',
+  rejected: '#e87585',
 }

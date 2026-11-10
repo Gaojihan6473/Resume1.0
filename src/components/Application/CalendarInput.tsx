@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar } from 'lucide-react'
 
@@ -11,6 +11,8 @@ interface Props {
   value: string | null
   onChange: (value: string | null) => void
   placeholder?: string
+  ariaLabel?: string
+  portalContainerRef?: RefObject<HTMLElement | null>
 }
 
 const MONTHS = [
@@ -20,7 +22,7 @@ const MONTHS = [
 
 const WEEKDAYS = ['\u65e5', '\u4e00', '\u4e8c', '\u4e09', '\u56db', '\u4e94', '\u516d']
 
-export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62e9\u65e5\u671f' }: Props) {
+export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62e9\u65e5\u671f', ariaLabel, portalContainerRef }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [focusYear, setFocusYear] = useState(new Date().getFullYear())
   const [focusMonth, setFocusMonth] = useState(new Date().getMonth())
@@ -60,12 +62,13 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
+      event.stopPropagation()
       setIsOpen(false)
       triggerRef.current?.focus()
     }
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [isOpen])
 
   const today = new Date()
@@ -79,6 +82,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
     const dd = String(date.getDate()).padStart(2, '0')
     onChange(`${yyyy}-${mm}-${dd}`)
     setIsOpen(false)
+    triggerRef.current?.focus()
   }
 
   const goToPrevMonth = () => {
@@ -160,6 +164,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
       <button
         ref={triggerRef}
         type="button"
+        aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         className="flex w-full cursor-pointer select-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-sm outline-none transition hover:border-blue-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100/70"
@@ -179,7 +184,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
         <div
           ref={panelRef}
           role="dialog"
-          aria-label="选择投递日期"
+          aria-label={ariaLabel ? `选择${ariaLabel}` : '选择投递日期'}
           data-application-floating-panel="true"
           className="dropdown-panel z-[1000] select-none p-3"
           style={panelStyle}
@@ -277,7 +282,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
           <div className="flex items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => { onChange(null); setIsOpen(false) }}
+              onClick={() => { onChange(null); setIsOpen(false); triggerRef.current?.focus() }}
               className="px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
             >
               清除
@@ -291,7 +296,7 @@ export function CalendarInput({ value, onChange, placeholder = '\u8bf7\u9009\u62
             </button>
           </div>
         </div>,
-        document.body,
+        portalContainerRef?.current || document.body,
       )}
     </div>
   )

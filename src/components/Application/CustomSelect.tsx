@@ -19,9 +19,7 @@ interface Option {
   title?: string
 }
 
-interface Props {
-  value: string
-  onChange: (value: string) => void
+interface SharedProps {
   options: Option[]
   placeholder?: string
   className?: string
@@ -32,11 +30,19 @@ interface Props {
   size?: 'default' | 'sm'
   icon?: ReactNode
   emptyMessage?: string
+  panelClassName?: string
+  panelMinWidth?: number
+  displayLabel?: string
 }
+type Props = SharedProps & (
+  | { multiple?: false; value: string; onChange: (value: string) => void }
+  | { multiple: true; value: string[]; onChange: (value: string[]) => void }
+)
 
 export function CustomSelect({
   value,
   onChange,
+  multiple,
   options,
   placeholder = '请选择',
   className = '',
@@ -47,6 +53,9 @@ export function CustomSelect({
   size = 'default',
   icon,
   emptyMessage = '暂无可选项',
+  panelClassName = '',
+  panelMinWidth = 0,
+  displayLabel,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -55,10 +64,13 @@ export function CustomSelect({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const selectedOption = options.find((o) => o.value === value)
+  const isSelected = (option: Option) => multiple
+    ? option.value === '' ? value.length === 0 : value.includes(option.value)
+    : option.value === value
+  const selectedOption = options.find(isSelected)
   const isPlaceholder = !selectedOption || (selectedOption.value === '' && selectedOption.label === placeholder)
   const estimatedOptionWidth = Math.max(
-    120,
+    120, panelMinWidth,
     ...options.map((option) =>
       Array.from(option.label).reduce(
         (width, character) => width + ((character.codePointAt(0) ?? 0) > 0xff ? 14 : 8),
@@ -152,9 +164,19 @@ export function CustomSelect({
     if (disabled) return
     if (!isOpen) {
       updatePanelPosition()
-      setActiveIndex(options.findIndex((option) => option.value === value))
+      setActiveIndex(options.findIndex(isSelected))
     }
     setIsOpen((open) => !open)
+  }
+
+  const chooseOption = (nextValue: string) => {
+    if (multiple) {
+      onChange(!nextValue ? [] : value.includes(nextValue) ? value.filter(item => item !== nextValue) : [...value, nextValue])
+    } else {
+      onChange(nextValue)
+      setIsOpen(false)
+    }
+    triggerRef.current?.focus()
   }
 
   const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -162,7 +184,7 @@ export function CustomSelect({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
       event.preventDefault()
       if (!isOpen) updatePanelPosition()
-      const current = isOpen ? activeIndex : options.findIndex((option) => option.value === value)
+      const current = isOpen ? activeIndex : options.findIndex(isSelected)
       const next = event.key === 'Home' ? 0
         : event.key === 'End' ? options.length - 1
           : event.key === 'ArrowDown' ? Math.min(current + 1, options.length - 1)
@@ -171,8 +193,7 @@ export function CustomSelect({
       setIsOpen(true)
     } else if (isOpen && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault()
-      if (options[activeIndex]) onChange(options[activeIndex].value)
-      setIsOpen(false)
+      if (options[activeIndex]) chooseOption(options[activeIndex].value)
     }
   }
 
@@ -210,7 +231,7 @@ export function CustomSelect({
         <span className="flex min-w-0 items-center gap-2">
           {icon ? <span className="shrink-0 text-slate-400">{icon}</span> : null}
           <span className={`min-w-0 flex-1 truncate ${isPlaceholder ? 'text-slate-400' : 'text-slate-800'}`}>
-            {selectedOption?.label || placeholder}
+            {displayLabel || (multiple && value.length > 1 ? `已选 ${value.length} 项` : selectedOption?.label) || placeholder}
           </span>
           {selectedOption?.badge ? <OptionBadge label={selectedOption.badge} tone={selectedOption.badgeTone} /> : null}
         </span>
@@ -222,9 +243,10 @@ export function CustomSelect({
           ref={panelRef}
           id={listId}
           role="listbox"
+          aria-multiselectable={multiple || undefined}
           aria-label={ariaLabel}
           data-application-floating-panel="true"
-          className="dropdown-panel z-[1000] overflow-auto overscroll-contain py-1 animate-in fade-in zoom-in-95 duration-150"
+          className={`dropdown-panel z-[1000] overflow-auto overscroll-contain py-1 animate-in fade-in zoom-in-95 duration-150 ${panelClassName}`}
           style={panelStyle}
         >
           {!options.length ? <div className="px-3 py-3 text-sm text-slate-400">{emptyMessage}</div> : null}
@@ -239,12 +261,10 @@ export function CustomSelect({
                 role="option"
                 tabIndex={-1}
                 title={option.title}
-                aria-selected={option.value === value}
+                aria-selected={isSelected(option)}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => {
-                  onChange(option.value)
-                  setIsOpen(false)
-                  triggerRef.current?.focus()
+                  chooseOption(option.value)
                 }}
                 className={`${option.actionPosition ? 'inline-flex w-1/2 justify-center' : 'flex w-full justify-between'} px-3 py-2 text-sm text-left hover:bg-slate-50 items-center gap-3 transition-colors ${activeIndex === index ? 'bg-slate-50' : ''} ${
                   option.separatorBefore ? 'mt-1 border-t border-slate-100 pt-2.5' : ''
@@ -252,11 +272,13 @@ export function CustomSelect({
                   option.actionPosition === 'right' ? 'border-l border-l-slate-100' : ''
                 }`}
               >
-                <span className={`min-w-0 truncate ${option.value === value ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
+                <span className={`min-w-0 truncate ${isSelected(option) ? 'text-blue-600 font-medium' : 'text-slate-700'}`}>
                   {option.label}
                 </span>
                 <span className={`max-w-[48%] shrink-0 items-center gap-2 ${option.actionPosition ? 'hidden' : 'flex'}`}>
-                  {option.value === value && <Check className="w-3.5 h-3.5 text-blue-500" />}
+                  {multiple ? <span aria-hidden="true" data-select-checkbox className={`flex h-4 w-4 items-center justify-center rounded border ${isSelected(option) ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300'}`}>
+                    {isSelected(option) && <Check className="h-3 w-3" />}
+                  </span> : isSelected(option) && <Check className="w-3.5 h-3.5 text-blue-500" />}
                   {option.badge ? <OptionBadge label={option.badge} tone={option.badgeTone} /> : null}
                   {option.trailing}
                 </span>

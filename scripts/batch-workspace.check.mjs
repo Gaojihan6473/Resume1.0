@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { PGlite } from '@electric-sql/pglite'
 import mammoth from 'mammoth'
+import { checkAnalytics } from './analytics-workspace.check.mjs'
 
 const origin = process.env.WORKSPACE_TEST_URL || 'http://127.0.0.1:5175'
 const env = await readFile(new URL('../.env', import.meta.url), 'utf8').catch((error) => {
@@ -27,6 +28,7 @@ await db.exec(await readFile(new URL('../supabase/migrations/20261008_batch_card
 await db.exec('drop table jd_analysis_records')
 await db.exec((await readFile(new URL('../supabase/migrations/20260628_create_jd_analysis_records.sql', import.meta.url), 'utf8')).replace('create extension if not exists pgcrypto;', ''))
 await db.exec(await readFile(new URL('../supabase/migrations/20261103024933_agent_history_source_lifecycle.sql', import.meta.url), 'utf8'))
+await db.exec(await readFile(new URL('../supabase/migrations/20261108094726_customizable_dashboard.sql', import.meta.url), 'utf8'))
 const source = (await db.query('select id from recruitment_batches')).rows[0].id
 const target = crypto.randomUUID()
 await db.query(`insert into recruitment_batches(id,user_id,name,color,description) values($1,$2,'2027届金融秋招','violet','金融机构与国企岗位'),(gen_random_uuid(),$2,'2027年暑期实习','teal','实习机会与岗位准备')`, [target, user])
@@ -44,6 +46,10 @@ const browser = await chromium.launch({ executablePath, headless: true })
 const context = await browser.newContext({ viewport: { width: 1440, height: 1050 } })
 const page = await context.newPage()
 const errors = [], requests = []
+const pendingRequests = new Set()
+page.on('request', request => pendingRequests.add(request.url()))
+page.on('requestfinished', request => pendingRequests.delete(request.url()))
+page.on('requestfailed', request => pendingRequests.delete(request.url()))
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => { if (message.type() === 'error' && /React Router caught|An error occurred in/.test(message.text())) errors.push(message.text()) })
 const expires = Math.floor(Date.now() / 1000) + 3600
@@ -52,7 +58,7 @@ await context.addInitScript(({ key, session }) => { localStorage.setItem(key, JS
   key: `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`,
   session: { access_token: jwt, refresh_token: 'local-fixture-only', expires_at: expires, expires_in: 3600, token_type: 'bearer', user: { id: user, aud: 'authenticated', role: 'authenticated', email: 'fixture@example.test', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() } },
 })
-const allowedTables = new Set(['recruitment_batches', 'resumes', 'applications', 'jd_analysis_records'])
+const allowedTables = new Set(['recruitment_batches', 'resumes', 'applications', 'jd_analysis_records', 'dashboard_configs'])
 const storedFiles = new Map()
 await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
   const request = route.request(), url = new URL(request.url())
@@ -84,9 +90,10 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
         delete_resume_with_links: ['p_resume'],
         delete_resume_with_agent_history: ['p_resume'],
         delete_application_with_agent_history: ['p_application'],
+        save_dashboard_config: ['p_config', 'p_revision'],
       }[path]
       if (!names) throw new Error(`Unexpected RPC: ${path}`)
-      const result = await db.query(`select ${path}(${names.map((_, index) => '$' + (index + 1)).join(',')}) as result`, names.map((name) => body[name]))
+      const result = await db.query(`select ${path}(${names.map((_, index) => '$' + (index + 1)).join(',')}) as result`, names.map((name) => name === 'p_config' ? JSON.stringify(body[name]) : body[name]))
       return respond(result.rows[0].result)
     }
     if (!allowedTables.has(path)) throw new Error(`Unexpected fixture request: ${url.pathname}`)
@@ -115,11 +122,15 @@ await page.route(`${new URL(supabaseUrl).origin}/**`, async (route) => {
     const limit = Number(url.searchParams.get('limit') || count)
     records = records.slice(offset, offset + limit)
     return respond(request.headers().accept?.includes('vnd.pgrst.object') ? records[0] : records, 200, { 'Content-Range': `${offset}-${offset + records.length - 1}/${count}` })
-  } catch (error) { return respond({ message: error.message, code: 'TEST_FIXTURE_ERROR' }, 400) }
+  } catch (error) { return respond({ message: error.message, code: error.code || 'TEST_FIXTURE_ERROR' }, 400) }
 })
 await mkdir(new URL('../.cache/batch-check/', import.meta.url), { recursive: true })
-const screenshot = (name) => page.screenshot({ path: new URL(`../.cache/batch-check/${name}.png`, import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'), fullPage: true })
+const screenshot = (name, options = {}) => page.screenshot({ path: new URL(`../.cache/batch-check/${name}.png`, import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'), fullPage: true, ...options })
 try {
+  if (process.env.WORKSPACE_ANALYTICS_ONLY === '1') {
+    await checkAnalytics({ page, db, origin, user, supabaseUrl, screenshot })
+    assert.equal(errors.length, 0, errors.join('\n'))
+  } else {
   const guestContext = await browser.newContext()
   try {
     const guest = await guestContext.newPage()
@@ -591,6 +602,8 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Analytics page must fit a narrow viewport')
   await screenshot('analytics-mobile')
   assert.equal(await page.getByText('Unexpected Application Error!', { exact: true }).count(), 0)
+  await checkAnalytics({ page, db, origin, user, supabaseUrl, screenshot })
+  await page.setViewportSize({ width: 390, height: 844 })
   // A retained report stays readable after source deletion; cleanup is an explicit user choice.
   const historyResume = crypto.randomUUID(), historyJob = crypto.randomUUID(), historyId = crypto.randomUUID()
   await db.query(`insert into resumes(id,user_id,batch_id,title,content) values($1,$2,$3,'历史来源测试','{}')`, [historyResume, user, target])
@@ -642,8 +655,11 @@ try {
   console.log('[workspace] compact batch deletion: cancel, Escape, keyboard, mobile, empty and occupied batches verified')
   assert.equal(errors.length, 0, errors.join('\n'))
   console.log(JSON.stringify({ passed: true, checks: ['history snapshots survive source deletion', 'deleted-source reports fit mobile viewports', 'explicit job/history cleanup is atomic', 'overview', '15 transparent illustrations load', 'illustration selection and independent theme persist across reload', 'plain style restoration', 'illustration picker at 320px', 'decorative layer does not intercept clicks', 'membership transfer through RPC and PostgreSQL', 'counts refresh', 'batch creation', 'desktop/mobile layout', 'drawer', 'editor reload', 'Chromium PDF export with embedded fonts and no batch metadata', 'dirty navigation', 'upload, multiline edit, save, reload, PDF and DOCX categories', 'multi-page preview, PDF and DOCX with serif font, line height and anchors', 'JD entry filters jobs by batch'], apiRequests: requests.length, previewPages, pdfPages: pdfDetails.count, screenshots: '.cache/batch-check' }, null, 2))
+  }
 } catch (error) {
-  await screenshot('failure')
+  console.error('[workspace] original failure:', error)
+  console.error('[workspace] pending resources:', [...pendingRequests].slice(-15))
+  await screenshot('failure', { timeout: 5000 }).catch(captureError => console.error('[workspace] failure screenshot:', captureError.message))
   console.error(JSON.stringify({ url: page.url(), errors, requests: requests.slice(-15), alerts: await page.locator('[role="alert"]').allTextContents(), buttons: await page.getByRole('button').allTextContents() }, null, 2))
   throw error
 } finally { await browser.close(); await db.close() }

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import ReactECharts from 'echarts-for-react'
+import { format } from 'echarts'
+import { useChartResize } from './useChartResize'
 import type { ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
 import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
@@ -36,6 +38,32 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
   const initialZoomEnd = hasOverflow
     ? Math.max(8, (DEFAULT_VISIBLE_RESUMES / resumes.length) * 100)
     : 100
+  const labelFrame = useRef(0)
+  const updateAxisLabels = useCallback(() => {
+    cancelAnimationFrame(labelFrame.current)
+    labelFrame.current = requestAnimationFrame(() => {
+      const chart = chartRef.current?.getEchartsInstance()
+      if (!chart || !active || !resumes.length || chart.getWidth() <= 0) return
+      const current = chart.getOption() as {
+        dataZoom?: { startValue?: number; endValue?: number }[]
+        xAxis?: { axisLabel?: { rotate?: number; width?: number } }[]
+      }
+      const zoom = current.dataZoom?.[0]
+      const start = Math.max(0, zoom?.startValue ?? 0)
+      const end = Math.min(resumes.length - 1, zoom?.endValue ?? Math.min(resumes.length, DEFAULT_VISIBLE_RESUMES) - 1)
+      const names = resumes.slice(start, end + 1).map(id => data.find(item => item.resumeId === id)?.resumeName || id)
+      const slot = Math.max(24, (chart.getWidth() - 80) / Math.max(1, names.length))
+      const longest = Math.max(0, ...names.map(name => format.getTextRect(name, "11px system-ui, 'Segoe UI', Roboto, sans-serif").width))
+      const rotate = Math.min(longest, 180) > slot - 16 ? -30 : 0
+      const width = Math.round(Math.max(24, Math.min(180, (slot - 16) / (rotate ? Math.cos(Math.PI / 6) : 1))))
+      const previous = current.xAxis?.[0]?.axisLabel
+      if (previous?.rotate === rotate && previous.width === width) return
+      // Update only labels so resizing and zooming preserve the current range.
+      chart.setOption({ xAxis: { axisLabel: { rotate, width } } }, { lazyUpdate: true, silent: true })
+    })
+  }, [active, data, resumes])
+  const chartEvents = useMemo(() => ({ finished: updateAxisLabels }), [updateAxisLabels])
+  useEffect(() => () => cancelAnimationFrame(labelFrame.current), [])
 
   const option = useMemo(() => {
     if (resumes.length === 0) return null
@@ -82,6 +110,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
         type: 'bar' as const,
         barGap: '8%',
         barCategoryGap: '24%',
+        barMaxWidth: 32,
         barMinHeight: 4,
         itemStyle: {
           color: STATUS_COLORS[status],
@@ -91,7 +120,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
           show: true,
           position: 'top' as const,
           fontSize: 10,
-          color: '#94a3b8',
+          color: '#6d82a0',
           formatter: (params: { data: BarDatum }) => (
             params.data.rawValue > 0 ? params.data.rawValue : ''
           ),
@@ -109,15 +138,16 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
     return {
       animationDuration: 420,
       animationDurationUpdate: 260,
+      textStyle: { fontFamily: "system-ui, 'Segoe UI', Roboto, sans-serif", color: '#536d90' },
       tooltip: {
         trigger: 'item' as const,
-        backgroundColor: 'rgba(255,255,255,0.96)',
+        backgroundColor: '#ffffff',
         borderWidth: 1,
-        borderColor: '#dbeafe',
-        borderRadius: 12,
-        padding: [12, 16],
-        extraCssText: 'box-shadow:0 16px 40px rgba(15,23,42,0.12);backdrop-filter:blur(12px);',
-        textStyle: { color: '#334155', fontSize: 13 },
+        borderColor: '#dce6f6',
+        borderRadius: 10,
+        padding: [10, 12],
+        extraCssText: 'box-shadow:0 6px 18px #284a7b12;',
+        textStyle: { color: '#536d90', fontSize: 12 },
         formatter: (params: {
           seriesName: string
           value: number
@@ -174,11 +204,9 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
           fontSize: 11,
           color: '#64748b',
           interval: 0,
+          rotate: 0,
           width: 108,
           overflow: 'truncate' as const,
-          formatter: (value: string) => (
-            value.length > 10 ? `${value.slice(0, 10)}…` : value
-          ),
         },
       },
       yAxis: {
@@ -253,17 +281,11 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
     return () => window.cancelAnimationFrame(frame)
   }, [resetKey, resetViewport])
 
-  useEffect(() => {
-    if (!active) return
-    const frame = window.requestAnimationFrame(() => {
-      chartRef.current?.getEchartsInstance()?.resize()
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [active, data.length])
+  const containerRef = useChartResize(chartRef, active, resumes.length > 0)
 
   if (resumes.length === 0) {
     return (
-      <div className="flex h-[clamp(400px,calc(100dvh-390px),680px)] items-center justify-center">
+      <div className="analytics-chart analytics-chart-empty">
         <div className="text-center">
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
             <svg className="h-8 w-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,10 +300,12 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
   }
 
   return (
-    <div className="h-[clamp(400px,calc(100dvh-390px),680px)] min-h-[400px]">
+    <div ref={containerRef} className="analytics-chart">
       <ReactECharts
         ref={chartRef}
         option={option}
+        onChartReady={updateAxisLabels}
+        onEvents={chartEvents}
         style={{ height: '100%', width: '100%' }}
         lazyUpdate
       />

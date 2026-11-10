@@ -124,7 +124,7 @@ try {
   if (!args.includes('--workspace')) await runSuite('PDF isolation and pagination', 'scripts/pdf-render-security.check.mjs')
   if (!args.includes('--pdf')) {
     await startVite()
-    await runSuite('Workspace, import, save and export', 'scripts/batch-workspace.check.mjs')
+    await runSuite(env.WORKSPACE_ANALYTICS_ONLY === '1' ? 'Dashboard interactions only' : 'Workspace, import, save and export', 'scripts/batch-workspace.check.mjs')
   }
 } catch (error) {
   console.error(`[acceptance] ${error.message}`)

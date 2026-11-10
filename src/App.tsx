@@ -23,6 +23,8 @@ import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
 import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLauncher'
+import { isDashboardDirty, useDashboardStore } from './store/dashboardStore'
+import { DashboardLeaveDialog } from './components/Analytics/DashboardLeaveDialog'
 
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
 
@@ -33,12 +35,16 @@ export function AppContent() {
   const batchId = cachedResumes.find((item) => item.id === currentResumeId)?.batch_id || new URLSearchParams(location.search).get('batch') || draftBatchId
   // Saving a new resume also updates its URL; read the latest save state at navigation time.
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (currentLocation.pathname === '/analytics' && nextLocation.pathname !== '/analytics') {
+      if (isDashboardDirty() || useDashboardStore.getState().saving) return true
+    }
     const state = useResumeStore.getState()
     const savedBatchId = state.cachedResumes.find((item) => item.id === state.currentResumeId)?.batch_id
       || useBatchStore.getState().draftBatchId
       || new URLSearchParams(currentLocation.search).get('batch')
     return shouldBlockResumeNavigation(currentLocation, nextLocation, state, savedBatchId)
   })
+  const boardNavigationBlocked = blocker.state === 'blocked' && location.pathname === '/analytics'
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
@@ -216,7 +222,7 @@ export function AppContent() {
 
       {/* Dirty Confirm Modal */}
       <DirtyConfirmModal
-        isOpen={showDirtyModal || blocker.state === 'blocked'}
+        isOpen={showDirtyModal || (blocker.state === 'blocked' && !boardNavigationBlocked)}
         navigationPath={blocker.state === 'blocked' ? blocker.location.pathname + blocker.location.search : undefined}
         onClose={() => {
           setShowDirtyModal(false)
@@ -261,6 +267,13 @@ export function AppContent() {
           if (blocker.state === 'blocked') blocker.proceed(); else navigate(path)
         }}
       />
+
+      <DashboardLeaveDialog open={boardNavigationBlocked}
+        onStay={() => { if (blocker.state === 'blocked') blocker.reset() }}
+        onDiscard={() => {
+          useDashboardStore.getState().cancel()
+          if (blocker.state === 'blocked') blocker.proceed()
+        }} />
 
       {/* Toast Container */}
       <ToastContainerWith />

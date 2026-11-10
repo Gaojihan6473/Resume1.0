@@ -47,21 +47,22 @@ export function BatchFields({ value, onChange }: { value: BatchInput; onChange: 
   </div>
 }
 
-export function BatchScopeSelector() {
+export function BatchScopeSelector({ variant = 'default' }: { variant?: 'default' | 'toolbar' }) {
   const [params, setParams] = useSearchParams()
   const { batches, fetch, loaded, error } = useBatchStore()
   const navigate = useNavigate()
   const id = params.get('batch') || ''
+  const compact = variant === 'toolbar'
   useEffect(() => { void fetch() }, [fetch])
-  return <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-    {id && <button type="button" onClick={() => navigate(`/batches/${id}`)} aria-label="返回批次详情" className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50"><ArrowLeft className="h-4 w-4" /></button>}
-    <Layers3 className="hidden h-4 w-4 shrink-0 text-blue-500 sm:block" />
-    <CustomSelect ariaLabel="当前批次" value={id} onChange={(value) => {
+  return <div className={compact ? 'board-batch-scope' : 'flex min-w-0 items-center gap-2 sm:gap-3'}>
+    {!compact && id && <button type="button" onClick={() => navigate(`/batches/${id}`)} aria-label="返回批次详情" className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50"><ArrowLeft className="h-4 w-4" /></button>}
+    {!compact && <Layers3 className="hidden h-4 w-4 shrink-0 text-blue-500 sm:block" />}
+    <CustomSelect ariaLabel="当前批次" value={id} size={compact ? 'sm' : 'default'} icon={compact ? <Layers3 size={15} /> : undefined} onChange={(value) => {
       const next = new URLSearchParams(params)
       if (value) next.set('batch', value); else next.delete('batch')
       ;['page', 'resume', 'resumeId', 'applicationId'].forEach((key) => next.delete(key))
       setParams(next)
-    }} className="min-w-0 w-[132px] sm:w-[200px]" options={[
+    }} className={compact ? `board-filter-select board-batch-select${id ? ' is-filtered' : ''}` : 'min-w-0 w-[132px] sm:w-[200px]'} options={[
       { value: '', label: '全部批次' },
       ...batches.map((batch) => ({ value: batch.id, label: batch.name })),
       ...(id && !batches.some((batch) => batch.id === id) ? [{ value: id, label: loaded ? '批次已不存在' : '加载中…' }] : []),

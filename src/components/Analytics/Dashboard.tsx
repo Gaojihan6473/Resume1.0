@@ -1,1041 +1,311 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  AlertCircle,
-  Award,
-  BarChart3,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  Clock,
-  Inbox,
-  Loader2,
-  Network,
-  RotateCcw,
-  Table2,
-  Target,
-  TrendingUp,
-} from 'lucide-react'
-import type { Application, ApplicationStatus } from '../../types/application'
-import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
-import type { TimeRange } from '../../types/analytics'
-import { GroupedBar } from './GroupedBar'
-import { ResumeJobGraph } from './ResumeJobGraph'
-import { STATUS_COLORS, STATUS_ORDER } from './chartConfig'
-import { fetchResumes, isSameResumeAsset } from '../../lib/api'
-import type { Resume } from '../../lib/api'
+import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout'
+import { applySizeConstraints } from 'react-grid-layout/core'
+import { BarChart3, FileText, LoaderCircle, Plus, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-react'
+import type { Application } from '../../types/application'
+import type { DashboardWidget, DashboardFilter } from '../../types/dashboard'
+import { fetchResumes, type Resume } from '../../lib/api'
+import { useAuthStore } from '../../store/authStore'
+import { useDashboardStore, isDashboardDirty } from '../../store/dashboardStore'
+import { dashboardResumeIds, filterError, filterWidgetApplications, isMetricWidget, LIBRARY_WIDGET_TYPES, WIDGETS } from '../../utils/dashboard'
+import { createDashboardConstraints, dashboardCompactor, restoreDashboardDisplacement } from '../../utils/dashboardGrid'
+import { DashboardWidgetCard } from './DashboardWidgetCard'
+import { DashboardWidgetPreview } from './DashboardWidgetPreview'
+import { DashboardTimeFilter } from './DashboardTimeFilter'
+import { BatchScopeSelector } from '../Batch/BatchControls'
 import { CustomSelect } from '../Application/CustomSelect'
-import { useResumeStore } from '../../store/resumeStore'
+import 'react-grid-layout/css/styles.css'
+import 'react-resizable/css/styles.css'
+import './Dashboard.css'
 
-interface DashboardProps {
-  applications: Application[]
-  isLoading: boolean
-  error: string | null
-  onRetry: () => void | Promise<void>
-}
+interface DashboardProps { applications: Application[]; isLoading: boolean; error: string | null; onRetry: () => void | Promise<void> }
 
-type DashboardView = 'table' | 'distribution' | 'graph'
-type SortField = 'company' | 'appliedAt' | 'status'
-type SortOrder = 'asc' | 'desc'
-
-interface ResumeStatusDatum {
-  resumeId: string
-  resumeName: string
-  company: string
-  position: string
-  status: ApplicationStatus
-  count: number
-  companies: string[]
-}
-
-const UNBOUND_RESUME_ID = 'unbound'
-const PAGE_SIZE = 20
-const DASHBOARD_VIEWS: DashboardView[] = ['table', 'distribution', 'graph']
-const SORT_FIELDS: SortField[] = ['company', 'appliedAt', 'status']
-const SORT_ORDERS: SortOrder[] = ['asc', 'desc']
-const TIME_RANGES: TimeRange[] = ['1m', '3m', '6m', 'all']
-
-const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
-  { value: '1m', label: '近 1 个月' },
-  { value: '3m', label: '近 3 个月' },
-  { value: '6m', label: '近 6 个月' },
-  { value: 'all', label: '全部时间' },
-]
-
-const VIEW_CONFIG: Record<DashboardView, {
-  label: string
-  title: string
-  description: string
-  icon: typeof Table2
-}> = {
-  table: {
-    label: '岗位明细',
-    title: '岗位明细',
-    description: '查看每一次投递的完整记录',
-    icon: Table2,
-  },
-  distribution: {
-    label: '状态分布',
-    title: '各简历投递状态分布',
-    description: '横轴按简历分组，对比不同版本的投递表现',
-    icon: BarChart3,
-  },
-  graph: {
-    label: '关系图谱',
-    title: '简历岗位关系图谱',
-    description: '探索简历版本与目标岗位之间的关联',
-    icon: Network,
-  },
-}
-
-export function Dashboard({
-  applications,
-  isLoading,
-  error,
-  onRetry,
-}: DashboardProps) {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const searchKey = searchParams.toString()
-  const batchId = searchParams.get('batch')
-  const setCachedResumes = useResumeStore((state) => state.setCachedResumes)
+export function Dashboard({ applications, isLoading, error, onRetry }: DashboardProps) {
+  const userId = useAuthStore(s => s.user?.id)
+  const board = useDashboardStore()
+  const [params, setParams] = useSearchParams()
+  const batch = params.get('batch')
   const [resumes, setResumes] = useState<Resume[]>([])
-  const [isResumesLoading, setIsResumesLoading] = useState(true)
-  const [resumesLoadedSuccessfully, setResumesLoadedSuccessfully] = useState(false)
-  const [resumeError, setResumeError] = useState<string | null>(null)
-  const [resumeReloadKey, setResumeReloadKey] = useState(0)
-
-  const activeView = parseView(searchParams.get('view'))
-  const timeRange = parseTimeRange(searchParams.get('range'))
-  const selectedResumeId = searchParams.get('resume') || null
-  const sortField = parseSortField(searchParams.get('sort'))
-  const sortOrder = parseSortOrder(searchParams.get('order'))
-  const requestedPage = parsePage(searchParams.get('page'))
-  const [mountedViews, setMountedViews] = useState<Set<DashboardView>>(
-    () => new Set([activeView]),
-  )
-  const dashboardRef = useRef<HTMLDivElement>(null)
-  const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [isDashboardScrolling, setIsDashboardScrolling] = useState(false)
+  const [resumeState, setResumeState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [retry, setRetry] = useState(0)
+  const [library, setLibrary] = useState(false)
+  const [libraryType, setLibraryType] = useState<'metric' | 'chart'>('metric')
+  const [gridVersion, setGridVersion] = useState(0)
+  const [viewport, setViewport] = useState(() => window.innerWidth)
+  const wide = viewport >= 1100
+  const config = board.draft || board.saved?.config
+  const editing = !!board.draft
+  const libraryRef = useRef<HTMLDialogElement>(null)
+  const search = params.toString()
+  const scopedResumes = useMemo(() => resumes.filter(r => !batch || r.batch_id === batch), [resumes, batch])
+  const filter = useMemo<DashboardFilter>(() => {
+    const query = new URLSearchParams(search)
+    const range = query.get('range')
+    return { range: range === '7d' || range === '30d' || range === 'month' || range === '1m' || range === '3m' || range === '6m' || range === 'custom' ? range : 'all', resumeId: query.get('resume') || '', resumeIds: [...new Set(query.getAll('resume').filter(Boolean))], start: query.get('start') || '', end: query.get('end') || '' }
+  }, [search])
+  const resumeIds = dashboardResumeIds(filter)
+  const dateError = filterError(filter)
+  const filteredApplications = useMemo(() => dateError ? [] : filterWidgetApplications(applications, filter), [applications, filter, dateError])
+  const updateFilter = (changes: Record<string, string | string[]>) => {
+    const next = new URLSearchParams(search)
+    for (const [key, value] of Object.entries(changes)) {
+      next.delete(key)
+      if (Array.isArray(value)) value.forEach(item => next.append(key, item))
+      else if (value && !(key === 'range' && value === 'all')) next.set(key, value)
+    }
+    setParams(next)
+  }
 
   useEffect(() => {
-    const scrollContainer = dashboardRef.current?.parentElement
-    if (!scrollContainer) return
+    const dialog = libraryRef.current
+    if (library && editing && wide && dialog && !dialog.open) dialog.showModal()
+    return () => { if (dialog?.open) dialog.close() }
+  }, [library, editing, wide])
 
-    const handleScroll = () => {
-      setIsDashboardScrolling(true)
-
-      if (scrollEndTimerRef.current) {
-        clearTimeout(scrollEndTimerRef.current)
-      }
-
-      scrollEndTimerRef.current = setTimeout(() => {
-        setIsDashboardScrolling(false)
-        scrollEndTimerRef.current = null
-      }, 180)
-    }
-
-    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
-    return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll)
-      if (scrollEndTimerRef.current) {
-        clearTimeout(scrollEndTimerRef.current)
-      }
-    }
+  useEffect(() => {
+    void useDashboardStore.getState().bind(userId || null)
+    return () => { void useDashboardStore.getState().bind(null) }
+  }, [userId])
+  useEffect(() => {
+    const onResize = () => setViewport(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [])
-
   useEffect(() => {
     let cancelled = false
-    const cachedResumes = useResumeStore.getState().cachedResumes
-
-    if (cachedResumes.length > 0) {
-      setResumes(cachedResumes)
-      setResumesLoadedSuccessfully(true)
-    }
-
-    async function loadResumes() {
-      setIsResumesLoading(cachedResumes.length === 0)
-      setResumeError(null)
-      const result = await fetchResumes()
+    setResumeState('loading')
+    setResumes([])
+    void fetchResumes().then(result => {
       if (cancelled) return
-
-      if (!result.success || !result.resumes) {
-        setResumeError(result.error || '简历列表加载失败')
-        setIsResumesLoading(false)
-        return
-      }
-
-      const hasChanges =
-        cachedResumes.length !== result.resumes.length ||
-        result.resumes.some((resume) => {
-          const cached = cachedResumes.find((item) => item.id === resume.id)
-          return !cached ||
-            cached.updated_at !== resume.updated_at ||
-            !isSameResumeAsset(cached.preview_url, resume.preview_url) ||
-            !isSameResumeAsset(cached.file_url, resume.file_url)
-        })
-
-      setResumes(result.resumes)
-      setResumesLoadedSuccessfully(true)
-      setIsResumesLoading(false)
-
-      if (hasChanges) {
-        setCachedResumes(result.resumes, Date.now())
-      }
-    }
-
-    void loadResumes()
-    return () => {
-      cancelled = true
-    }
-  }, [resumeReloadKey, setCachedResumes])
-
+      if (result.success && result.resumes) { setResumes(result.resumes); setResumeState('ready') }
+      else setResumeState('error')
+    }).catch(() => { if (!cancelled) setResumeState('error') })
+    return () => { cancelled = true }
+  }, [userId, retry])
   useEffect(() => {
-    setMountedViews((current) => {
-      if (current.has(activeView)) return current
-      const next = new Set(current)
-      next.add(activeView)
-      return next
-    })
-  }, [activeView])
-
-  const updateSearchParams = useCallback((
-    changes: Record<string, string | null>,
-    options?: { replace?: boolean },
-  ) => {
-    const next = new URLSearchParams(searchKey)
-    Object.entries(changes).forEach(([key, value]) => {
-      if (value === null || value === '') {
-        next.delete(key)
-      } else {
-        next.set(key, value)
-      }
-    })
-    setSearchParams(next, { replace: options?.replace ?? false })
-  }, [searchKey, setSearchParams])
-
-  const hasUnboundApplications = useMemo(
-    () => applications.some((application) => !application.resume_id),
-    [applications],
-  )
-
-  const resumeTitleMap = useMemo(() => {
-    const map = new Map<string, string>()
-    resumes.filter((resume) => !batchId || resume.batch_id === batchId).forEach((resume) => map.set(resume.id, resume.title))
-    applications.forEach((application) => {
-      if (application.resume_id && !map.has(application.resume_id)) {
-        map.set(
-          application.resume_id,
-          [application.company, application.position].filter(Boolean).join(' · ') || '未知简历',
-        )
-      }
-    })
-    return map
-  }, [applications, resumes, batchId])
-
-  const resumeOptions = useMemo(() => {
-    const options = Array.from(resumeTitleMap.entries()).map(([id, title]) => ({ id, title }))
-    if (hasUnboundApplications) {
-      options.push({ id: UNBOUND_RESUME_ID, title: '未关联简历' })
-    }
-    return options
-  }, [hasUnboundApplications, resumeTitleMap])
-
-  const resumeValidationKey = useMemo(
-    () => resumeOptions.map((option) => option.id).join('|'),
-    [resumeOptions],
-  )
-  const resumeSelectOptions = useMemo(
-    () => [
-      { value: '', label: '全部简历' },
-      ...resumeOptions.map((option) => ({ value: option.id, label: option.title })),
-    ],
-    [resumeOptions],
-  )
-
+    const next = new URLSearchParams(search)
+    for (const key of ['view', 'sort', 'order', 'page']) next.delete(key)
+    if (next.toString() !== search) setParams(next, { replace: true })
+  }, [search, setParams])
   useEffect(() => {
-    const current = new URLSearchParams(searchKey)
-    let changed = false
-    const rawView = current.get('view')
-    const rawRange = current.get('range')
-    const rawSort = current.get('sort')
-    const rawOrder = current.get('order')
-    const rawPage = current.get('page')
-    const rawResume = current.get('resume')
-
-    if (rawView && !isDashboardView(rawView)) {
-      current.delete('view')
-      changed = true
+    const onUnload = (event: BeforeUnloadEvent) => {
+      if (isDashboardDirty() || useDashboardStore.getState().saving) { event.preventDefault(); event.returnValue = '' }
     }
-    if (rawRange && !isTimeRange(rawRange)) {
-      current.delete('range')
-      changed = true
-    }
-    if (rawSort && !isSortField(rawSort)) {
-      current.delete('sort')
-      changed = true
-    }
-    if (rawOrder && !isSortOrder(rawOrder)) {
-      current.delete('order')
-      changed = true
-    }
-    if (rawPage && (!/^\d+$/.test(rawPage) || Number(rawPage) < 1)) {
-      current.delete('page')
-      changed = true
-    }
-    if (
-      rawResume &&
-      resumesLoadedSuccessfully &&
-      !isLoading &&
-      !resumeOptions.some((option) => option.id === rawResume)
-    ) {
-      current.delete('resume')
-      current.delete('page')
-      changed = true
-    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [])
 
-    if (changed) {
-      setSearchParams(current, { replace: true })
-    }
-  }, [
-    isLoading,
-    resumeOptions,
-    resumeValidationKey,
-    resumesLoadedSuccessfully,
-    searchKey,
-    setSearchParams,
-  ])
-
-  const filteredApplications = useMemo(() => {
-    const threshold = getDateThreshold(timeRange)
-
-    return applications.filter((application) => {
-      if (threshold) {
-        const applicationDate = new Date(application.appliedAt || application.created_at)
-        if (applicationDate < threshold) return false
-      }
-
-      if (selectedResumeId === UNBOUND_RESUME_ID) {
-        return !application.resume_id
-      }
-      if (selectedResumeId && application.resume_id !== selectedResumeId) {
-        return false
-      }
-      return true
-    })
-  }, [applications, selectedResumeId, timeRange])
-
-  const stats = useMemo(() => {
-    const submittedApplications = filteredApplications.filter(
-      (application) => application.status !== 'interested',
-    )
-    const statusCounts = STATUS_ORDER.map((status) => ({
-      status,
-      count: filteredApplications.filter((application) => application.status === status).length,
-    }))
-    const offerCount = statusCounts.find((item) => item.status === 'offered')?.count || 0
-    const rejectCount = statusCounts.find((item) => item.status === 'rejected')?.count || 0
-    const resolvedCount = offerCount + rejectCount
-    const passRate = resolvedCount > 0 ? Math.round((offerCount / resolvedCount) * 100) : 0
-
-    const channelCounts = new Map<Application['channel'], number>()
-    submittedApplications.forEach((application) => {
-      channelCounts.set(application.channel, (channelCounts.get(application.channel) || 0) + 1)
-    })
-    const topChannel = Array.from(channelCounts.entries()).sort((a, b) => b[1] - a[1])[0]
-
-    return {
-      total: submittedApplications.length,
-      statusCounts,
-      passRate,
-      topChannel,
-    }
-  }, [filteredApplications])
-
-  const sortedApplications = useMemo(() => {
-    const result = [...filteredApplications]
-    result.sort((left, right) => {
-      let comparison = 0
-      if (sortField === 'company') {
-        comparison = left.company.localeCompare(right.company)
-      } else if (sortField === 'appliedAt') {
-        comparison =
-          new Date(left.appliedAt || left.created_at).getTime() -
-          new Date(right.appliedAt || right.created_at).getTime()
-      } else {
-        comparison = STATUS_ORDER.indexOf(left.status) - STATUS_ORDER.indexOf(right.status)
-      }
-      return sortOrder === 'asc' ? comparison : -comparison
-    })
-    return result
-  }, [filteredApplications, sortField, sortOrder])
-
-  const totalPages = Math.max(1, Math.ceil(sortedApplications.length / PAGE_SIZE))
-  const currentPage = Math.min(requestedPage, totalPages)
-  const paginatedApplications = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return sortedApplications.slice(start, start + PAGE_SIZE)
-  }, [currentPage, sortedApplications])
-
-  useEffect(() => {
-    if (isLoading || requestedPage <= totalPages) return
-    updateSearchParams(
-      { page: totalPages === 1 ? null : String(totalPages) },
-      { replace: true },
-    )
-  }, [isLoading, requestedPage, totalPages, updateSearchParams])
-
-  const resumeStatusData = useMemo<ResumeStatusDatum[]>(() => {
-    const data: ResumeStatusDatum[] = []
-    const filteredByResume = new Map<string, Application[]>()
-
-    filteredApplications.forEach((application) => {
-      const resumeId = application.resume_id || UNBOUND_RESUME_ID
-      const existing = filteredByResume.get(resumeId) || []
-      existing.push(application)
-      filteredByResume.set(resumeId, existing)
-    })
-
-    const visibleResumeIds = selectedResumeId
-      ? [selectedResumeId]
-      : resumeOptions.map((option) => option.id)
-
-    visibleResumeIds.forEach((resumeId) => {
-      if (resumeId === UNBOUND_RESUME_ID && !hasUnboundApplications) return
-      const resumeApplications = filteredByResume.get(resumeId) || []
-      const resumeName = resumeId === UNBOUND_RESUME_ID
-        ? '未关联简历'
-        : resumeTitleMap.get(resumeId) || '未知简历'
-
-      STATUS_ORDER.forEach((status) => {
-        const statusApplications = resumeApplications.filter(
-          (application) => application.status === status,
-        )
-        data.push({
-          resumeId,
-          resumeName,
-          company: statusApplications[0]?.company || '',
-          position: statusApplications[0]?.position || '',
-          status,
-          count: statusApplications.length,
-          companies: statusApplications.map(
-            (application) => `${application.company} - ${application.position}`,
-          ),
-        })
-      })
-    })
-
-    return data
-  }, [
-    filteredApplications,
-    hasUnboundApplications,
-    resumeOptions,
-    resumeTitleMap,
-    selectedResumeId,
-  ])
-
-  const filterResetKey = `${timeRange}:${selectedResumeId || 'all'}`
-  const activeViewConfig = VIEW_CONFIG[activeView]
-  const activeViewIndex = DASHBOARD_VIEWS.indexOf(activeView)
-  const ActiveViewIcon = activeViewConfig.icon
-  const workspaceCount = activeView === 'table'
-    ? `共 ${filteredApplications.length} 条`
-    : activeView === 'distribution'
-      ? `共 ${new Set(resumeStatusData.map((item) => item.resumeId)).size} 份简历`
-      : `共 ${filteredApplications.length} 条关系`
-  const visibleError = error || resumeError
-
-  const handleRetry = () => {
-    void onRetry()
-    setResumeReloadKey((value) => value + 1)
+  const reload = () => {
+    if (editing && !window.confirm('重新加载将放弃当前草稿，是否继续？')) return
+    void board.load()
   }
-
-  const handleTimeRangeChange = (range: TimeRange) => {
-    updateSearchParams({
-      range,
-      page: null,
-    })
+  const updateLayout = (layout: Layout) => {
+    const current = useDashboardStore.getState().draft
+    if (!current || !wide) return
+    const next = { ...current, widgets: current.widgets.map(w => {
+      const item = layout.find(l => l.i === w.id)
+      return item ? { ...w, layout: { x: item.x, y: item.y, w: item.w, h: item.h } } : w
+    }) }
+    if (JSON.stringify(next) !== JSON.stringify(current)) board.setDraft(next)
   }
+  if (board.owner !== userId || board.loading) return <DashboardLoadingState />
+  if (board.error || !config) return <div className="analytics-dashboard"><div role="alert">{board.error || '请登录后查看看板'}</div><button className="board-button" onClick={reload}>重新加载配置</button></div>
+  if (isLoading && !applications.length && !error) return <DashboardLoadingState />
+  const sorted = [...config.widgets].sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x)
+  const retryData = () => { void onRetry(); setRetry(n => n + 1) }
+  const renderWidget = (widget: typeof config.widgets[number]) => <DashboardWidgetCard key={widget.id} widget={widget}
+    filter={filter} applications={filteredApplications} resumes={scopedResumes}
+    dataState={applications.length ? 'ready' : error ? 'error' : isLoading ? 'loading' : 'ready'}
+    resumeState={resumeState} editing={editing && wide} disabled={board.saving || (editing && !wide)} />
 
-  const handleResumeChange = (resumeId: string) => {
-    updateSearchParams({
-      resume: resumeId || null,
-      page: null,
-    })
-  }
-
-  const handleSort = (field: SortField) => {
-    const nextOrder = sortField === field
-      ? (sortOrder === 'asc' ? 'desc' : 'asc')
-      : 'desc'
-    updateSearchParams({
-      sort: field,
-      order: nextOrder,
-      page: null,
-    })
-  }
-
-  if (isLoading && applications.length === 0) {
-    return <DashboardLoadingState />
-  }
-
-  if (error && applications.length === 0) {
-    return <DashboardFailure message={error} onRetry={handleRetry} />
-  }
-
-  return (
-    <div
-      ref={dashboardRef}
-      className="relative mx-auto min-h-full w-full max-w-[1600px] px-4 pb-32 pt-6 sm:px-6 lg:px-8"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed right-[8%] top-24 -z-10 h-48 w-48 rounded-full bg-violet-300/15 blur-3xl"
-      />
-
-      <section aria-label="全量概览" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          icon={<TrendingUp className="h-5 w-5" />}
-          iconClassName="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-200/80"
-          label="总投递数"
-          value={stats.total}
-          subText={`${stats.passRate}% 结果通过率`}
-        />
-        <StatCard
-          icon={<Target className="h-5 w-5" />}
-          iconClassName="bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-violet-200/80"
-          label="面试中"
-          value={stats.statusCounts.find((item) => item.status === 'interviewing')?.count || 0}
-          subText={`${stats.statusCounts.find((item) => item.status === 'offered')?.count || 0} Offer`}
-        />
-        <StatCard
-          icon={<Clock className="h-5 w-5" />}
-          iconClassName="bg-gradient-to-br from-teal-400 to-emerald-500 text-white shadow-emerald-200/80"
-          label="测评中"
-          value={stats.statusCounts.find((item) => item.status === 'assessing')?.count || 0}
-          subText={`${stats.statusCounts.find((item) => item.status === 'rejected')?.count || 0} 已拒绝`}
-        />
-        <StatCard
-          icon={<Award className="h-5 w-5" />}
-          iconClassName="bg-gradient-to-br from-rose-400 to-orange-400 text-white shadow-rose-200/80"
-          label="常用渠道"
-          value={stats.topChannel ? APPLICATION_CHANNEL_LABELS[stats.topChannel[0]] : '-'}
-          subText={stats.topChannel ? `${stats.topChannel[1]} 次` : ''}
-        />
-      </section>
-
-      <section className="relative mt-6 overflow-visible rounded-[28px] bg-gradient-to-br from-sky-300/70 via-violet-200/65 to-cyan-300/70 p-px shadow-[0_24px_70px_-36px_rgba(79,70,229,0.58)] lg:mt-5">
-        <div className="relative overflow-visible rounded-[27px] bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
-        <div className="relative z-20 flex flex-col gap-3 rounded-t-[27px] border-b border-slate-100/80 bg-white/90 px-4 py-4 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <ActiveViewIcon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold text-slate-800">
-                {activeViewConfig.title}
-              </h2>
-              <p className="hidden truncate text-xs text-slate-400 sm:block">
-                {activeViewConfig.description}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center rounded-xl border border-white/75 bg-white/35 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-xl">
-              {TIME_RANGE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleTimeRangeChange(option.value)}
-                  aria-pressed={timeRange === option.value}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition motion-reduce:transition-none sm:px-3 ${
-                    timeRange === option.value
-                      ? 'bg-white/75 text-blue-600 shadow-[0_6px_16px_-10px_rgba(37,99,235,0.85)]'
-                      : 'text-slate-400 hover:bg-white/35 hover:text-slate-700'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <CustomSelect
-              value={selectedResumeId || ''}
-              onChange={handleResumeChange}
-              options={resumeSelectOptions}
-              className="w-40 sm:w-48"
-            />
-            <span className="ml-auto whitespace-nowrap text-xs font-medium text-slate-400 lg:ml-1">
-              {workspaceCount}
-            </span>
-          </div>
-        </div>
-
-        {visibleError && (
-          <div
-            role="alert"
-            className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 lg:mx-6"
-          >
-            <span className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {visibleError}，当前显示已缓存的数据。
-            </span>
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100 motion-reduce:transition-none"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              重新加载
-            </button>
-          </div>
-        )}
-
-        <div className="relative">
-          {mountedViews.has('table') && (
-            <div
-              aria-hidden={activeView !== 'table'}
-              className={`transition duration-200 motion-reduce:transition-none ${
-                activeView === 'table'
-                  ? 'relative visible translate-y-0 opacity-100'
-                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
-              }`}
-            >
-              <div className="overflow-x-auto px-4 pb-2 pt-3 lg:px-6">
-                <table className="w-full min-w-[720px] table-fixed">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left">
-                      <SortableHeader
-                        label="公司"
-                        field="company"
-                        activeField={sortField}
-                        order={sortOrder}
-                        onSort={handleSort}
-                        className="w-[16%]"
-                      />
-                      <th scope="col" className="w-[16%] px-3 py-2.5 text-xs font-semibold text-slate-400">
-                        职位
-                      </th>
-                      <th scope="col" className="hidden w-[12%] px-3 py-2.5 text-xs font-semibold text-slate-400 xl:table-cell">
-                        渠道
-                      </th>
-                      <SortableHeader
-                        label="状态"
-                        field="status"
-                        activeField={sortField}
-                        order={sortOrder}
-                        onSort={handleSort}
-                        className="w-[14%]"
-                      />
-                      <SortableHeader
-                        label="投递时间"
-                        field="appliedAt"
-                        activeField={sortField}
-                        order={sortOrder}
-                        onSort={handleSort}
-                        className="w-[14%]"
-                      />
-                      <th scope="col" className="hidden w-[12%] px-3 py-2.5 text-xs font-semibold text-slate-400 xl:table-cell">
-                        薪资
-                      </th>
-                      <th scope="col" className="w-[16%] px-3 py-2.5 text-xs font-semibold text-slate-400">
-                        关联简历
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedApplications.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-16 text-center">
-                          <EmptyTable />
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedApplications.map((application) => (
-                        <tr
-                          key={application.id}
-                          className="border-b border-slate-100/80 bg-white/75 transition-colors last:border-b-0 hover:bg-blue-50/35 motion-reduce:transition-none"
-                        >
-                          <td className="truncate px-3 py-2 text-sm font-semibold text-slate-800">
-                            {application.company}
-                          </td>
-                          <td className="truncate px-3 py-2 text-sm text-slate-600">
-                            {application.position}
-                          </td>
-                          <td className="hidden px-3 py-2 xl:table-cell">
-                            <span className="inline-flex rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                              {APPLICATION_CHANNEL_LABELS[application.channel]}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <StatusBadge status={application.status} />
-                          </td>
-                          <td className="px-3 py-2 text-sm text-slate-500">
-                            {formatApplicationDate(application)}
-                          </td>
-                          <td className="hidden truncate px-3 py-2 text-sm text-slate-500 xl:table-cell">
-                            {application.salaryRange || '-'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {application.resume_id && resumeTitleMap.get(application.resume_id) ? (
-                              <span
-                                title={resumeTitleMap.get(application.resume_id)}
-                                className="inline-flex max-w-full truncate rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600"
-                              >
-                                {resumeTitleMap.get(application.resume_id)}
-                              </span>
-                            ) : (
-                              <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-400">
-                                未关联
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 pb-3 pt-3 lg:px-6">
-                <span className="text-xs text-slate-400">
-                  每页 {PAGE_SIZE} 条 · 共 {filteredApplications.length} 条
-                </span>
-                <Pagination
-                  page={currentPage}
-                  totalPages={totalPages}
-                  onChange={(page) => updateSearchParams({
-                    page: page === 1 ? null : String(page),
-                  })}
-                />
-              </div>
-            </div>
-          )}
-
-          {mountedViews.has('distribution') && (
-            <div
-              aria-hidden={activeView !== 'distribution'}
-              className={`px-4 pb-24 pt-4 transition duration-200 motion-reduce:transition-none lg:px-6 lg:pb-4 ${
-                activeView === 'distribution'
-                  ? 'relative visible translate-y-0 opacity-100'
-                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
-              }`}
-            >
-              <GroupedBar
-                data={resumeStatusData}
-                active={activeView === 'distribution'}
-                resetKey={filterResetKey}
-              />
-            </div>
-          )}
-
-          {mountedViews.has('graph') && (
-            <div
-              aria-hidden={activeView !== 'graph'}
-              className={`px-4 pb-24 pt-4 transition duration-200 motion-reduce:transition-none lg:px-6 lg:pb-4 ${
-                activeView === 'graph'
-                  ? 'relative visible translate-y-0 opacity-100'
-                  : 'pointer-events-none invisible absolute inset-x-0 top-0 translate-y-1.5 opacity-0'
-              }`}
-            >
-              <ResumeJobGraph
-                applications={filteredApplications}
-                resumes={resumes.filter((resume) => !batchId || resume.batch_id === batchId)}
-                selectedResumeId={selectedResumeId}
-                resumeTitleMap={resumeTitleMap}
-                active={activeView === 'graph'}
-                resetKey={filterResetKey}
-              />
-            </div>
-          )}
-        </div>
-
-        {isResumesLoading && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 overflow-hidden rounded-b-[24px] bg-blue-50">
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-400 motion-reduce:animate-none" />
-          </div>
-        )}
-        </div>
-      </section>
-
-      <nav
-        aria-label="面板视图"
-        className={`fixed bottom-3.5 left-1/2 z-40 h-[52px] w-[min(390px,calc(100%-32px))] -translate-x-1/2 overflow-hidden rounded-full border border-white/70 transition-[background-color,border-color,box-shadow,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
-          isDashboardScrolling
-            ? 'bg-white/48 opacity-45 shadow-[0_8px_24px_-18px_rgba(30,64,175,0.22)]'
-            : 'bg-white/76 opacity-100 shadow-[0_12px_32px_-18px_rgba(30,64,175,0.28)]'
-        }`}
-      >
-        <div className="relative grid h-full w-full grid-cols-3 px-1.5 backdrop-blur-3xl backdrop-saturate-150">
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-2 left-1.5 flex h-0.5 w-[calc((100%_-_0.75rem)/3)] justify-center transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-            style={{ transform: `translateX(${activeViewIndex * 100}%)` }}
-          >
-            <span className="h-full w-8 rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 shadow-[0_1px_4px_rgba(79,70,229,0.32)]" />
-          </span>
-          {DASHBOARD_VIEWS.map((view) => {
-            const config = VIEW_CONFIG[view]
-            const isActive = activeView === view
-
-            return (
-              <button
-                key={view}
-                type="button"
-                onClick={() => updateSearchParams({ view })}
-                aria-current={isActive ? 'page' : undefined}
-                className={`relative z-10 flex min-w-0 items-center justify-center px-1.5 pb-1 text-[13px] transition-colors duration-300 ease-out motion-reduce:transition-none sm:px-2 ${
-                  isActive
-                    ? 'font-semibold text-blue-600'
-                    : 'font-medium text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <span className="truncate">{config.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </nav>
+  return <div className={`analytics-dashboard customizable-dashboard${editing ? ' is-editing' : ''}`}>
+    <section className="board-control-panel" aria-label="看板控制区">
+      <div className="board-panel-title"><BarChart3 size={18} /><h1>投递概览</h1><span className="board-module-count" aria-label={`${config.widgets.length} 个模块`} title={`${config.widgets.length} 个模块`}>{config.widgets.length}</span>{editing && <span className="board-editing-badge">编辑中</span>}</div>
+    <div className="board-global-filters" role="group" aria-label="全局筛选">
+      <DashboardTimeFilter filter={filter} onChange={updateFilter} />
+      <CustomSelect multiple className={`board-filter-select board-resume-select${resumeIds.length ? ' is-filtered' : ''}`} size="sm" ariaLabel="筛选简历" icon={<FileText size={15} />} value={resumeIds} onChange={value => updateFilter({ resume: value })}
+        displayLabel={resumeIds.length > 1 ? `已选 ${resumeIds.length} 份简历` : undefined} panelClassName="board-resume-menu"
+        options={[{ value: '', label: '全部简历', group: '简历 · 可多选' }, { value: 'unbound', label: '未关联简历' }, ...resumeIds.filter(id => id !== 'unbound' && !scopedResumes.some(r => r.id === id)).map(id => ({ value: id, label: '所选简历不可用' })), ...scopedResumes.map(r => ({ value: r.id, label: r.title }))]} />
+      <BatchScopeSelector variant="toolbar" />
+      {(filter.range !== 'all' || resumeIds.length > 0 || batch) && <button className="board-filter-reset" onClick={() => updateFilter({ range: 'all', resume: [], batch: '', start: '', end: '' })}><RotateCcw size={12} />重置筛选</button>}
     </div>
-  )
-}
-
-function StatCard({
-  icon,
-  iconClassName,
-  label,
-  value,
-  subText,
-}: {
-  icon: React.ReactNode
-  iconClassName: string
-  label: string
-  value: string | number
-  subText: string
-}) {
-  return (
-    <article className="group rounded-[22px] bg-gradient-to-br from-sky-300/75 via-violet-200/70 to-cyan-300/75 p-px shadow-[0_16px_38px_-24px_rgba(59,130,246,0.65)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_46px_-24px_rgba(79,70,229,0.55)] motion-reduce:transform-none motion-reduce:transition-none">
-      <div className="relative h-full overflow-hidden rounded-[21px] bg-white/92 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.98)] backdrop-blur-2xl">
-        <div className="relative flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3.5">
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg ${iconClassName}`}>
-              {icon}
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-400">{label}</p>
-              <p className="mt-0.5 truncate text-2xl font-bold tracking-tight text-slate-900">
-                {value}
-              </p>
-            </div>
-          </div>
-          {subText && (
-            <span className="shrink-0 rounded-lg border border-white/70 bg-white/40 px-2 py-1 text-[11px] font-medium text-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-xl">
-              {subText}
-            </span>
-          )}
-        </div>
+      <div className="board-actions">
+        {editing ? <>
+          {wide && <><button className="board-button" aria-label="添加模块" title="添加模块" disabled={board.saving} onClick={() => setLibrary(true)}><Plus size={14} />添加</button>
+            <button className="board-button" aria-label="恢复默认布局" title="恢复默认布局" disabled={board.saving} onClick={() => { board.resetDefault(); setGridVersion(version => version + 1) }}><RotateCcw size={14} />重置</button></>}
+          <button className="board-button" aria-label="取消编辑" title="取消编辑" disabled={board.saving} onClick={board.cancel}><X size={14} />取消</button>
+          <button className="board-button primary" aria-label={board.saving ? '保存中…' : '保存看板'} title="保存看板" disabled={board.saving || !wide} onClick={() => void board.save()}>{board.saving ? <LoaderCircle size={14} className="motion-safe:animate-spin" /> : <Save size={14} />}{board.saving ? '保存中' : '保存'}</button>
+        </> : wide ? <button className="board-button primary" onClick={board.edit}><SlidersHorizontal size={14} />编辑看板</button> : <span className="board-help">在宽屏设备上编辑布局</span>}
       </div>
-    </article>
-  )
-}
-
-function SortableHeader({
-  label,
-  field,
-  activeField,
-  order,
-  onSort,
-  className,
-}: {
-  label: string
-  field: SortField
-  activeField: SortField
-  order: SortOrder
-  onSort: (field: SortField) => void
-  className?: string
-}) {
-  const isActive = field === activeField
-
-  return (
-    <th scope="col" className={`px-3 py-2.5 ${className || ''}`}>
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="flex items-center gap-1 text-xs font-semibold text-slate-400 transition-colors hover:text-slate-700 motion-reduce:transition-none"
-      >
-        {label}
-        {isActive && order === 'asc' ? (
-          <ChevronUp className="h-3.5 w-3.5 text-blue-500" />
-        ) : (
-          <ChevronDown className={`h-3.5 w-3.5 ${isActive ? 'text-blue-500' : 'text-slate-300'}`} />
-        )}
-      </button>
-    </th>
-  )
-}
-
-function StatusBadge({ status }: { status: ApplicationStatus }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-      style={{
-        backgroundColor: `${STATUS_COLORS[status]}14`,
-        color: STATUS_COLORS[status],
-      }}
-    >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: STATUS_COLORS[status] }}
-      />
-      {APPLICATION_STATUS_LABELS[status]}
-    </span>
-  )
-}
-
-function Pagination({
-  page,
-  totalPages,
-  onChange,
-}: {
-  page: number
-  totalPages: number
-  onChange: (page: number) => void
-}) {
-  return (
-    <div className="flex items-center gap-2" aria-label="岗位明细分页">
-      <button
-        type="button"
-        onClick={() => onChange(page - 1)}
-        disabled={page <= 1}
-        aria-label="上一页"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
-      <span className="min-w-20 text-center text-xs font-medium text-slate-500">
-        第 <strong className="text-slate-800">{page}</strong> / {totalPages} 页
-      </span>
-      <button
-        type="button"
-        onClick={() => onChange(page + 1)}
-        disabled={page >= totalPages}
-        aria-label="下一页"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
-function EmptyTable() {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 shadow-inner">
-        <Inbox className="h-8 w-8 text-slate-300" />
-      </div>
-      <p className="font-medium text-slate-500">暂无投递记录</p>
-      <p className="mt-1 text-sm text-slate-400">尝试调整时间范围或简历筛选</p>
-    </div>
-  )
+    </section>
+    {dateError && <p role="alert" className="board-notice">{dateError}</p>}
+    {editing && !wide && <div role="status" className="board-notice">编辑草稿已保留，请返回宽屏继续编辑并保存。</div>}
+    {board.saveError && <div role="alert" className="board-notice">{board.saveError} <button className="board-button" disabled={board.saving} onClick={reload}>重新加载配置</button></div>}
+    {(error || resumeState === 'error') && <div role="alert" className="board-notice">{error || '简历列表加载失败，无法确认所选简历的范围'} <button className="board-button" onClick={retryData}>重新加载</button></div>}
+    {isLoading && <div role="status">正在更新岗位数据…</div>}
+    {!config.widgets.length && <div className="board-empty"><h2>看板还没有模块</h2><p>{wide ? '进入编辑后，从模块库添加你关心的数据。' : '请在宽屏设备上添加模块。'}</p>{editing && wide && <button className="board-button primary" onClick={() => setLibrary(true)}>添加第一个模块</button>}</div>}
+    <DashboardGrid key={gridVersion} widgets={config.widgets} sorted={sorted} wide={wide} editable={editing && !board.saving} onLayoutChange={updateLayout} renderWidget={renderWidget} />
+    {library && editing && wide && <div className="board-modal-backdrop" onClick={() => setLibrary(false)}>
+      <dialog ref={libraryRef} aria-label="添加模块" className="board-library" onClick={e => e.stopPropagation()} onCancel={() => setLibrary(false)}>
+        <header><h2>添加模块</h2><button className="board-button board-library-close" aria-label="关闭模块库" title="关闭" autoFocus onClick={() => setLibrary(false)}><X size={18} aria-hidden="true" /></button></header>
+        <p>选择模块预览即可添加，可重复添加。下方为示例样式，添加后使用全局筛选下的实际数据。</p>
+        <div className="board-library-tabs" role="tablist" aria-label="模块类型">
+          {(['metric', 'chart'] as const).map(category => <button key={category} type="button" role="tab" id={`library-tab-${category}`} aria-controls="library-panel" aria-selected={libraryType === category} tabIndex={libraryType === category ? 0 : -1}
+            onClick={() => setLibraryType(category)} onKeyDown={event => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+              event.preventDefault()
+              const next = event.key === 'Home' ? 'metric' : event.key === 'End' ? 'chart' : category === 'metric' ? 'chart' : 'metric'
+              setLibraryType(next)
+              libraryRef.current?.querySelector<HTMLButtonElement>(`#library-tab-${next}`)?.focus()
+            }}>{category === 'metric' ? '数值型' : '图表型'}<span>{LIBRARY_WIDGET_TYPES.filter(type => isMetricWidget(type) === (category === 'metric')).length}</span></button>)}
+        </div>
+        <div id="library-panel" role="tabpanel" aria-labelledby={`library-tab-${libraryType}`} className="board-library-grid">{LIBRARY_WIDGET_TYPES.filter(type => isMetricWidget(type) === (libraryType === 'metric')).map(type => <button key={type} aria-label={`添加${WIDGETS[type].title}`} disabled={board.saving} onClick={() => { board.add(type); setLibrary(false) }}><span className="library-card-heading"><strong>{WIDGETS[type].title}</strong><Plus size={16} /></span><DashboardWidgetPreview type={type} /><span className="library-card-description">{WIDGETS[type].description}</span><span className="library-preview-badge">示例</span></button>)}</div>
+      </dialog>
+    </div>}
+  </div>
 }
 
 function DashboardLoadingState() {
-  return (
-    <div className="flex min-h-full items-center justify-center px-6 py-12">
-      <div className="text-center">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-500" />
-        <p className="mt-3 text-sm text-slate-500">加载中...</p>
-      </div>
-    </div>
-  )
-}
-
-function DashboardFailure({
-  message,
-  onRetry,
-}: {
-  message: string
-  onRetry: () => void
-}) {
-  return (
-    <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col px-4 pb-32 pt-12 sm:px-6 lg:px-8">
-      <div className="grid grid-cols-1 gap-3 opacity-60 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="h-24 rounded-[22px] bg-white/92 ring-1 ring-sky-200/70 backdrop-blur-2xl" />
-        ))}
-      </div>
-      <div className="mt-3 flex min-h-[420px] flex-1 flex-col items-center justify-center rounded-[28px] bg-white/95 px-6 text-center shadow-[0_24px_70px_-36px_rgba(79,70,229,0.5)] ring-1 ring-violet-200/60 backdrop-blur-2xl">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
-          <AlertCircle className="h-8 w-8" />
+  return <div className="analytics-dashboard board-loading" role="status" aria-label="面板加载中" aria-busy="true">
+    <span className="sr-only">正在加载看板配置及岗位数据…</span>
+    <div aria-hidden="true" className="board-loading-content motion-safe:animate-pulse">
+      <div className="board-loading-controls rounded-2xl bg-white/70">
+        <div className="h-5 w-32 rounded-lg bg-slate-200/60" />
+        <div className="mt-5 flex flex-wrap gap-3">
+          <div className="h-8 w-28 rounded-lg bg-slate-200/50" />
+          <div className="h-8 w-36 rounded-lg bg-slate-200/50" />
         </div>
-        <h2 className="mt-5 text-lg font-semibold text-slate-800">面板数据加载失败</h2>
-        <p className="mt-2 max-w-md text-sm text-slate-500">{message}</p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 motion-reduce:transition-none"
-        >
-          <RotateCcw className="h-4 w-4" />
-          重新加载
-        </button>
+      </div>
+      <div className="board-loading-grid">
+        {[1, 2, 3, 4].map(id => <div key={id} className="board-loading-card rounded-2xl bg-white/70">
+          <div className="h-3 w-20 rounded bg-slate-200/60" />
+          <div className="mt-5 h-7 w-16 rounded-lg bg-slate-200/50" />
+          <div className="mt-3 h-3 w-28 rounded bg-slate-100" />
+        </div>)}
+        <div className="board-loading-chart rounded-2xl bg-white/70">
+          <div className="h-4 w-24 rounded bg-slate-200/60" />
+          <div className="mt-7 h-52 rounded-xl bg-slate-100/70" />
+        </div>
       </div>
     </div>
-  )
+  </div>
 }
 
-function isDashboardView(value: string): value is DashboardView {
-  return DASHBOARD_VIEWS.includes(value as DashboardView)
+function pointerPosition(event: Event) {
+  if ('clientX' in event) return { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY }
+  if ('touches' in event) {
+    const touch = (event as TouchEvent).touches[0] || (event as TouchEvent).changedTouches[0]
+    if (touch) return { x: touch.clientX, y: touch.clientY }
+  }
+  return null
 }
 
-function isTimeRange(value: string): value is TimeRange {
-  return TIME_RANGES.includes(value as TimeRange)
-}
-
-function isSortField(value: string): value is SortField {
-  return SORT_FIELDS.includes(value as SortField)
-}
-
-function isSortOrder(value: string): value is SortOrder {
-  return SORT_ORDERS.includes(value as SortOrder)
-}
-
-function parseView(value: string | null): DashboardView {
-  return value && isDashboardView(value) ? value : 'table'
-}
-
-function parseTimeRange(value: string | null): TimeRange {
-  return value && isTimeRange(value) ? value : 'all'
-}
-
-function parseSortField(value: string | null): SortField {
-  return value && isSortField(value) ? value : 'appliedAt'
-}
-
-function parseSortOrder(value: string | null): SortOrder {
-  return value && isSortOrder(value) ? value : 'desc'
-}
-
-function parsePage(value: string | null) {
-  if (!value || !/^\d+$/.test(value)) return 1
-  return Math.max(1, Number(value))
-}
-
-function getDateThreshold(range: TimeRange) {
-  if (range === 'all') return null
-  const threshold = new Date()
-  if (range === '1m') threshold.setMonth(threshold.getMonth() - 1)
-  if (range === '3m') threshold.setMonth(threshold.getMonth() - 3)
-  if (range === '6m') threshold.setMonth(threshold.getMonth() - 6)
-  return threshold
-}
-
-function formatApplicationDate(application: Application) {
-  const value = application.appliedAt || application.created_at
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-  })
+// Mount measurement with its actual container, after the asynchronous config load.
+// Otherwise the observer sees a null ref and the initial 1280px width can persist.
+function DashboardGrid({ widgets, sorted, wide, editable, onLayoutChange, renderWidget }: {
+  widgets: DashboardWidget[]; sorted: DashboardWidget[]; wide: boolean; editable: boolean
+  onLayoutChange: (layout: Layout) => void; renderWidget: (widget: DashboardWidget) => ReactNode
+}) {
+  const { width, containerRef, mounted } = useContainerWidth()
+  const pointerDown = useRef<{ x: number; y: number } | null>(null)
+  const currentPointer = useRef<{ x: number; y: number } | null>(null)
+  const preferred = useRef<Layout | null>(null)
+  const interactionBaseline = (layout: Layout) => {
+    if (!preferred.current) preferred.current = layout.map(item => ({ ...item }))
+    // Preserve the visible order before restoring preferred coordinates. Two
+    // preferred slots can coincide after a manual insertion above a chart.
+    return [...layout].sort((a, b) => a.y - b.y || a.x - b.x).map(item => ({ ...item, ...preferred.current?.find(original => original.i === item.i) }))
+  }
+  const rememberPlacement = (item: Layout[number] | undefined) => {
+    if (item && preferred.current) preferred.current = [...preferred.current.filter(original => original.i !== item.i), { ...item }]
+  }
+  useEffect(() => { if (!editable) preferred.current = null }, [editable])
+  const dragStart = useRef<{ id: string; x: number; clientX: number; baseline: Layout; initial: Layout; resolved?: Layout } | null>(null)
+  const constraints = useMemo(() => createDashboardConstraints(widgets, id => {
+    const start = dragStart.current
+    return start?.id === id && currentPointer.current ? start.x + (currentPointer.current.x - start.clientX) / ((width + 16) / 12) : undefined
+  }, () => dragStart.current?.baseline ?? resizeStart.current?.baseline), [widgets, width])
+  const [, repaint] = useState(0)
+  const pointerFrame = useRef(0)
+  const resizeStart = useRef<{ id: string; x: number; y: number; gridX: number; w: number; h: number; handle: 'w' | 'e' | 's' | 'se'; baseline: Layout; initial: Layout } | null>(null)
+  // RGL keeps live pixel geometry in refs, but memoizes items by snapped layout.
+  // Repaint once per frame so movement within one snap band does not freeze.
+  // Memoized widget cards keep their data/charts out of this lightweight update.
+  const paintPointer = useCallback(() => {
+    if (pointerFrame.current) return
+    pointerFrame.current = requestAnimationFrame(() => {
+      pointerFrame.current = 0
+      repaint(version => version + 1)
+    })
+  }, [repaint])
+  const finishPointer = useCallback(() => {
+    cancelAnimationFrame(pointerFrame.current)
+    pointerFrame.current = 0
+    repaint(version => version + 1)
+  }, [repaint])
+  useEffect(() => () => cancelAnimationFrame(pointerFrame.current), [])
+  useEffect(() => {
+    const track = (event: Event) => { if (dragStart.current) currentPointer.current = pointerPosition(event) }
+    // Capture before react-draggable's document handlers round to whole columns.
+    window.addEventListener('mousemove', track, true)
+    window.addEventListener('touchmove', track, true)
+    return () => { window.removeEventListener('mousemove', track, true); window.removeEventListener('touchmove', track, true) }
+  }, [])
+  return <div ref={containerRef} className="board-grid-container"
+    onMouseDownCapture={event => { pointerDown.current = pointerPosition(event.nativeEvent) }}
+    onTouchStartCapture={event => { pointerDown.current = pointerPosition(event.nativeEvent) }}>
+    {wide && mounted ? <GridLayout width={width} gridConfig={{ cols: 12, rowHeight: 24, margin: [16, 16], containerPadding: [0, 0] }}
+      layout={widgets.map(w => ({ i: w.id, ...w.layout, minW: WIDGETS[w.type].minW, minH: WIDGETS[w.type].minH }))}
+      constraints={constraints} compactor={dashboardCompactor}
+      onDrag={(layout, _old, item, placeholder) => {
+        const start = dragStart.current
+        if (start && item) {
+          const resolved = restoreDashboardDisplacement(layout, start.baseline, item.i, start.initial)
+          layout.forEach(current => Object.assign(current, resolved.find(next => next.i === current.i)))
+          start.resolved = resolved
+          if (placeholder) Object.assign(placeholder, resolved.find(next => next.i === item.i))
+        }
+        paintPointer()
+      }}
+      onDragStart={(layout, _old, item, _placeholder, event) => {
+        currentPointer.current = pointerPosition(event)
+        if (item && pointerDown.current) dragStart.current = { id: item.i, x: item.x, clientX: pointerDown.current.x, baseline: interactionBaseline(layout), initial: layout.map(current => ({ ...current })) }
+      }}
+      onDragStop={layout => {
+        const resolved = dragStart.current?.resolved
+        if (resolved) layout.forEach(current => Object.assign(current, resolved.find(next => next.i === current.i)))
+        rememberPlacement(layout.find(item => item.i === dragStart.current?.id))
+        dragStart.current = null; pointerDown.current = null; finishPointer()
+      }}
+      onResizeStart={(layout, _old, item, _placeholder, event) => {
+        const pointer = pointerPosition(event)
+        const handle = event.target instanceof Element ? event.target.closest('.react-resizable-handle') : null
+        resizeStart.current = pointer && item ? { id: item.i, ...pointer, gridX: item.x, w: item.w, h: item.h, baseline: interactionBaseline(layout), initial: layout.map(current => ({ ...current })), handle: handle?.classList.contains('react-resizable-handle-w') ? 'w' : handle?.classList.contains('react-resizable-handle-e') ? 'e' : handle?.classList.contains('react-resizable-handle-s') ? 's' : 'se' } : null
+      }}
+      onResize={(layout, _old, item, placeholder, event) => {
+        const start = resizeStart.current
+        const pointer = pointerPosition(event)
+        if (start && pointer && item) {
+          // RGL rounds even calcWHRaw to whole cells. Its public resize callback
+          // can update the layout before collision resolution and compaction.
+          const west = start.handle === 'w'
+          const size = applySizeConstraints(constraints, { ...item, x: start.gridX, w: start.w, h: start.h },
+            start.w + (west ? -1 : 1) * (pointer.x - start.x) / ((width + 16) / 12),
+            start.h + (pointer.y - start.y) / 40, start.handle,
+            { cols: 12, maxRows: Infinity, containerWidth: width, containerHeight: 0, rowHeight: 24, margin: [16, 16], layout })
+          Object.assign(item, size)
+          if (west) item.x = start.gridX + start.w - size.w
+          const resolved = restoreDashboardDisplacement(layout, start.baseline, item.i, start.initial)
+          layout.forEach(current => Object.assign(current, resolved.find(next => next.i === current.i)))
+          if (placeholder) Object.assign(placeholder, resolved.find(next => next.i === item.i))
+        }
+        paintPointer()
+      }}
+      onResizeStop={layout => { rememberPlacement(layout.find(item => item.i === resizeStart.current?.id)); resizeStart.current = null; finishPointer() }}
+      dragConfig={{ enabled: editable, handle: '.widget-drag-handle', cancel: 'input,select,button:not(.widget-drag-handle),details' }}
+      resizeConfig={{ enabled: editable, handles: ['w', 'e', 's', 'se'] }} onLayoutChange={onLayoutChange}>
+      {widgets.map(w => <div key={w.id}>{renderWidget(w)}</div>)}
+    </GridLayout> : <div className="board-narrow-grid">{sorted.map(w => <div key={w.id} className={WIDGETS[w.type].w === 3 ? 'board-narrow-stat' : 'board-narrow-chart'}>{renderWidget(w)}</div>)}</div>}
+  </div>
 }
