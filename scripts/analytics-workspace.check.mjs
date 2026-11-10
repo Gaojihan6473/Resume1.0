@@ -294,6 +294,12 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
   }), 'Time and resume controls use identical compact internal spacing')
   const timeFilter = page.getByRole('combobox', { name: '时间范围' })
   const assertFilterHighlight = async (name, active) => {
+    // The label animates its color; wait for the final style, then assert it.
+    await page.waitForFunction(({ name, active }) => {
+      const control = document.querySelector(`[role="combobox"][aria-label="${name}"]`)
+      const label = control?.querySelector('button > span > span:last-child')
+      return label && getComputedStyle(label).color === (active ? 'rgb(146, 107, 72)' : 'rgb(40, 63, 96)')
+    }, { name, active })
     const style = await page.getByRole('combobox', { name }).evaluate(el => ({
       color: getComputedStyle(el.querySelector('button > span > span:last-child')).color,
       marker: getComputedStyle(el.querySelector('button > span > span:first-child'), '::after').content,

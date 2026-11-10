@@ -47,7 +47,10 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
       const current = chart.getOption() as {
         dataZoom?: { startValue?: number; endValue?: number }[]
         xAxis?: { axisLabel?: { rotate?: number; width?: number } }[]
-      }
+      } | undefined
+      // The wrapper can emit a finished event while recreating its chart model.
+      // onChartReady/the next finished event will retry once options exist.
+      if (!current) return
       const zoom = current.dataZoom?.[0]
       const start = Math.max(0, zoom?.startValue ?? 0)
       const end = Math.min(resumes.length - 1, zoom?.endValue ?? Math.min(resumes.length, DEFAULT_VISIBLE_RESUMES) - 1)
