@@ -621,12 +621,14 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
   await page.reload(); await widget('状态占比').waitFor(); await chartsFit()
   for (const width of [1440, 820, 390]) {
     await page.setViewportSize({ width, height: 900 })
+    await page.waitForFunction(width => width < 1100 ? !!document.querySelector('.board-narrow-grid') : !!document.querySelector('.board-grid-container .react-grid-layout'), width)
     await chartsFit()
     await widget('状态占比').scrollIntoViewIfNeeded()
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Refined share chart fits narrow screens')
     await screenshot(`analytics-status-share-${width}`)
   }
   await page.setViewportSize({ width: 1440, height: 900 })
+  await page.waitForFunction(() => !!document.querySelector('.board-grid-container .react-grid-layout'))
   await page.getByRole('combobox', { name: '筛选简历' }).click()
   await page.getByRole('option', { name: '未关联简历', exact: true }).click()
   await page.keyboard.press('Escape')
