@@ -1,11 +1,9 @@
-import { useRef, useState, useEffect } from 'react'
-import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, useNavigate, useLocation, useBlocker } from 'react-router-dom'
+import { Component, lazy, Suspense, useRef, useState, useEffect, type ReactNode } from 'react'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate, Link, useNavigate, useLocation, useBlocker } from 'react-router-dom'
 import { useResumeStore } from './store/resumeStore'
 import { useAuthStore } from './store/authStore'
-import { Toolbar } from './components/Toolbar/Toolbar'
-import { EditorAnalysisLayout } from './components/Editor/EditorAnalysisLayout'
-import { HomePage } from './pages/HomePage'
 import { WorkspaceHomePage } from './pages/WorkspaceHomePage'
+import { HomePage } from './pages/HomePage'
 import { EditorWorkspace } from './components/Batch/EditorWorkspace'
 import { BatchCreationPicker } from './components/Batch/BatchControls'
 import { useBatchStore } from './store/batchStore'
@@ -14,10 +12,6 @@ import { shouldBlockResumeNavigation } from './utils/resumeNavigation'
 import { LegacyWorkspaceEntry } from './components/Batch/LegacyWorkspaceEntry'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
-import { LoginPage } from './pages/LoginPage'
-import { MePage } from './pages/MePage'
-import { ApplicationsPage } from './pages/ApplicationsPage'
-import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
@@ -26,7 +20,48 @@ import { ResumeAgentGlobalLauncher } from './components/Agent/ResumeAgentLaunche
 import { isDashboardDirty, useDashboardStore } from './store/dashboardStore'
 import { DashboardLeaveDialog } from './components/Analytics/DashboardLeaveDialog'
 
+const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
+const MePage = lazy(() => import('./pages/MePage').then(module => ({ default: module.MePage })))
+const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage').then(module => ({ default: module.ApplicationsPage })))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then(module => ({ default: module.AnalyticsPage })))
+const Toolbar = lazy(() => import('./components/Toolbar/Toolbar').then(module => ({ default: module.Toolbar })))
+const EditorAnalysisLayout = lazy(() => import('./components/Editor/EditorAnalysisLayout').then(module => ({ default: module.EditorAnalysisLayout })))
+
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
+
+function AppLoading() {
+  return (
+    <div className="h-screen flex items-center justify-center bg-gray-50" role="status">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="mt-2 text-gray-500">加载中...</p>
+      </div>
+    </div>
+  )
+}
+
+class PageErrorBoundary extends Component<{ children: ReactNode; canGoHome: boolean }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+
+    return (
+      <main className="grid min-h-dvh place-items-center bg-gray-50 px-4">
+        <section className="text-center" role="alert">
+          <h1 className="text-lg font-semibold text-slate-800">页面加载失败</h1>
+          <button type="button" className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white"
+            onClick={() => window.location.reload()}>重新加载页面</button>
+          {this.props.canGoHome && <Link className="ml-4 text-blue-700 underline" to="/">返回首页</Link>}
+        </section>
+      </main>
+    )
+  }
+}
 
 export function AppContent() {
   const { isDirty, currentResumeId, cachedResumes } = useResumeStore()
@@ -99,19 +134,14 @@ export function AppContent() {
   const handleNavigateToLogin = () => { closeSidebar(); navigate('/login') }
   // Show loading while initializing auth
   if (authInitializing) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-2 text-gray-500">加载中...</p>
-        </div>
-      </div>
-    )
+    return <AppLoading />
   }
 
   return (
     <>
-      <Routes>
+      <PageErrorBoundary key={location.pathname} canGoHome={location.pathname !== '/'}>
+      <Suspense fallback={<AppLoading />}>
+        <Routes>
         {/* Login Page - public */}
         <Route path="/login" element={<LoginPage />} />
 
@@ -208,7 +238,9 @@ export function AppContent() {
 
         {/* Redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
+      </Suspense>
+      </PageErrorBoundary>
 
       <BatchCreationPicker />
       <ResumeAgentGlobalLauncher />

@@ -65,7 +65,3 @@ export async function extractPdfDocument(file: File, visual = true, signal?: Abo
     await task.destroy()
   }
 }
-
-export async function extractTextFromPdf(file: File): Promise<string> {
-  return (await extractPdfDocument(file, false)).rawText
-}

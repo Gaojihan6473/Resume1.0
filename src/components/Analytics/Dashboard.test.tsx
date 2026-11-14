@@ -27,6 +27,7 @@ beforeEach(async () => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+  document.documentElement.style.setProperty('--breakpoint-workspace', '1100px')
   useAuthStore.setState({ user: { id: 'u1', email: '', keyName: '' } })
   await useDashboardStore.getState().bind(null)
   vi.mocked(fetchResumes).mockResolvedValue({ success: true, resumes })
@@ -34,7 +35,10 @@ beforeEach(async () => {
   vi.mocked(fetchDashboard).mockResolvedValue(null)
   vi.mocked(saveDashboard).mockImplementation(async (_owner, config) => ({ config, revision: 1 }))
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  document.documentElement.style.removeProperty('--breakpoint-workspace')
+})
 it('offers reset for a batch-only filter and clears all global conditions', async () => {
   mount('?batch=b1')
   fireEvent.click(await screen.findByRole('button', { name: '重置筛选' }))

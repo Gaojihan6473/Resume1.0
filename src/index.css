@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 .dropdown-panel {
   @apply rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15;
@@ -8,6 +8,17 @@
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, Consolas, monospace;
+}
+
+@theme static {
+  --breakpoint-workspace: 1100px;
+  --color-brand-action: #326bed;
+  --color-brand-action-hover: #245bd4;
+  --color-workspace-text: #243958;
+  --color-workspace-focus: #7da7ee;
+  --radius-brand-action: 11px;
+  --shadow-brand-action: 0 4px 12px #326bed12;
+  --shadow-brand-action-hover: 0 5px 14px #326bed18;
 }
 
 .batch-card:hover { border-color: color-mix(in srgb, var(--batch-accent) 45%, white); }
@@ -2434,69 +2445,4 @@ body {
 .dropdown-fade-in {
   animation: dropdownFadeIn 0.2s ease forwards;
   transform-origin: top center;
-}
-
-/* Resume Agent Dock transitions */
-@keyframes agentDockPanelOpen {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.965);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
-  }
-}
-
-@keyframes agentDockPanelClose {
-  from {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(10px) scale(0.975);
-  }
-}
-
-@keyframes agentDockContentEnter {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.agent-dock-panel-open {
-  animation: agentDockPanelOpen 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  transform-origin: bottom center;
-}
-
-.agent-dock-panel-close {
-  animation: agentDockPanelClose 180ms cubic-bezier(0.4, 0, 1, 1) both;
-  pointer-events: none;
-  transform-origin: bottom center;
-}
-
-.agent-dock-compact-enter {
-  animation: agentDockPanelOpen 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  transform-origin: bottom center;
-}
-
-.agent-dock-content-enter {
-  animation: agentDockContentEnter 180ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agent-dock-panel-open,
-  .agent-dock-panel-close,
-  .agent-dock-compact-enter,
-  .agent-dock-content-enter {
-    animation-duration: 1ms;
-  }
 }

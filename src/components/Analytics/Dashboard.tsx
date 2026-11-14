@@ -32,8 +32,11 @@ export function Dashboard({ applications, isLoading, error, onRetry }: Dashboard
   const [library, setLibrary] = useState(false)
   const [libraryType, setLibraryType] = useState<'metric' | 'chart'>('metric')
   const [gridVersion, setGridVersion] = useState(0)
+  const [wideBreakpoint] = useState(() => parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--breakpoint-workspace'),
+  ))
   const [viewport, setViewport] = useState(() => window.innerWidth)
-  const wide = viewport >= 1100
+  const wide = viewport >= wideBreakpoint
   const config = board.draft || board.saved?.config
   const editing = !!board.draft
   const libraryRef = useRef<HTMLDialogElement>(null)

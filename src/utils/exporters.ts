@@ -9,8 +9,6 @@ function normalizePdfFileName(fileName: string): string {
   return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`
 }
 
-const PREVIEW_A4_WIDTH_PX = 595
-
 function richTextToLines(html: string): string[] {
   if (isRichHtmlEmpty(html)) return []
   const container = document.createElement('div')
@@ -59,35 +57,6 @@ function normalizeSectionOrder(order: ResumeData['sectionOrder'] | undefined): R
     if (!normalized.includes(sectionId)) normalized.push(sectionId)
   }
   return normalized
-}
-
-export async function generatePreviewImage(
-  element: HTMLElement
-): Promise<Blob | null> {
-  const html2canvas = (await import('html2canvas')).default
-
-  try {
-    console.log('[generatePreviewImage] Starting html2canvas capture, element:', element.offsetWidth, 'x', element.offsetHeight)
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      width: PREVIEW_A4_WIDTH_PX,
-      windowWidth: PREVIEW_A4_WIDTH_PX,
-    })
-    console.log('[generatePreviewImage] Canvas created:', canvas.width, 'x', canvas.height)
-
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        console.log('[generatePreviewImage] Blob result:', blob ? `${blob.size} bytes, ${blob.type}` : 'NULL')
-        resolve(blob)
-      }, 'image/png', 1.0)
-    })
-  } catch (error) {
-    console.error('Generate preview error:', error)
-    return null
-  }
 }
 
 export async function exportToPdf(

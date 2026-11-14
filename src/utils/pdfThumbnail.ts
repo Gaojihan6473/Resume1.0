@@ -1,5 +1,3 @@
-import { pdfjs } from '../lib/pdfWorker'
-
 const DEFAULT_THUMBNAIL_WIDTH = 900
 
 export async function generatePdfThumbnail(
@@ -8,6 +6,7 @@ export async function generatePdfThumbnail(
 ): Promise<Blob | null> {
   if (typeof document === 'undefined') return null
 
+  const { pdfjs } = await import('../lib/pdfWorker')
   const data = await pdfBlob.arrayBuffer()
   const loadingTask = pdfjs.getDocument({ data })
   const pdf = await loadingTask.promise

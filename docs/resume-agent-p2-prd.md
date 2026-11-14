@@ -1,5 +1,6 @@
 # Resume Agent P2 需求文档
 
+> 历史规划草案，保留用于追溯产品构想。启动本阶段前重新核对现行能力与验收条件。
 > 文档级别：P2 / 锦上添花与长期差异化
 > 前置条件：[P1](./resume-agent-p1-prd.md) 已形成稳定数据和使用闭环
 > 总览：[Resume Agent 总路线图](./resume-agent-roadmap.md)

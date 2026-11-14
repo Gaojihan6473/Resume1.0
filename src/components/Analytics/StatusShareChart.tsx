@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { ReactChart, type ChartInstance } from './ReactChart'
 import type { EChartsOption } from 'echarts'
 import type { summarizeApplications } from '../../utils/dashboard'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -7,7 +7,7 @@ import { STATUS_COLORS } from './chartConfig'
 import { useChartResize } from './useChartResize'
 
 export function StatusShareChart({ data }: { data: ReturnType<typeof summarizeApplications> }) {
-  const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
+  const chartRef = useRef<ChartInstance | null>(null)
   const ref = useChartResize(chartRef, true, true)
   const [compact, setCompact] = useState(true)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -69,7 +69,7 @@ export function StatusShareChart({ data }: { data: ReturnType<typeof summarizeAp
   const events = useMemo(() => ({ legendselectchanged: (event: { selected: Record<string, boolean> }) => setSelected(event.selected) }), [])
   return <div className="insight-widget">
     <div ref={ref} className="analytics-chart">
-      {total ? <ReactECharts ref={chartRef} option={option} onEvents={events} notMerge style={{ height: '100%', width: '100%' }} />
+      {total ? <ReactChart ref={chartRef} option={option} onEvents={events} notMerge style={{ height: '100%', width: '100%' }} />
         : <div className="board-empty-chart">暂无岗位数据</div>}
     </div>
     {total > 0 && <p className="insight-chart-note">点击图例筛选 · 占比按当前可见岗位计算</p>}

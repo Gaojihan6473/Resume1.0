@@ -7,7 +7,7 @@ import { InsightWidgetChart } from './InsightWidgetChart'
 import { STATUS_COLORS } from './chartConfig'
 
 const chart = vi.hoisted(() => ({ option: {} as EChartsOption }))
-vi.mock('echarts-for-react', () => ({ default: ({ option }: { option: EChartsOption }) => { chart.option = option; return <div data-testid="chart" /> } }))
+vi.mock('./ReactChart', () => ({ ReactChart: ({ option }: { option: EChartsOption }) => { chart.option = option; return <div data-testid="chart" /> } }))
 vi.mock('./useChartResize', () => ({ useChartResize: () => ({ current: null }) }))
 afterEach(cleanup)
 

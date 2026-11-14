@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import ReactECharts from 'echarts-for-react'
-import { format } from 'echarts'
+import { ReactChart, type ChartInstance, chartFormat } from './ReactChart'
 import { useChartResize } from './useChartResize'
 import type { ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -32,7 +31,7 @@ interface BarDatum {
 }
 
 export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
-  const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
+  const chartRef = useRef<ChartInstance | null>(null)
   const resumes = useMemo(() => [...new Set(data.map((item) => item.resumeId))], [data])
   const hasOverflow = resumes.length > DEFAULT_VISIBLE_RESUMES
   const initialZoomEnd = hasOverflow
@@ -56,7 +55,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
       const end = Math.min(resumes.length - 1, zoom?.endValue ?? Math.min(resumes.length, DEFAULT_VISIBLE_RESUMES) - 1)
       const names = resumes.slice(start, end + 1).map(id => data.find(item => item.resumeId === id)?.resumeName || id)
       const slot = Math.max(24, (chart.getWidth() - 80) / Math.max(1, names.length))
-      const longest = Math.max(0, ...names.map(name => format.getTextRect(name, "11px system-ui, 'Segoe UI', Roboto, sans-serif").width))
+      const longest = Math.max(0, ...names.map(name => chartFormat.getTextRect(name, "11px system-ui, 'Segoe UI', Roboto, sans-serif").width))
       const rotate = Math.min(longest, 180) > slot - 16 ? -30 : 0
       const width = Math.round(Math.max(24, Math.min(180, (slot - 16) / (rotate ? Math.cos(Math.PI / 6) : 1))))
       const previous = current.xAxis?.[0]?.axisLabel
@@ -304,7 +303,7 @@ export function GroupedBar({ data, active, resetKey }: GroupedBarProps) {
 
   return (
     <div ref={containerRef} className="analytics-chart">
-      <ReactECharts
+      <ReactChart
         ref={chartRef}
         option={option}
         onChartReady={updateAxisLabels}

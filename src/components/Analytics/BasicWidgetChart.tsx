@@ -1,12 +1,12 @@
 import { useMemo, useRef } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { ReactChart, type ChartInstance } from './ReactChart'
 import { useChartResize } from './useChartResize'
 import { APPLICATION_CHANNEL_LABELS } from '../../types/application'
 import { summarizeApplications } from '../../utils/dashboard'
 import { StatusShareChart } from './StatusShareChart'
 
 export function BasicWidgetChart({ type, data }: { type: 'status' | 'channel' | 'trend'; data: ReturnType<typeof summarizeApplications> }) {
-  const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
+  const chartRef = useRef<ChartInstance | null>(null)
   const ref = useChartResize(chartRef, true, true)
   const option = useMemo(() => {
     const channel = type === 'channel'
@@ -20,5 +20,5 @@ export function BasicWidgetChart({ type, data }: { type: 'status' | 'channel' | 
   }, [type, data])
   if (type === 'status') return <StatusShareChart data={data} />
   const empty = type === 'channel' ? !data.channels.length : !data.trend.length
-  return <div ref={ref} className="analytics-chart">{empty ? <div className="board-empty-chart">暂无投递数据</div> : <ReactECharts ref={chartRef} option={option} notMerge style={{ height: '100%', width: '100%' }} />}</div>
+  return <div ref={ref} className="analytics-chart">{empty ? <div className="board-empty-chart">暂无投递数据</div> : <ReactChart ref={chartRef} option={option} notMerge style={{ height: '100%', width: '100%' }} />}</div>
 }

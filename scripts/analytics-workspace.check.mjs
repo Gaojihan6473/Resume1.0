@@ -231,7 +231,7 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
     await page.getByRole('combobox', { name: '筛选简历' }).click()
     await page.getByRole('option', { name: '全部简历', exact: true }).click()
     await page.keyboard.press('Escape')
-    for (const width of [1440, 820, 390]) {
+    for (const width of [1440, 1100, 1099, 820, 390]) {
       await page.setViewportSize({ width, height: 900 })
       await page.waitForFunction(width => width < 1100 ? !!document.querySelector('.board-narrow-grid') : !!document.querySelector('.board-grid-container .react-grid-layout'), width)
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -248,13 +248,19 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
     await page.getByRole('option', { name: '空面板验收', exact: true }).click()
     await waitTotal(0)
     assert.equal(await widget('状态占比').getByText('暂无岗位数据', { exact: true }).count(), 1)
-    console.log('[analytics-library] Passed real tab keyboard navigation, curated catalog, metric counts, save/reload, resume and batch filters, empty state and 1440/820/390 chart layouts')
+    console.log('[analytics-library] Passed real tab keyboard navigation, curated catalog, metric counts, save/reload, resume and batch filters, empty state and responsive chart layouts')
     return
   }
   const assertDefaultPanels = async () => {
-    const left = await widget('状态分布').boundingBox()
-    const right = await widget('关系图谱').boundingBox()
-    const cards = await Promise.all(['总投递数', '面试中', '测评中', '常用渠道'].map(name => widget(name).boundingBox()))
+    const bounds = await page.waitForFunction(names => {
+      const widgets = [...document.querySelectorAll('.board-widget')]
+      if (widgets.length !== names.length) return false
+      const panels = names.map(name => widgets.find(el => el.getAttribute('aria-label') === name))
+      if (panels.some(el => !el || el.parentElement.getAnimations().some(animation => animation.playState === 'running'))) return false
+      return panels.map(el => el.getBoundingClientRect().toJSON())
+    }, ['状态分布', '关系图谱', '总投递数', '面试中', '测评中', '常用渠道'])
+    const [left, right, ...cards] = await bounds.jsonValue()
+    await bounds.dispose()
     assert.ok(cards.every(card => Math.abs(card.y - cards[0].y) < 2 && Math.abs(card.width - cards[0].width) < 2), 'Four equal-width metric cards share the first row')
     assert.ok(left.y > cards[0].y + cards[0].height && Math.abs(left.y - right.y) < 2 && Math.abs(left.width - right.width) < 2 && Math.abs(left.height - right.height) < 2 && right.x > left.x + left.width, 'Distribution and graph share an equal-sized second row')
   }
@@ -432,7 +438,11 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
   assert.ok(await savedToast.evaluate(el => el.parentElement.classList.contains('animate-slide-in') && el.parentElement.querySelector('.text-emerald-500')), 'Saved board uses the shared success toast')
   await screenshot('analytics-save-toast')
   let saved = await read()
-  assert.equal(saved.config.widgets.length, 11)
+  assert.deepEqual(
+    saved.config.widgets.map(w => w.type),
+    [...legacyConfig.widgets.map(w => w.type), 'graph', 'graph', 'status', 'total'],
+    'Saving retains the seeded modules and all four additions in order',
+  )
   const dist = saved.config.widgets.find(w => w.type === 'distribution')
   assert.equal(dist.layout.w, 8.25, 'Resize persists the nearest sixteenth-width stop')
   assert.equal(dist.layout.h, 14, 'Vertical resize keeps the standard height presets')
@@ -489,12 +499,16 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
 
   await page.getByRole('button', { name: '编辑看板', exact: true }).click()
   await total.getByRole('textbox', { name: '模块标题' }).fill('离开草稿')
-  await page.getByRole('button', { name: '返回批次详情', exact: true }).click()
+  const leaveForHome = async () => {
+    await page.locator('.analytics-brand').hover()
+    await page.getByTitle('返回首页', { exact: true }).click()
+  }
+  await leaveForHome()
   await page.getByRole('dialog', { name: '离开看板' }).getByRole('button', { name: '继续编辑' }).click()
   assert.equal(await widget('离开草稿').count(), 1)
-  await page.getByRole('button', { name: '返回批次详情', exact: true }).click()
+  await leaveForHome()
   await page.getByRole('dialog', { name: '离开看板' }).getByRole('button', { name: '放弃并离开' }).click()
-  await page.waitForURL(`**/batches/${batch}`)
+  await page.waitForURL(new URL('/', origin).href)
   await page.goto(`${origin}/analytics?batch=${batch}`)
   await page.getByRole('button', { name: '编辑看板', exact: true }).waitFor()
 
@@ -516,7 +530,7 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
   assert.equal(await total.locator('.analytics-stat-value').count(), 0)
   assert.deepEqual((await read()).config, saved.config)
 
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 600 }, { width: 820, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 740 }]) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 600 }, { width: 1100, height: 900 }, { width: 1099, height: 900 }, { width: 820, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 740 }]) {
     await page.setViewportSize(viewport)
     await page.goto(`${origin}/analytics?batch=${batch}`)
     await widget('近期投递').waitFor(); await chartsFit()
@@ -616,6 +630,7 @@ export async function checkAnalytics({ page, db, origin, user, supabaseUrl, scre
   await page.getByRole('combobox', { name: '筛选简历' }).click()
   await page.getByRole('option', { name: '未关联简历', exact: true }).click()
   await page.keyboard.press('Escape')
+  await page.waitForFunction(() => document.querySelector('article[aria-label="已投公司"] .analytics-stat-value')?.textContent === '2')
   assert.equal(await widget('已投公司').locator('.analytics-stat-value').innerText(), '2')
   assert.equal(await widget('未关联简历').locator('.analytics-stat-value').innerText(), '2')
   await page.getByRole('combobox', { name: '当前批次' }).click()

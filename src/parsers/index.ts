@@ -55,8 +55,8 @@ export async function parseFile(file: File, useAI = false, signal?: AbortSignal,
   progress?.('检查完整性')
   let fallback: ParsedResult
   if (useAI && legacy) {
-    const { parseFile: parseLegacy } = await import('./legacyParser')
-    fallback = await parseLegacy(file, true, signal)
+    const { parseLegacyText } = await import('./legacyParser')
+    fallback = await parseLegacyText(document.rawText, signal)
   } else {
     const { parseByRules } = await import('./ruleParser')
     fallback = { data: parseByRules(document.rawText), rawText: document.rawText, parseLog: ['[import] rule fallback'] }

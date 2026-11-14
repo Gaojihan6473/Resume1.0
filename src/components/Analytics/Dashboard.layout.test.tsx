@@ -11,10 +11,16 @@ vi.mock('../../lib/api/dashboard', () => ({ fetchDashboard: vi.fn(), saveDashboa
 // Exercise the real measurement hook; jsdom does not provide a layout engine.
 vi.mock('react-grid-layout', async original => ({ ...await original<typeof import('react-grid-layout')>(), GridLayout: ({ width, children }: { width: number; children: React.ReactNode }) => <div data-testid="grid" data-width={width}>{children}</div> }))
 vi.mock('./GroupedBar', () => ({ GroupedBar: () => <div>状态分布图</div> }))
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  document.documentElement.style.removeProperty('--breakpoint-workspace')
+})
 
 it('measures the actual container after configuration arrives rather than retaining the initial 1280px', async () => {
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1800 })
+  document.documentElement.style.setProperty('--breakpoint-workspace', '1100px')
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
   const original = window.getComputedStyle.bind(window)
   vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {

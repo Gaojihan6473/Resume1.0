@@ -1,5 +1,7 @@
+@reference "../../index.css";
+
 .analytics-page {
-  color: #243958;
+  color: var(--color-workspace-text);
   background: radial-gradient(ellipse at 6% 25%, #deebff65, transparent 45%), radial-gradient(ellipse at 100% 65%, #f0eaff65, transparent 40%), #f4f8ff;
 }
 .analytics-page .app-topbar { background: #f4f8ff; border-bottom: 1px solid #e6edf9; backdrop-filter: none; }
@@ -11,7 +13,7 @@
 .board-loading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .board-loading-card { min-width: 0; min-height: 140px; padding: 20px; }
 .board-loading-chart { grid-column: 1 / -1; min-height: 320px; padding: 20px; }
-@media (max-width: 1099px) { .board-loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@variant max-workspace { .board-loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .board-loading-grid { grid-template-columns: minmax(0, 1fr); } }
 .analytics-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; flex-shrink: 0; }
 .analytics-stat { display: flex; align-items: center; min-width: 0; gap: 12px; padding: 14px 18px; border: 1px solid #dce6f6; border-radius: 20px; background: #ffffffed; }
@@ -44,16 +46,18 @@
 .analytics-chart-legend { position: absolute; top: 4px; right: 8px; z-index: 1; display: flex; align-items: center; gap: 12px; padding: 6px 10px; border: 1px solid #e1e8f5; border-radius: 10px; background: white; color: #6d82a0; font-size: 11px; }
 .analytics-fit-view { position: absolute; left: 12px; top: 4px; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid #dce6f6; border-radius: 10px; background: #fcfdff; color: #557cbe; cursor: pointer; }
 .analytics-fit-view:hover { border-color: #c8dafa; background: #edf3ff; }
-.analytics-dashboard button:focus-visible, .analytics-chart-legend [tabindex]:focus-visible { outline: 2px solid #7da7ee; outline-offset: 2px; }
+.analytics-dashboard button:focus-visible, .analytics-chart-legend [tabindex]:focus-visible { outline: 2px solid var(--color-workspace-focus); outline-offset: 2px; }
 .analytics-skeleton { min-height: 98px; background: #edf3fc; }
 .analytics-error-content { align-items: center; justify-content: center; padding-block: 24px; overflow-y: auto; }
 @media (min-width: 1480px) { .analytics-dashboard { padding-inline: clamp(28px, 2vw, 48px); } }
-@media (min-width: 1100px) and (max-height: 800px) {
-  .analytics-dashboard { padding-top: 16px; padding-bottom: 18px; gap: 14px; }
-  .analytics-stat { padding-block: 10px; }
-  .analytics-panel { padding: 16px; }
+@variant workspace {
+  @media (max-height: 800px) {
+    .analytics-dashboard { padding-top: 16px; padding-bottom: 18px; gap: 14px; }
+    .analytics-stat { padding-block: 10px; }
+    .analytics-panel { padding: 16px; }
+  }
 }
-@media (max-width: 1099px) {
+@variant max-workspace {
   .analytics-dashboard { padding: 18px; gap: 14px; }
   .analytics-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .analytics-stat { padding: 10px 14px; }
@@ -113,12 +117,12 @@
 .board-time-filter.has-date-range .board-time-select { max-width: 244px; }
 .board-filter-select > button { width: auto; max-width: 100%; height: 36px; min-height: 36px; padding-left: 8px; padding-right: 25px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #283f60; font-size: 13px; font-weight: 400; box-shadow: none; }
 .board-filter-select > button:hover, .board-filter-select > button[aria-expanded=true] { border-color: transparent; background: #e9f0ff; }
-.board-filter-select > button:focus-visible { outline: 2px solid #7da7ee; outline-offset: 2px; }
+.board-filter-select > button:focus-visible { outline: 2px solid var(--color-workspace-focus); outline-offset: 2px; }
 .board-filter-select > button > span { gap: 6px; color: inherit; }
 .board-filter-select > button > span > span:last-child { color: inherit; }
 .board-filter-select > svg { right: 8px; }
 .board-filter-select > button > span > span:first-child { color: #7189af; }
-.board-time-select > button[aria-expanded=true] > span > span:first-child { color: #326bed; }
+.board-time-select > button[aria-expanded=true] > span > span:first-child { color: var(--color-brand-action); }
 .board-filter-select.is-filtered > button { color: #926b48; }
 .board-filter-select.is-filtered > button:hover, .board-filter-select.is-filtered > button[aria-expanded=true] { background: #926b480a; }
 .board-filter-select.is-filtered > button > span > span:first-child, .board-filter-select.is-filtered > svg { color: #a17e5e; }
@@ -143,7 +147,7 @@
 .board-date-popover p[role=alert] { color: #c75461; }
 .board-filter-reset { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 4px 8px; color: #7e94b4; font-size: 11px; cursor: pointer; }
 .board-filter-reset:hover { color: #4f80ed; }
-.board-control-panel .board-button.primary { min-height: 34px; padding: 7px 12px; border-radius: 10px; background: #326bed; border-color: #326bed; font-weight: 500; }
+.board-control-panel .board-button.primary { min-height: 34px; padding: 7px 12px; border-radius: 10px; background: var(--color-brand-action); border-color: var(--color-brand-action); font-weight: 500; }
 .is-editing .board-actions .board-button { min-height: 34px; gap: 5px; padding: 7px 10px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
 @media (max-width: 767px) {
   .board-control-panel { gap: 10px; padding: 0; margin-bottom: 14px; }
@@ -165,7 +169,7 @@
 .widget-heading { display: flex; align-items: center; gap: 5px; min-height: 26px; flex-shrink: 0; }
 .widget-heading h2, .widget-heading > input { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #283f60; font-size: 13px; font-weight: 600; }
 .widget-heading > input { width: 100%; background: transparent; border: 0; border-radius: 0; padding: 2px 0; }
-.widget-heading > input:focus-visible { outline: none; box-shadow: 0 1px 0 #7da7ee; }
+.widget-heading > input:focus-visible { outline: none; box-shadow: 0 1px 0 var(--color-workspace-focus); }
 .widget-drag-handle { display: flex; cursor: grab; padding: 4px 0; color: #91a6c4; touch-action: none; }
 .widget-drag-handle:active { cursor: grabbing; }
 .is-editing .widget-drag-handle { opacity: .55; transition: color 120ms ease, opacity 120ms ease; }

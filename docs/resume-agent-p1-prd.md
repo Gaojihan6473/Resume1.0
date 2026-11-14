@@ -1,5 +1,6 @@
 # Resume Agent P1 需求文档
 
+> 历史规划草案，保留用于追溯产品构想。启动本阶段前重新核对现行能力与验收条件。
 > 文档级别：P1 / 显著增强
 > 前置条件：[P0 MVP](./resume-agent-p0-prd.md) 已通过阶段门槛
 > 总览：[Resume Agent 总路线图](./resume-agent-roadmap.md)

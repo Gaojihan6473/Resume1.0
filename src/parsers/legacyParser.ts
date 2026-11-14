@@ -3,82 +3,30 @@ import type { ParsedResult, ResumeData } from '../types/resume'
 import { getMiniMaxContent, requestMiniMaxChat } from '../lib/minimax'
 import { normalizeResumeData } from '../utils/resumeData'
 import { buildRichHtmlFromLines } from '../utils/richText'
+import { checkAbort } from './sourceDocument'
 
-export async function parseFile(
-  file: File,
-  useAI: boolean = false,
-  signal?: AbortSignal
-): Promise<ParsedResult> {
-  throwIfAborted(signal)
-  const logs: string[] = []
-  logs.push('[parser] start')
-  logs.push(`[parser] file size: ${file.size} bytes`)
-  logs.push(`[parser] file type: ${file.type || 'unknown'}`)
-  logs.push(`[parser] ai enabled: ${useAI}`)
-  logs.push(`[parser] ai proxy enabled: ${useAI}`)
-
-  const rawText = await extractText(file)
-  throwIfAborted(signal)
-  logs.push(`[extract] text length: ${rawText.length}`)
-
-  if (useAI) {
-    try {
-      logs.push('[ai] request start')
-      const data = await parseByAI(rawText, signal)
-      logs.push('[ai] parse success')
-      logs.push(
-        `[result] sections: edu=${data.education?.length || 0}, intern=${data.internships?.length || 0}, proj=${data.projects?.length || 0}`
-      )
-
-      const hasNoMainSections =
-        (!data.education || data.education.length === 0) &&
-        (!data.internships || data.internships.length === 0) &&
-        (!data.projects || data.projects.length === 0)
-
-      if (!hasNoMainSections) {
-        return { data, rawText, parseLog: logs }
-      }
-
-      logs.push('[ai] empty structured result, fallback to rule parser')
-    } catch {
-      logs.push('[ai] parse failed')
-      console.warn('[parser] AI unavailable; falling back to rules')
-    }
-  }
-
-  logs.push('[rule] parser start')
-  throwIfAborted(signal)
-  const { parseByRules } = await import('./ruleParser')
-  const data = parseByRules(rawText)
-  logs.push('[rule] parse completed')
-  logs.push(
-    `[result] sections: edu=${data.education?.length || 0}, intern=${data.internships?.length || 0}, proj=${data.projects?.length || 0}`
-  )
-  return { data, rawText, parseLog: logs }
-}
-
-async function extractText(file: File): Promise<string> {
-  const fileName = file.name.toLowerCase()
-
-  if (fileName.endsWith('.pdf')) {
-    const { extractTextFromPdf } = await import('./pdfParser')
-    return extractTextFromPdf(file)
-  }
-  if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
-    const { extractTextFromDocx } = await import('./docxParser')
-    return extractTextFromDocx(file)
-  }
-  if (fileName.endsWith('.txt')) {
-    const { extractTextFromTxt } = await import('./textParser')
-    return extractTextFromTxt(file)
-  }
+export async function parseLegacyText(rawText: string, signal?: AbortSignal): Promise<ParsedResult> {
+  checkAbort(signal)
+  const logs = ['[parser] legacy import', `[extract] text length: ${rawText.length}`]
 
   try {
-    const { extractTextFromTxt } = await import('./textParser')
-    return await extractTextFromTxt(file)
+    logs.push('[ai] request start')
+    const data = await parseByAI(rawText, signal)
+    checkAbort(signal)
+    if (data.education.length || data.internships.length || data.projects.length) {
+      logs.push('[ai] parse success')
+      return { data, rawText, parseLog: logs }
+    }
+    logs.push('[ai] empty structured result, fallback to rule parser')
   } catch {
-    throw new Error('Unsupported file type. Please upload PDF, DOCX, DOC or TXT.')
+    checkAbort(signal)
+    logs.push('[ai] parse failed')
+    console.warn('[parser] AI unavailable; falling back to rules')
   }
+
+  const { parseByRules } = await import('./ruleParser')
+  checkAbort(signal)
+  return { data: parseByRules(rawText), rawText, parseLog: [...logs, '[rule] parse completed'] }
 }
 
 function unwrapCodeFence(text: string): string {
@@ -182,7 +130,7 @@ async function repairJsonByAI(rawContent: string, signal?: AbortSignal): Promise
 }
 
 async function parseByAI(rawText: string, signal?: AbortSignal): Promise<ResumeData> {
-  throwIfAborted(signal)
+  checkAbort(signal)
 
   const fidelityDirectives = `Module-first extraction rules:
 1) Fill data according to editor modules directly.
@@ -347,12 +295,6 @@ ${rawText.slice(0, 12000)}`
 
   fillSummaryFallbackFromRaw(safeData, rawText)
   return normalizeResumeData(safeData)
-}
-
-function throwIfAborted(signal?: AbortSignal) {
-  if (signal?.aborted) {
-    throw new Error('Parse cancelled')
-  }
 }
 
 function fillSummaryFallbackFromRaw(data: ResumeData, rawText: string) {

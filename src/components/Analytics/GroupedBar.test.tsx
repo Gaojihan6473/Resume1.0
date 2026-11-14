@@ -3,9 +3,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { GroupedBar } from './GroupedBar'
 
 const chart = vi.hoisted(() => ({ ready: true, width: 760, zoom: { startValue: 0, endValue: 5 }, axis: { rotate: 0, width: 108 }, setOption: vi.fn(), events: {} as Record<string, () => void> }))
-vi.mock('echarts-for-react', async () => {
+vi.mock('./ReactChart', async () => {
   const React = await import('react')
-  return { default: React.forwardRef(function Chart(props: { onEvents: Record<string, () => void> }, ref) {
+  return { chartFormat: { getTextRect: (text: string) => ({ width: text.length * 11 }) }, ReactChart: React.forwardRef(function Chart(props: { onEvents: Record<string, () => void> }, ref) {
     chart.events = props.onEvents
     React.useImperativeHandle(ref, () => ({ getEchartsInstance: () => ({
       getWidth: () => chart.width,
@@ -17,7 +17,6 @@ vi.mock('echarts-for-react', async () => {
   }) }
 })
 vi.mock('./useChartResize', () => ({ useChartResize: () => ({ current: null }) }))
-vi.mock('echarts', () => ({ format: { getTextRect: (text: string) => ({ width: text.length * 11 }) } }))
 const data = Array.from({ length: 6 }, (_, i) => ({ resumeId: `r${i}`, resumeName: `秋招-互联网产品经理-${i}`, company: '', position: '', status: 'applied' as const, count: 1, companies: [] }))
 beforeEach(() => {
   chart.ready = true

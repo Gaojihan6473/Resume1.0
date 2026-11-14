@@ -313,7 +313,7 @@ ${resumeText}`,
     assertCompletionFinished(firstCompletion)
 
     try {
-      return parseAnalysisResult(firstCompletion.content, false)
+      return parseAnalysisResult(firstCompletion.content)
     } catch (parseError) {
       console.warn('[JDAnalysis] 首次返回不是合法 JSON，准备自动重试:', parseError)
       const retryCompletion = await requestAnalysisContent({
@@ -338,7 +338,7 @@ ${resumeText}`,
       assertCompletionFinished(retryCompletion)
 
       try {
-        return parseAnalysisResult(retryCompletion.content, false)
+        return parseAnalysisResult(retryCompletion.content)
       } catch (retryParseError) {
         if (!retryCompletion.content.trim()) {
           throw new Error('AI 返回内容为空，未生成分析结果')
@@ -580,50 +580,18 @@ const strictJsonRetrySystemPrompt = `${analyzeJDSystemPrompt}
 - 不要省略 closing brace。
 - 如果内容太长，减少 suggestions 数量，优先保证 JSON 完整合法。`
 
-function parseAnalysisResult(content: string, fallbackOnError = true): JDAnalysisResult {
-  try {
-    const parsed = parseJsonObject(content)
-    const legacySuggestions = normalizeSuggestions(parsed.suggestions)
-    const sectionAnalyses = normalizeSectionAnalyses(parsed.sectionAnalyses, legacySuggestions)
+function parseAnalysisResult(content: string): JDAnalysisResult {
+  const parsed = parseJsonObject(content)
+  const legacySuggestions = normalizeSuggestions(parsed.suggestions)
+  const sectionAnalyses = normalizeSectionAnalyses(parsed.sectionAnalyses, legacySuggestions)
 
-    return {
-      matchScore: typeof parsed.matchScore === 'number' ? parsed.matchScore : 0,
-      scoreBreakdown: normalizeScoreBreakdown(parsed.scoreBreakdown, parsed.matchScore),
-      suggestions: sectionAnalyses.flatMap((section) => section.suggestions),
-      sectionAnalyses,
-      resumeText: typeof parsed.resumeText === 'string' ? parsed.resumeText : '',
-      jdText: typeof parsed.jdText === 'string' ? parsed.jdText : '',
-    }
-  } catch (error) {
-    if (!fallbackOnError) {
-      throw error
-    }
-    console.error('[JDAnalysis] JSON解析失败:', error, content.slice(0, 800))
-    const sectionAnalyses = normalizeSectionAnalyses(undefined, [
-      {
-        type: 'modify',
-        category: 'format',
-        itemTitle: 'AI 返回结果',
-        originalContent: '无法解析分析结果',
-        problemText: '无法解析分析结果',
-        targetText: 'AI 返回结果',
-        current: '无法解析分析结果',
-        problem: 'AI 返回格式异常',
-        problemReason: 'AI 返回格式异常，暂时无法展示结构化诊断原因',
-        suggestion: '请重试或检查输入内容',
-        rewriteExample: '',
-        reason: 'AI 返回的内容不是合法 JSON',
-      },
-    ])
-
-    return {
-      matchScore: 50,
-      scoreBreakdown: createDefaultScoreBreakdown(50),
-      suggestions: sectionAnalyses.flatMap((section) => section.suggestions),
-      sectionAnalyses,
-      resumeText: '',
-      jdText: '',
-    }
+  return {
+    matchScore: typeof parsed.matchScore === 'number' ? parsed.matchScore : 0,
+    scoreBreakdown: normalizeScoreBreakdown(parsed.scoreBreakdown, parsed.matchScore),
+    suggestions: sectionAnalyses.flatMap((section) => section.suggestions),
+    sectionAnalyses,
+    resumeText: typeof parsed.resumeText === 'string' ? parsed.resumeText : '',
+    jdText: typeof parsed.jdText === 'string' ? parsed.jdText : '',
   }
 }
 

@@ -12,7 +12,7 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 - Styling: Tailwind CSS 4
 - State: Zustand
 - Parsing: `pdfjs-dist`, `mammoth`, rule-based parser + optional AI parsing
-- Export: service-side Chromium PDF rendering for official resume PDFs, `docx` for Word export. Legacy `jsPDF`/`html2canvas` dependencies may still exist, but do not use browser print/screenshot flows for official PDF output.
+- Export: service-side Chromium PDF rendering for official resume PDFs, `docx` for Word export.
 - Package manager: `npm` (lockfile present: `package-lock.json`)
 
 ## Repo Map
@@ -47,6 +47,12 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 - Do not commit secrets/tokens or hardcode new credentials.
 - Update `README.md` when commands or user-facing behavior changes.
 
+## Maintained Documentation
+
+- Follow the [UI conventions](./docs/ui-conventions.md) for shared styles, responsive layout and reusable controls.
+- Use the [authentication guide](./docs/auth-system-design.md) and [README](./README.md) for current behavior. Treat Agent roadmap and PRD files labeled historical as decision records. When replacing a design, update the current guide and label any retained historical plan with its replacement.
+- Before adding a component or fallback, look for the current entry point and existing implementations. For a compatibility path, record the input or deployment that still needs it and the condition for removal.
+
 ## PDF Export & Preview Agreements
 - Product promise: the resume editor preview should feel real-time, and the exported PDF should match the preview in layout, pagination, fonts, and content as closely as the current architecture allows.
 - Do not reintroduce `window.print()`, browser print CSS as the primary export path, DOM screenshot slicing, or full-page image PDF generation for official resume PDFs.
@@ -54,7 +60,7 @@ Repository-level guidance for coding agents (Codex, Claude Code, etc.).
 - Resume PDF output must not depend on the user's OS fonts, browser print implementation, local DPI, or installed Chinese font fallback.
 - The editor preview should remain lightweight and responsive. Do not generate a PDF on every edit; use HTML/iframe A4 preview for real-time editing and generate PDFs on explicit export or background save tasks.
 - Preview-only state such as JD analysis focus/highlight must not be included in official PDFs or cached as the normal resume preview.
-- If modifying resume rendering, keep these paths aligned: `src/utils/resumeHtmlRenderer.ts`, `scripts/resume-pdf-renderer.mjs`, `api/render-resume-pdf.js`, `scripts/pdf-render-server.mjs`, and the Vite dev middleware in `vite.config.ts`.
+- If modifying resume rendering, keep these paths aligned: `src/utils/resumeHtmlRenderer.ts`, `src/utils/resumeRenderShared.mjs`, `scripts/resume-pdf-renderer.mjs`, `api/render-resume-pdf.js`, `scripts/pdf-render-server.mjs`, and the Vite dev middleware in `vite.config.ts`.
 - If modifying pagination, verify multi-page resumes, long rich text, avatars/images, line-height changes, font switching, and JD analysis anchor scrolling.
 - For Vercel deployment, avoid bundling a full Playwright browser into the function. Prefer `playwright-core` plus the configured serverless Chromium package, and watch function size limits.
 - `VITE_PDF_RENDER_URL` should remain optional when same-origin `/render-resume-pdf` is available.

@@ -1,7 +1,6 @@
 # Resume Agent 总路线图（P0—P2）
 
-> 文档状态：规划基线
-> 适用分支：`agent-v2`
+> 历史规划与决策记录。当前入口、任务恢复及历史行为见 [README](../README.md#agent-任务隔离与恢复) 和 [ResumeAgentLauncher](../src/components/Agent/ResumeAgentLauncher.tsx)。
 > 更新日期：2026-08-22
 > 详细文档：[P0 MVP PRD](./resume-agent-p0-prd.md) · [P1 PRD](./resume-agent-p1-prd.md) · [P2 PRD](./resume-agent-p2-prd.md)
 

@@ -48,6 +48,16 @@ export interface JDScoreBreakdownItem {
 
 export type JDScoreBreakdown = Record<JDScoreBreakdownKey, JDScoreBreakdownItem>
 
+export interface ResumeAnalysisFocus {
+  section: JDAnalysisSectionId
+  itemKey?: string
+  problemText?: string
+  locked?: boolean
+  flash?: boolean
+  flashMode?: 'once' | 'repeat' | 'fade'
+  flashKey?: number
+}
+
 export type JDAnalysisSectionId = 'internships' | 'projects' | 'summary' | 'skills'
 
 export type JDSectionStatus = '重点优化' | '可小修' | '暂无问题'

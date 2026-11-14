@@ -13,6 +13,7 @@ import type { Application } from '../../types/application'
 import {
   type JDAnalysisResult,
   type JDAnalysisSectionId,
+  type ResumeAnalysisFocus,
   type SuggestionItem,
 } from '../../types/analytics'
 import type { SectionId } from '../../types/resume'
@@ -42,7 +43,6 @@ import {
 } from '../Analytics/jdAnalysis'
 import { Suggestions, type SuggestionInteractionTarget } from '../Analytics/Suggestions'
 import { Preview } from '../Preview/Preview'
-import type { ResumeAnalysisFocus } from '../Preview/PreviewContent'
 import { ResumeAgentConfigPanel } from '../Agent/ResumeAgentConfigPanel'
 import { ResumeAgentHeaderNotice } from '../Agent/ResumeAgentHeaderNotice'
 import { ResumeAgentTaskPanel } from '../Agent/ResumeAgentTaskPanel'

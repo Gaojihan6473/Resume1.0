@@ -6,7 +6,7 @@ import { StatusShareChart } from './StatusShareChart'
 
 interface RingOption { title: { text: string; subtext: string }; legend: { formatter: (name: string) => string }; series: { type: string; padAngle?: number; itemStyle?: { borderRadius: number } }[] }
 const chart = vi.hoisted(() => ({ option: {} as RingOption, events: {} as Record<string, (event: { selected: Record<string, boolean> }) => void> }))
-vi.mock('echarts-for-react', () => ({ default: ({ option, onEvents }: { option: RingOption; onEvents: typeof chart.events }) => { chart.option = option; chart.events = onEvents; return <div data-testid="status-ring" /> } }))
+vi.mock('./ReactChart', () => ({ ReactChart: ({ option, onEvents }: { option: RingOption; onEvents: typeof chart.events }) => { chart.option = option; chart.events = onEvents; return <div data-testid="status-ring" /> } }))
 vi.mock('./useChartResize', () => ({ useChartResize: () => ({ current: null }) }))
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }))
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })

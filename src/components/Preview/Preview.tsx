@@ -16,7 +16,7 @@ import {
 } from '../../utils/resumePdfPreviewSnapshot'
 import { isRichHtmlEmpty } from '../../utils/richText'
 import type { ResumeData } from '../../types/resume'
-import type { ResumeAnalysisFocus } from './PreviewContent'
+import type { ResumeAnalysisFocus } from '../../types/analytics'
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123

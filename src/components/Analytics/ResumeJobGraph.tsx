@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { ReactChart, type ChartInstance } from './ReactChart'
 import { useChartResize } from './useChartResize'
 import { Maximize2, Network } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
@@ -102,7 +102,7 @@ export function ResumeJobGraph({
 }: ResumeJobGraphProps) {
   const [focusedCategory, setFocusedCategory] = useState<FocusedCategory>(null)
   const [isTooltipSuppressed, setIsTooltipSuppressed] = useState(false)
-  const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
+  const chartRef = useRef<ChartInstance | null>(null)
   const restoreTooltipTimerRef = useRef<number | null>(null)
 
   useEffect(() => () => {
@@ -479,7 +479,7 @@ export function ResumeJobGraph({
       onMouseUpCapture={restoreTooltipSoon}
       onMouseLeave={restoreTooltipSoon}
     >
-      <ReactECharts
+      <ReactChart
         key={`resume-job-graph-${resetKey}`}
         ref={chartRef}
         option={option}

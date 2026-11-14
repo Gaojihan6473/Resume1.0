@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { ReactChart, type ChartInstance } from './ReactChart'
 import type { EChartsOption } from 'echarts'
 import type { InsightWidgetType } from '../../types/dashboard'
 import { APPLICATION_CHANNEL_LABELS, APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -16,7 +16,7 @@ function escapeHtml(value: string) {
 }
 
 export function InsightWidgetChart({ type, data }: Props) {
-  const chartRef = useRef<InstanceType<typeof ReactECharts> | null>(null)
+  const chartRef = useRef<ChartInstance | null>(null)
   const ref = useChartResize(chartRef, true, true)
   const rows = useMemo(() => {
     const groups = new Map<string, InsightRow>()
@@ -156,7 +156,7 @@ export function InsightWidgetChart({ type, data }: Props) {
   return <div className="insight-widget">
     <div ref={ref} className="analytics-chart">
       {!rows.length ? <div className="board-empty-chart">{type === 'companyRanking' && data.total ? '暂无可统计的公司名称' : '暂无投递数据'}</div>
-        : <ReactECharts ref={chartRef} option={option} notMerge style={{ height: '100%', width: '100%' }} />}
+        : <ReactChart ref={chartRef} option={option} notMerge style={{ height: '100%', width: '100%' }} />}
     </div>
     <p className="insight-chart-note">{note}</p>
   </div>
