@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createResumePdfPage, setResumePdfPageContent } from './resume-pdf-security.mjs'
+import { sanitizeResumeText } from '../src/utils/textSanitizer.ts'
 import {
   escapeHtml, isHtmlEmpty, normalizeResumeData, pt, renderEducation, renderLinesAsParagraphs, sanitizeRichHtml, textToHtml,
 } from '../src/utils/resumeRenderShared.mjs'
@@ -11,6 +13,63 @@ const repoRoot = path.resolve(__dirname, '..')
 
 const embeddedFontCssCache = new Map()
 export { sanitizeResumeText } from '../src/utils/textSanitizer.ts'
+
+// Keep the preview snapshot when supplied; structured data remains the fallback
+// for clients and saved versions without a paginated HTML snapshot.
+export function prepareResumePdfHtml(body) {
+  if (typeof body.html !== 'string' || !body.html.trim()) {
+    return buildResumePdfHtml(body.resumeData, typeof body.title === 'string' ? body.title : '')
+  }
+
+  const family = body.resumeData?.style?.fontFamily === 'serif' ? 'serif' : 'sans'
+  const fontCss = getEmbeddedFontCss(family)
+  const html = sanitizeResumeText(body.html)
+    .replace(/@font-face\s*{[\s\S]*?font-family:\s*['"]Resume(?:Sans|Serif)['"][\s\S]*?}/g, '')
+
+  if (/<\/style>/i.test(html)) return html.replace(/<\/style>/i, `\n${fontCss}\n</style>`)
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `<style>${fontCss}</style></head>`)
+  return `<style>${fontCss}</style>${html}`
+}
+
+// Runtimes own browser launch/reuse and cache invalidation. All entry points use
+// the same isolated page, font readiness, A4 options and bounded crash retry.
+export async function renderResumePdf(body, { getBrowser, releaseBrowser, onBrowserClosed }) {
+  const html = prepareResumePdfHtml(body)
+  const renderOnce = async () => {
+    const browser = await getBrowser()
+    let page
+    try {
+      page = await createResumePdfPage(browser)
+      await page.emulateMedia({ media: 'print' })
+      await setResumePdfPageContent(page, html)
+      await page.evaluate(() => document.fonts.ready)
+      return await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      })
+    } finally {
+      if (page) {
+        try {
+          await page.close()
+        } catch {
+          // The page may already be closed after Chromium exits.
+        }
+      }
+      await releaseBrowser?.(browser)
+    }
+  }
+
+  try {
+    return await renderOnce()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/Target page, context or browser has been closed|Target closed|Browser closed|browser.*closed/i.test(message)) throw error
+    onBrowserClosed?.()
+    return renderOnce()
+  }
+}
 
 function fontFileDataUrl(packageName, fileName) {
   const fontPath = path.join(repoRoot, 'node_modules', '@fontsource', packageName, 'files', fileName)

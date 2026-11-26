@@ -17,7 +17,7 @@
 
 - 已实现分析记录保存、读取、历史结果复用及重新分析入口。快速分析和 Agent 历史分别显示。
 - 重命名等扩展需求按当前入口逐项核对后再拆解。
-- 现行入口见 [编辑器分析区](../src/components/Editor/EditorAnalysisLayout.tsx)、[历史数据访问](../src/lib/api/jdAnalysisRecords.ts) 和 [README](../README.md#agent-任务隔离与恢复)。
+- 现行入口见 [编辑器分析区](../src/components/Editor/EditorAnalysisLayout.tsx)、[历史数据访问](../src/lib/api/jdAnalysisRecords.ts) 和 [Agent 任务指南](./agent-task-guide.md#任务隔离与恢复)。
 
 ## 3. 经历库与 JD 定制简历
 

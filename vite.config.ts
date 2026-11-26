@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { chromium, type Browser, type Page } from 'playwright-core'
+import { chromium, type Browser } from 'playwright-core'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -9,11 +9,10 @@ import tailwindcss from '@tailwindcss/vite'
 const MAX_DEV_PDF_BODY_BYTES = 5 * 1024 * 1024
 
 type ResumePdfRenderer = {
-  buildResumePdfHtml: (resumeData: unknown, title?: string) => string
-  getEmbeddedFontCss: (fontFamily?: string) => string
-  sanitizeResumeText: (value: string) => string
-  createResumePdfPage: (browser: Browser) => Promise<Page>
-  setResumePdfPageContent: (page: Page, html: string) => Promise<void>
+  renderResumePdf: (
+    body: { resumeData: unknown; title: string; html?: string },
+    options: { getBrowser: () => Promise<Browser>; onBrowserClosed: () => void }
+  ) => Promise<Buffer>
 }
 
 let rendererPromise: Promise<ResumePdfRenderer> | null = null
@@ -115,101 +114,14 @@ async function renderDevResumePdf(
   title: string,
   html?: string
 ): Promise<Buffer> {
-  return renderDevResumePdfWithRetry(resumeData, title, html)
-}
-
-function getRequestedFontFamily(resumeData: unknown): string {
-  return (
-    typeof resumeData === 'object' &&
-    resumeData !== null &&
-    'style' in resumeData &&
-    typeof (resumeData as { style?: { fontFamily?: unknown } }).style?.fontFamily === 'string' &&
-    (resumeData as { style: { fontFamily: string } }).style.fontFamily === 'serif'
-  )
-    ? 'serif'
-    : 'sans'
-}
-
-function stripResumeFontFaces(html: string): string {
-  return html.replace(/@font-face\s*{[\s\S]*?font-family:\s*['"]Resume(?:Sans|Serif)['"][\s\S]*?}/g, '')
-}
-
-async function injectEmbeddedResumeFonts(html: string, resumeData: unknown): Promise<string> {
   const renderer = await getRenderer()
-  const fontCss = renderer.getEmbeddedFontCss(getRequestedFontFamily(resumeData))
-  const htmlWithoutExternalFonts = stripResumeFontFaces(renderer.sanitizeResumeText(html))
-
-  if (/<\/style>/i.test(htmlWithoutExternalFonts)) {
-    return htmlWithoutExternalFonts.replace(/<\/style>/i, `\n${fontCss}\n</style>`)
-  }
-
-  if (/<\/head>/i.test(htmlWithoutExternalFonts)) {
-    return htmlWithoutExternalFonts.replace(/<\/head>/i, `<style>${fontCss}</style></head>`)
-  }
-
-  return `<style>${fontCss}</style>${htmlWithoutExternalFonts}`
-}
-
-function isClosedBrowserError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return /Target page, context or browser has been closed|Target closed|Browser closed|browser.*closed/i.test(message)
-}
-
-async function renderDevResumePdfOnce(
-  resumeData: unknown,
-  title: string,
-  html?: string
-): Promise<Buffer> {
-  const browser = await getConnectedBrowser()
-  let page: Page | null = null
-
-  try {
-    const renderer = await getRenderer()
-    page = await renderer.createResumePdfPage(browser)
-
-    await page.emulateMedia({ media: 'print' })
-    const content = html
-      ? await injectEmbeddedResumeFonts(html, resumeData)
-      : (await getRenderer()).buildResumePdfHtml(resumeData, title)
-    await renderer.setResumePdfPageContent(page, content)
-    await page.evaluate('document.fonts.ready')
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: {
-        top: '0',
-        right: '0',
-        bottom: '0',
-        left: '0',
-      },
-    })
-    return Buffer.from(pdf)
-  } finally {
-    if (page) {
-      try {
-        await page.close()
-      } catch {
-        // The page can already be closed when Chromium exits unexpectedly.
-      }
-    }
-  }
-}
-
-async function renderDevResumePdfWithRetry(
-  resumeData: unknown,
-  title: string,
-  html?: string
-): Promise<Buffer> {
-  try {
-    return await renderDevResumePdfOnce(resumeData, title, html)
-  } catch (error) {
-    if (!isClosedBrowserError(error)) throw error
-
-    browserPromise = null
-    console.warn('[resume-pdf-dev-server] Chromium was closed during render, retrying once.')
-    return renderDevResumePdfOnce(resumeData, title, html)
-  }
+  return renderer.renderResumePdf({ resumeData, title, html }, {
+    getBrowser: getConnectedBrowser,
+    onBrowserClosed() {
+      browserPromise = null
+      console.warn('[resume-pdf-dev-server] Chromium was closed during render, retrying once.')
+    },
+  })
 }
 
 function resumePdfDevServer(): Plugin {

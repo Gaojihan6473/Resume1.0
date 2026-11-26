@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { buildResumePdfHtml, createResumePdfPage, getEmbeddedFontCss, sanitizeResumeText, setResumePdfPageContent } from './resume-pdf-renderer.mjs'
+import { renderResumePdf } from './resume-pdf-renderer.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -69,12 +69,13 @@ function getAllowedOrigin(req) {
 
   if (configured.includes('*')) return '*'
   if (origin && configured.includes(origin)) return origin
-  return configured[0] || '*'
+  return null
 }
 
 function corsHeaders(req) {
+  const origin = getAllowedOrigin(req)
   return {
-    'Access-Control-Allow-Origin': getAllowedOrigin(req),
+    ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
     'Access-Control-Allow-Headers': 'authorization, content-type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     Vary: 'Origin',
@@ -193,11 +194,6 @@ function getLocalChromiumExecutablePath() {
   return LOCAL_CHROMIUM_EXECUTABLES.find((candidate) => fs.existsSync(candidate))
 }
 
-function isClosedBrowserError(error) {
-  const message = error instanceof Error ? error.message : String(error)
-  return /Target page, context or browser has been closed|Target closed|Browser closed|browser.*closed/i.test(message)
-}
-
 async function closeBrowserAfterRender(browser) {
   if (reuseBrowser) return
 
@@ -208,76 +204,15 @@ async function closeBrowserAfterRender(browser) {
   }
 }
 
-async function renderHtmlToPdfOnce(html) {
-  const browser = await getBrowser()
-  let page = null
-
-  try {
-    page = await createResumePdfPage(browser)
-
-    await page.emulateMedia({ media: 'print' })
-    await setResumePdfPageContent(page, html)
-    await page.evaluate(() => document.fonts.ready)
-    return await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      margin: {
-        top: '0',
-        right: '0',
-        bottom: '0',
-        left: '0',
-      },
-    })
-  } finally {
-    if (page) {
-      try {
-        await page.close()
-      } catch {
-        // The page can already be closed when Chromium exits unexpectedly.
-      }
-    }
-    await closeBrowserAfterRender(browser)
-  }
-}
-
-async function renderHtmlToPdf(html) {
-  try {
-    return await renderHtmlToPdfOnce(html)
-  } catch (error) {
-    if (!isClosedBrowserError(error)) throw error
-
-    browserPromise = null
-    console.warn('[pdf-render] Chromium was closed during render, retrying once.')
-    return renderHtmlToPdfOnce(html)
-  }
-}
-
-function getRequestedFontFamily(body) {
-  return body?.resumeData?.style?.fontFamily === 'serif' ? 'serif' : 'sans'
-}
-
-function stripResumeFontFaces(html) {
-  return html.replace(/@font-face\s*{[\s\S]*?font-family:\s*['"]Resume(?:Sans|Serif)['"][\s\S]*?}/g, '')
-}
-
-function injectEmbeddedResumeFonts(html, fontFamily) {
-  const fontCss = getEmbeddedFontCss(fontFamily)
-  const htmlWithoutExternalFonts = stripResumeFontFaces(sanitizeResumeText(html))
-
-  if (/<\/style>/i.test(htmlWithoutExternalFonts)) {
-    return htmlWithoutExternalFonts.replace(/<\/style>/i, `\n${fontCss}\n</style>`)
-  }
-
-  if (/<\/head>/i.test(htmlWithoutExternalFonts)) {
-    return htmlWithoutExternalFonts.replace(/<\/head>/i, `<style>${fontCss}</style></head>`)
-  }
-
-  return `<style>${fontCss}</style>${htmlWithoutExternalFonts}`
-}
-
-async function renderPdf(resumeData, title) {
-  return renderHtmlToPdf(buildResumePdfHtml(resumeData, title))
+async function renderPdf(body) {
+  return renderResumePdf(body, {
+    getBrowser,
+    releaseBrowser: closeBrowserAfterRender,
+    onBrowserClosed() {
+      browserPromise = null
+      console.warn('[pdf-render] Chromium was closed during render, retrying once.')
+    },
+  })
 }
 
 async function handleRender(req, res) {
@@ -301,9 +236,7 @@ async function handleRender(req, res) {
   }
 
   try {
-    const pdfBuffer = typeof body.html === 'string' && body.html.trim()
-      ? await renderHtmlToPdf(injectEmbeddedResumeFonts(body.html, getRequestedFontFamily(body)))
-      : await renderPdf(body.resumeData, typeof body.title === 'string' ? body.title : '')
+    const pdfBuffer = await renderPdf(body)
     sendPdf(req, res, pdfBuffer)
   } catch (error) {
     console.error('[pdf-render] Render failed:', error)

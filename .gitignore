@@ -29,3 +29,10 @@ supabase/.temp/
 
 # Local validation caches
 .cache/
+.tmp/
+output/
+coverage/
+
+# Local CLI installation artifacts
+/package/
+/supabase-2.90.0.tgz

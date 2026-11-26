@@ -1,151 +1,75 @@
 # Resume Parser & Editor
 
-A React + TypeScript + Vite app for importing resumes (`PDF/DOCX/TXT`), extracting structured fields, editing content, previewing A4 layout, and exporting to `PDF/Word`.
+面向求职流程的简历解析与编辑应用：管理招聘批次，导入 PDF / DOCX / TXT，在可视化表单中编辑并实时预览 A4 简历，导出 PDF / Word，关联岗位、查看投递看板，并使用 Resume Agent 创建独立的岗位版本。
 
-## Features
+## 本地启动
 
-- Upload and parse resume files
-- Source-backed AI import with page images for PDFs, native DOCX/TXT content, completeness checks, and rule-based fallback
-- Edit student work, awards, and other supplementary content as multiline entries in 技能与其他
-- Visual editor + live A4 preview from the same HTML used for PDF export
-- Save/load resumes with Supabase
-- Global new/import actions ask for a recruitment batch when needed, then open the editor or upload dialog once; the destination remains interactive after the handoff.
-- Saving preserves edits made while the request is in flight; responses from another document cannot replace the current editor. Closing an import or switching documents cancels the previous parse.
-- “保存并切换”在新草稿保存并补全编辑器 URL 后仍会前往原目标页面；后台缩略图只发布到对应 PDF 版本，版本已变化时跳过本次更新。
-- Track applications in a customizable dashboard with nine repeatable modules, global filters, draggable/resizable layouts, and account-scoped cloud saves
-- The jobs page uses two soft white panels: 我的简历 initially shows only a searchable thumbnail list; selecting a resume reveals its preview and separate edit button below the list. Selecting it again or using 取消选择 hides the preview and returns the space to the list. 我的岗位 keeps compact cards, job/company search, filters, card/list switching and creation inside its panel. Switching views preserves the search, filters and selected resume. Selection gently highlights linked jobs without hiding other jobs. Narrow screens stack the panels and job cards. JD analysis remains inside the resume editor.
-- The jobs page panels use fine borders without outer shadows. When a resume is selected, its preview and guidance share a near-white gradient across the bottom of 我的简历, with a soft shadow along the top edge.
-- On wide desktop screens, the jobs workspace expands with the viewport instead of stopping at 1480px. Outer spacing is a compact 28–48px; space recovered by narrowing both margins goes entirely to the left resume panel, preserving the jobs panel's width at the same viewport. Tablet and phone layouts stay the same.
-- 我的简历 shows the number of resumes in the current batch scope. Both lists keep native scrolling and a stable scrollbar gutter; scrollbar thumbs appear while scrolling and fade after one second of inactivity, without shifting the content.
-- Clicking the selected resume's preview opens an enlarged, centered image overlay. Close it with the top-right button, by clicking outside the image, or with Escape; the current resume selection is preserved and keyboard focus returns to the preview.
-- Job cards use a compact “公司 - 岗位” title, with a semibold company name and a readable muted-blue role; the second line shows the location with a pin icon, resume/channel association and application date. Full titles remain available on hover when truncated.
-- The jobs panel's list view uses borderless rows with faint inset separators and a square-cornered soft blue hover background extending 10px beyond each separator endpoint and meeting the separators above and below; keyboard focus remains visible.
-- The “新建岗位” menu matches its trigger's 12px text, 15px icons and compact spacing for “图文解析” and “手动填写”.
-- 岗位表单中，点击「关联简历」旁的问号可查看提示：岗位与简历需属于同一批次才能建立关联。
-- The signed-in homepage shows recruitment batch cards and two side-by-side white panels of recently edited resumes and jobs, with the latest three items in each list. Visible category headings and subtle dividers organize compact rows; only the jobs heading offers a borderless text-and-arrow link to view all jobs. Narrow screens stack the panels. Each batch opens an independent workspace with the existing resume/job cards and responsive pagination.
-- Recent rows provide a square-cornered soft blue hover/keyboard-focus background and a right arrow, without edit/view action text. Job status badges align to the right beside the arrow. Batch links have independent hover feedback; clicking the rest of a row opens its resume or job. Motion follows the system's reduced-motion preference.
-- “我的” is a cross-batch library with 简历 / 岗位 / 批次 tabs, keyword and batch filters, job status filtering, and 5-item “加载更多” browsing. Returning from a detail/editor page restores filters, loaded rows and scroll position during the signed-in session; signing out clears that position history. Resume actions remain visible, creation follows the selected batch (or asks for one), and copies retain their original batch without job links.
-- Library search keeps typing responsive and waits for Chinese IME composition to finish before updating filters and the URL. Typing or clearing a keyword preserves the current scroll position and other selected filters.
-- The account section sits above the library. Compact rows use clear title/secondary-text hierarchy using the homepage background, white cards and shared blue accents; batch descriptions and job timestamps remain in detail views or tooltips. Library rows show batch ownership and resume/job associations. Clicking a resume's linked-job count opens its batch on the jobs page and selects that resume for the existing highlight behavior; all jobs in that batch remain visible. Deleting a resume preserves jobs and removes their resume link. Library refresh is independent of saving: only an unsaved draft shows the shared “保存当前草稿” action, and partial loading failures preserve cached data with explicit retry messages.
-- JD analysis runs inside the resume editor with a viewport-height input panel; the editor column stays fixed while long JD content scrolls inside the text area
-- Resume Agent uses a global launcher that expands upward to select a base resume and target job, then creates an independently reviewable job-specific version without overwriting the base resume. It is available to authenticated users by default.
-- The launcher task list uses compact single-line rows with color-coded status badges and scrolls when more tasks are present.
-- Hover the top-left brand area to open the side navigation; it closes after the pointer leaves the trigger and sidebar.
-- Dropdowns share one visual style across job forms, batch controls, the editor toolbar, font sizes, and JD history, with keyboard selection and menus that stay above scroll containers.
-- Imported resumes default to left-aligned basic information, regardless of the name's position in the source file.
-- 批次删除确认按钮在请求准备、删除和列表刷新期间显示“删除中”并保持禁用；失败后恢复“确认删除”，可重试。
-- Imported dates default to the right. Education details include college, major, degree and GPA in preview, PDF and DOCX. Personal tags and school locations without a direct output slot are retained in “其他补充” with a review warning; unmatched source content continues to be retained for review.
-- PDF, DOCX, TXT and scanned imports use a fixed 9px body size (10px section headings and 15.3px name), including rule/legacy fallbacks. Body sizes remain manually editable after import; saved resumes keep their existing sizes.
-- Export vector PDF / DOCX
-- Education school tags use a compact row with 985/211 shortcuts and custom labels such as “QS 前 50”. Click + to open the inline input, confirm with Enter or ✓, click a custom tag to rename it, and remove it with ×. The input collapses after saving or cancelling; custom tags persist in saved resumes, previews, PDF and DOCX exports.
-
-开发入口见 [AGENTS.md](./AGENTS.md)、[日常开发与验收](./docs/development-workflow.md)、[UI 约定](./docs/ui-conventions.md)和[密钥登录与云同步](./docs/auth-system-design.md)。
-
-## Tech Stack
-
-登录、岗位、面板、个人库和简历编辑界面按访问加载。看板只打包使用中的 ECharts 模块，PDF 缩略图渲染器在实际生成缩略图时加载。
-
-- React 19
-- TypeScript
-- Zustand (state)
-- Vite 8
-- Tailwind CSS 4
-- pdfjs-dist / mammoth (text extraction)
-- Playwright PDF rendering + docx (export)
-
-## Scripts
+使用 Node.js 24 和 npm，依赖版本由 `package-lock.json` 锁定。
 
 ```bash
+npm ci
 npm run dev
-npm run pdf:server
-npm run lint
-npm run build
-npm test
-npm run test:batches
-npm run test:storage
-npm run test:workspace
-npm run eval:resume-agent
-npm run preview
-npm run check:encoding
-npm run check
-npm run check:core
-npm run check:acceptance
 ```
 
-日常开发、测试与验收遵循 [项目工作流](docs/development-workflow.md)，并由 `AGENTS.md` 引导后续编码代理执行：行为改动先建立失败用例、修复前查根因、交付前以当前验证结果为准。`check` 是日常代码基线，`check:core` 增加数据库/权限/Agent 回归，`check:acceptance` 自动管理本机服务并运行浏览器与 PDF 验收，无需生产凭证或手动启动 Vite。验收使用合成数据；真实模型、生产服务和多设备并发需要另行验证。GitHub CI 配置见 `.github/workflows/quality.yml`，提交推送后运行；分支保护和发布门禁需独立配置。
+本地运行需配置 `.env` 中的 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 与 `VITE_EDGE_FUNCTIONS_URL`。项目与凭证配置见[密钥登录与云同步](./docs/auth-system-design.md)。模型密钥和服务端凭证只配置在服务端，不使用 `VITE_` 前缀。
 
-“我的”页面在账号与资料列表下提供独立的 **Agent 分析** 模块，按时间倒序汇总当前账号已保存的 Agent 分析。支持按简历、公司、岗位搜索；资料列表和分析历史均首次展示 5 条，点击“加载更多”每次追加 5 条；展开记录可查看匹配结果、优化建议、失败原因与当时的职位描述，也可打开关联简历。历史详情按需加载；列表仅显示一次岗位信息，展开后以分析报告的形式按分析摘要、岗位匹配、优化建议分区呈现，通过标题、编号和分隔线组织内容。优化建议可逐项展开，默认展开首项；内部展开使用加减号，与记录层的上下箭头区分。详情区域收窄居中，栏目刻度和实线／虚线区分不同内容层级。每条记录支持通过右侧删除图标确认删除，仅删除该条分析历史，关联简历、岗位及已生成版本保留。普通 JD 分析不混入此列表。
+Vite 开发服务直接提供同源 `/render-resume-pdf`，需要已安装的 Chrome / Edge 或 Playwright Chromium。可通过 `PDF_CHROMIUM_EXECUTABLE_PATH` 指定浏览器路径。无需单独启动 PDF 服务即可开发预览和导出。
 
-删除简历或岗位时，默认保留 Agent 分析历史及当时的内容快照；删除确认框可勾选“同时删除相关 Agent 分析历史”，通过数据库事务一并清理，失败时不做部分删除。没有相关 Agent 历史时，勾选后仍可正常删除。此功能依赖 `supabase/migrations/20261103024933_agent_history_source_lifecycle.sql`，缺少迁移时界面会提示分析历史删除服务暂不可用。确认框仅显示勾选项和勾选后的永久删除提示。普通 JD 分析历史与已生成的简历版本保留。历史详情明确标注基于分析时的内容，来源删除或不可访问时显示提示，并移除失效的简历入口；来源查询失败可重试，打开简历前会再次确认。数据库也会拒绝来源删除后迟到的分析记录写入。
+## 主要能力
 
-此功能的发布顺序：先应用 `supabase/migrations/20261103024933_agent_history_source_lifecycle.sql`，再发布前端。新增函数使用调用者权限并校验有效凭证；未应用迁移时，勾选清理会报删除失败，不会退回到只删源数据。
+- 招聘批次、跨批次个人库和岗位关联管理。
+- AI 与规则解析导入，保留来源内容与待核对提示。
+- 可视化编辑、HTML / iframe 实时预览、中文字体和多页布局。
+- 服务端 Chromium 矢量 PDF、DOCX 导出及不可变 PDF / 缩略图版本。
+- 账号隔离的云端保存、未保存修改保护和异步请求隔离。
+- 自定义投递看板、JD 分析与可独立审核的 Resume Agent 岗位版本。
 
-## Notes
+前端使用 React 19、TypeScript、Vite 8、Tailwind CSS 4 和 Zustand；解析使用 pdfjs-dist / mammoth，云端数据与鉴权使用 Supabase，导出使用 Playwright Chromium / docx。
 
-- AI resume import uses DeepSeek `deepseek-flash` through the `deepseek-chat` Edge Function. PDFs send bounded inline page images and positioned text blocks; DOCX/TXT send native content blocks. Model output identifies sections and source block references; the client assembles the original text, checks missing or conflicting blocks, retries the affected region once, and retains uncertain text in 其他补充 with a review warning. Rule parsing remains available if AI fails. Scans that cannot be read show an upload warning. Old `.doc` files require conversion to DOCX or PDF before upload.
-- PDF imports keep the source section order, infer name/date alignment and body font size from text coordinates, remove header text already represented by fields, and join physical PDF line wraps inside each content item. The editable preview preserves the source's text layout where possible; photographs and decorative color blocks are not reconstructed. A resume with no uploaded avatar does not show a placeholder image.
-- Set `VITE_RESUME_IMPORT_MODE=legacy` only to roll back resume import to the previous MiniMax route. This does not remove the new data categories. Keep `MINIMAX_API_KEY` on the Edge Function for this rollback and existing MiniMax calls; never use `VITE_` for API keys.
-- JD analysis calls are proxied through the `deepseek-chat` Supabase Edge Function and use `deepseek-v4-flash`. Configure `DEEPSEEK_API_KEY` on the Edge Function environment; do not expose it as a `VITE_` frontend variable.
-- Existing resumes are normalized on read: absent `studentWork`, `awards`, and `other` arrays become empty arrays. New content survives editing, saving, copying, preview, PDF, and Word export. Import status shows 读取文件、识别内容、检查完整性 and, when needed, 补充识别. Requests are isolated so cancelling or uploading a new file cannot apply an earlier result.
-- Resume Agent uses the separate `resume-agent` Edge Function. The frontend is enabled by default and can be rolled back per environment with `VITE_RESUME_AGENT_ENABLED=false`; keep server-side `RESUME_AGENT_ENABLED=true` after deploying the function. The default Eval command validates 20 synthetic fixtures locally; add `-- --live` only for an explicit local DeepSeek run.
-- Login uses the `auth-sign-in` Supabase Edge Function: it verifies an `sk-...` key against `public.valid_keys`, then exchanges a server-generated magic-link token for a Supabase Auth session. Configure `SUPABASE_SERVICE_ROLE_KEY` for auth and AI Edge Functions.
-- The `resumes` storage bucket is private. The frontend stores object paths in `file_url` / `preview_url` and resolves them to signed URLs when rendering.
-- Apply `supabase/migrations/20261030022811_close_resume_storage_public_access.sql` to remove legacy public/owner-only Storage policies that can bypass account isolation or key revocation. Active owners retain access to versioned assets and legacy `previews/<resume-id>.png` thumbnails. `npm run test:storage` reproduces the old anonymous access and verifies anonymous, cross-account, revoked-key and normal owner operations against the migration. Previously issued signed URLs are bearer links and can remain usable until expiry; changing RLS does not revoke those links.
-- Generated PDFs and thumbnails use a new immutable object path for each version. Copies may share the saved snapshot, while later saves of the original write new objects and leave that snapshot intact. Existing fixed-path snapshots remain readable for their original resume and are no longer overwritten by new saves. Historical copies pointing at another resume's mutable PDF fall back to their own structured content; their next save creates fresh assets.
-- Clearing imported personal-summary text is an explicit edit; saving does not restore the legacy text/highlights fields.
-- The editor preview renders the same A4 HTML document that is sent to Playwright for PDF export. In local `npm run dev`, Vite serves `/render-resume-pdf` directly. On Vercel, `/render-resume-pdf` is rewritten to the Node Function in `api/render-resume-pdf.js`. For a separate render service, set `VITE_PDF_RENDER_URL`.
-- Official PDF export uses server-side Chromium. Browser acceptance also reimports an exported DOCX through the actual importer to check XML parser compatibility.
-- All PDF render entry points isolate client HTML: document scripts and network requests are disabled, active elements/attributes are removed, and only embedded `data:` images/fonts load. The normal avatar uploader already supplies an embedded image. Pagination geometry and server-embedded Chinese fonts are retained. Run `node scripts/pdf-render-security.check.mjs` with local Chromium to verify blocked requests, multipage Chinese text, and avatars.
-- Signing out clears local credentials before attempting remote revocation, so a network outage cannot restore the local session on reload. Remote revocation is best effort with a five-second timeout; local cleanup failures remain visible instead of reporting success.
-- In the Manage Batch drawer, clicking outside the drawer saves batch information changes before closing. If saving fails, the drawer stays open and shows the error.
-- For production, set `ALLOWED_ORIGINS` on auth Edge Functions to a comma-separated list of trusted browser origins.
-- Production build uses code splitting for parser/export modules.
-- Import logs contain only stage, timing, block counts, and error category; raw resumes, images, and credentials must not be logged or committed. No cross-user parsing cache is used.
+## 开发与验证
 
-### Resume import release order
+| 命令 | 用途 |
+| --- | --- |
+| `npm run dev` | 本地开发，包含 PDF 渲染入口 |
+| `npm run build` / `npm run preview` | 生产构建 / 本地预览构建 |
+| `npm run pdf:server` | 启动独立 PDF 渲染服务 |
+| `npm test` | 单元、组件及 PDF 服务回归测试 |
+| `npm run check` | lint、测试、构建、编码检查 |
+| `npm run check:core` | 基线检查及数据库、Storage 权限、Agent 合成评测 |
+| `npm run check:acceptance` | 自动启动本地服务，运行 PDF 与浏览器工作流验收 |
+| `npm run check:acceptance -- --pdf` | 仅 PDF 安全、中文字体与分页验收 |
+| `npm run check:acceptance -- --workspace` | 仅工作区、导入、保存与导出浏览器验收 |
 
-Run `npm test`, `npm run lint`, `npm run build`, and `npm run check:encoding`; verify multi-page previews and PDF/DOCX exports. Release the compatible `deepseek-chat` Edge Function and PDF renderer first, then the frontend. The renderer normalizes old and new resume data. Confirm `VITE_SUPABASE_URL` and `VITE_EDGE_FUNCTIONS_URL` point to the intended Supabase project before a release. This change does not deploy those services automatically.
+独立检查还有 `npm run lint`、`npm run check:encoding`、`npm run test:batches`、`npm run test:storage` 和 `npm run eval:resume-agent`。`npm run test:workspace` 是需要已启动服务的底层脚本，日常优先使用自动管理服务的验收入口。
 
-### 批次工作空间与迁移
+完整流程见[日常开发与验收](./docs/development-workflow.md)：行为变更先建立失败证据，交付前运行受影响检查。验收使用合成数据、隔离数据库与模拟 AI / Storage，不代表生产服务或真实模型已验证。CI 见[quality.yml](./.github/workflows/quality.yml)，分支保护和发布门禁需单独配置。
 
-- 未登录首页隐藏左侧导航栏和导航展开箭头，悬停品牌不会打开侧栏。导航气泡仅在登录且会话恢复完成后首次提示；关闭后在当前浏览器内不再展示。
-- 未登录首页采用铺满首屏的浅蓝渐变、居中品牌介绍、导入/空白创建双入口和三步流程，适配桌面、平板与手机。示例采用完整 A4 比例、虚构的工作/项目成果与教育技能信息；手机端将版本切换移至纸张上方。交互示例可切换基础版及岗位版本，只展示合成内容，不创建真实简历；导入与创建沿用登录验证。小鱼气泡与工作台框边缘重叠，轻浮动在悬停或键盘聚焦时暂停；点击小鱼可循环切换简短提示。示例切换同步更新右侧岗位重点，问号说明支持 Esc、点击外部和失焦关闭。密钥登录页与登录提示弹窗统一使用浅蓝色系、简洁线性图标与轻阴影，保留原有密钥验证及登录跳转，返回首页按钮位于登录卡片外左上方，与卡片左边缘对齐，支持明确的悬停、按下和键盘聚焦反馈；登录提示弹窗打开后聚焦登录，焦点限制在弹窗内，支持遮罩/Esc/按钮关闭并返回原入口。按钮支持键盘焦点、触屏操作及减少动态效果设置。
-- 总首页展示平级批次，按创建时间倒序排列。批次可自定义名称、说明和预设主题色，并可独立选择 15 款插画卡面或“纯色”。新建与管理批次都提供缩略图和即时预览；插画半透明展示在卡片右侧，点击区域、文字及菜单保持可用。最近简历和岗位分别按编辑时间倒序展示最近 3 条，不提供翻页；后台 PDF 和缩略图生成不改变编辑排序。
-- 首页仅纵向滚动。最近编辑采用双栏白色面板：桌面左侧简历、右侧岗位，各展示最近 3 条，窄屏上下堆叠。分类标题显示图标和当前展示数量，简历不设“查看全部”，岗位右上角提供无底色、无边框的文字加箭头链接进入全部岗位。每类内容共用一个圆角面板，内部通过细分隔线和留白组织紧凑条目，不为每条记录单独设置卡片边框和阴影；条目桌面高度为 100px。简历配缩略图与名称，岗位配统一图标、公司、状态和岗位名称；所属批次与编辑时间紧邻排列，批次可独立点击，条目支持整行打开和键盘焦点。求职方向、地点、投递渠道、关联简历和投递日期可在编辑页或详情查看。
-- 求职空间、最近编辑与批次详情共用开放式模块标题：左侧实色竖向色条（首页采用雾蓝）、加粗标题（桌面 21px、手机 19px）和底部低对比度、两端渐隐的横向分隔线，不显示标题左侧装饰图标；详情页色条和分隔线随批次主题色变化。长批次名称截断显示，详情页不显示标题下方的批次说明，右上角仅保留“管理批次”按钮，不显示批次切换下拉框。岗位/统计页范围和管理侧栏中的来源/目标批次均复用统一下拉组件，展开菜单浮于侧栏之上；按 Esc 先收起下拉菜单。
-- `/batches/:batchId` 展示该批次的简历和岗位，正文标题使用“求职空间 > 当前批次”面包屑；点击“求职空间”返回首页，支持悬停、按下和键盘聚焦反馈，顶部品牌旁不显示导航。新建、上传和岗位解析自动使用当前批次。`/editor?resumeId=...` 支持直接打开、刷新恢复及未保存修改保护。岗位页、面板使用 `?batch=...` 统一范围，省略时查看全部批次。
-- 批次详情中的岗位卡片按最近修改时间倒序排列，先排序再分页；修改岗位信息或状态后，返回批次详情或刷新页面时，最近修改的岗位排在最前。
-- 面板页提供个人可自定义看板，保留浅蓝背景、白色细边框和紧凑控件。默认第一行依次为总投递数、面试中、测评中、常用渠道，第二行左侧为状态分布、右侧为关系图谱，两张图表等宽等高；新账号及「恢复默认布局」使用此六模块排版，已保存的自定义布局保持不变。模块库提供七种数值模块与三种图表模块；模块库为每种模块展示数字卡、柱状图、关系图或环形图的缩略预览，预览标注为示例，添加后展示全局筛选下的实际数据。支持重复添加和独立改名，所有模块由全局筛选联动。宽度至少 1100px 时点击「编辑看板」，通过标题把手直接拖动位置，拖动左侧、右侧、底部边缘或右下角直接缩放，不再提供尺寸设置菜单；横向移动和缩放均以默认小卡片宽度的 1/4（整行的 1/16）为一个吸附步长，松手后落到最近吸附点，并保留最小尺寸与容器边界；统计卡使用两档高度，图表使用三档高度。操作中卡片轻微透明悬浮并实时跟随鼠标，浅色占位框预告吸附位置，靠近网格轨道或相邻边缘时自动吸附，不展示贯穿页面的对齐线，松手后落入吸附点，保存并刷新后保留调整后的尺寸。模块自动避让，页面纵向滚动；第一行未填满时，也可把模块放到已有内容的第二行，不会为了填补上方空位自动拉回第一行；纵向手动拖动以默认小卡片高度的 1/4 为一步，模块让位与复位规则见下方说明；若空出整单位高度的空行，后续行自动按整单位上移补齐；被当前拖动或缩放临时挤下去的模块，在挤压解除后恢复到本次操作前的位置，主动放到第二行的模块则保留所在行。编辑操作采用「图标＋添加／重置／取消／保存」的紧凑按钮，悬停可查看完整说明。保存才写入账号唯一的云端配置，取消恢复原配置；恢复默认布局同样需要保存，清空全部模块也可保存。手机单列、平板自动排列，仅浏览与全局筛选，不覆盖桌面布局。
-- 看板仅提供全局筛选：页面顶部以无底框单行工具栏呈现标题、时间／简历／批次筛选和编辑入口，三个筛选入口统一图标、文字和箭头间距，以短竖线和等距留白区分，窄屏隐藏分隔线，窄屏自动换行。时间、简历、批次处于「全部」时保持无底框，选中具体条件后以正常字重的柔和暖棕文字、同色系图标和图标右上角的小状态点提示当前筛选，不增加常驻底色或外框，恢复「全部」后取消高亮。时间菜单提供全部时间、近 7 天、近 30 天、本月和自定义日期，简历筛选采用相同的轻量入口，支持连续勾选多份简历及「未关联简历」，选中多项时显示「已选 N 份简历」，统计与图表合并所选范围；取消全部勾选或选择「全部简历」恢复不限简历，旧单选链接保持兼容。点击「重置筛选」会同时清除时间、全部简历选择和批次；仅选中批次时也显示重置入口。快捷范围按北京时间自然日计算并包含今天，自定义日期复用岗位页的 CalendarInput 日历，在浮层内选择起止日期，点击「应用日期」后所有模块同步更新；取消不改变筛选。旧链接的近一／三／六个月条件仍兼容。条件保留在 URL 中，刷新后继续使用；编辑布局不重置全局筛选，模块配置不再保存筛选条件，旧配置中的模块筛选会被忽略。所选简历已删除或不在当前批次时提示在顶部重新选择，不自动扩大范围。自选日期按北京时间自然日包含首尾日期；时间筛选使用投递日期，缺失时使用创建日期。状态统计代表所选时期投递岗位的当前状态；渠道和逐周投递数量趋势排除「感兴趣」，不表示历史面试次数或状态流转。岗位明细仍在岗位页查看。
-- 「添加模块」弹窗内通过「数值型／图表型」Tab 切换浏览，展示分类数量，支持左右方向键及 Home／End，滚动列表时标题和分类保持可见。新增数值模块为待投递、已投公司、未关联简历，沿用旧四卡的标题、主数值和单行辅助说明，分别补充涉及公司数、投递总数、未关联岗位占已投递的比例。图表型仅提供状态分布、关系图谱、状态占比。状态占比使用圆角环段、中心岗位总数与数量／占比图例，窄模块自动改为上下布局；点击图例筛选时中心数量和占比分母同步更新，空数据明确提示。岗位总数包含「感兴趣」，公司和未关联计数排除收藏，公司名去除首尾空格后去重并忽略空名称。全部模块跟随全局筛选，已有默认布局不自动改变；旧配置中的历史类型保持读取兼容。
-- 默认两张图表初始各占半行，最小宽度为整行的 1/3，可继续向内缩小并保存。拖动模块时，横向及纵向重叠均达到对应较小尺寸的 75% 才触发让位；拉伸使用独立的空间让位规则：左边、右边、下边和右下角拉入下一有效尺寸（左侧拉伸固定右边缘）并占用邻居空间时，邻居向下避让，不要求达到移动的覆盖比例；同一次编辑中缩回后邻居复位，松手保留尺寸与让位结果，保存刷新后恢复这份布局。让位距离按拖动模块高度计算，不再将高图表限制为四格，拖离后邻居恢复原位。
-- 面板首次加载配置或岗位数据时，使用与首页一致的浅色圆角卡片骨架和呼吸动画，窄屏自动堆叠；启用减少动态效果时静态展示。已有岗位数据的后台刷新保留当前面板，加载失败继续显示错误和重试入口。
-- 看板保存成功后显示「看板已保存」，复用现有成功 toast 的样式和自动消失时长；保存中、保存失败及账号切换后的过期响应不显示成功提示。
-- 状态分布的横轴名称在空间充足时水平显示，拥挤时向右下方倾斜 30°（旋转角度 -30°）；模块缩放或横轴缩放后重新判断，长名称按可用宽度省略。
-- 看板上线前需先应用 `supabase/migrations/20261108094726_customizable_dashboard.sql`，然后发布前端。新增 `dashboard_configs` 表及 `save_dashboard_config` RPC，由 RLS 限制本人及有效登录密钥访问，修订号防止多窗口静默覆盖。缺少迁移、加载失败、保存失败或版本冲突会明确提示，不会用默认布局覆盖已有配置。数据库验证纳入 `npm run test:batches`，看板浏览器验收纳入 `npm run check:acceptance -- --workspace`；本地验收使用隔离数据库和模拟传输，不代表生产服务验证。
-- 设置 `WORKSPACE_ANALYTICS_ONLY=1` 后运行工作区验收，可仅执行看板专项（报告明确标为 `Dashboard interactions only`），用于快速复现图表、网格和筛选问题；叠加 `WORKSPACE_WIDGET_LIBRARY_ONLY=1` 可仅运行模块库、默认图表缩小、让位阈值、状态占比及筛选持久化专项；再叠加 `WORKSPACE_RESIZE_ONLY=1` 可单独验证拉伸让位、缩回复位、跨手势及保存刷新；完整工作区验收应不设置该变量。当前运行项目 `resume-parser` 已于 2026-11-08 应用看板迁移并核对 RLS、匿名访问拒绝及函数执行权限；真实账号的完整操作仍需与本地合成验收区分。
-- 简历编辑页顶部直接显示工具栏，不额外展示“返回批次 / 所属批次”导航行；侧栏在“首页”和“岗位”之间显示“空间”，点击返回当前简历所属批次的详情页，其他页面不显示此入口。未保存修改仍需确认。
-- 简历工具栏的“重置”会先打开确认弹窗。确认后将字体、行高、间距和页边距恢复为默认值，简历内容会保留。点击“取消”或按 Esc 可保留当前样式。
-- 首页卡片菜单和详情页共用管理抽屉；批次详情页的卡片不显示多选框，也不提供“移动 / 复制”或“移动岗位”快捷入口，统一进入“管理批次 → 内容管理”后搜索、多选、移入、移出和复制简历。移动简历会带走全部关联岗位；单独移动岗位会在目标批次复制其关联简历，同次操作共享一份副本。选好来源/目标批次与内容后，点击“移动”直接执行，不再展示移动预览确认页；后台仍校验关联内容，复制简历保留影响清单确认；“删除批次”以红色描边按钮与“保存修改”并列；首页卡片菜单点击“删除批次”直接弹出确认窗口，不打开管理侧栏；侧栏内点击“删除批次”也使用同一弹窗，不再展开下方的删除区域或展示预览页。有内容时在弹窗中选择接收批次，确认后整体迁移并删除；空批次确认后直接删除。
-- 简历副本使用新的 ID 和来源标记独立编辑，不复制 JD 分析和 Agent 历史；复制时可引用同一份不可变 PDF/缩略图快照，后续保存写入新的资源路径，不改变其他副本。已有记录移动保留 ID 和历史。删除非空批次必须整体迁移到另一个批次，不生成副本；空的最后一个批次可直接删除。
-- 迁移脚本为 `supabase/migrations/20261007_recruitment_batches.sql`。为每个已有用户创建“默认批次”并回填已有内容，保留原 ID 与关联。新用户仅初始化一次；主动删除后不会自动重建。旧客户端未传 `batch_id` 的创建请求优先沿用关联简历批次，否则使用现存默认/最早批次；没有批次时明确报错。
-- 插画卡面上线前需应用 `supabase/migrations/20261008_batch_card_styles.sql`，为批次增加 `card_style` 字段；已有批次默认“纯色”，选项随批次同步保存。生成素材位于 `public/batch-covers/`，采用带透明通道的 WebP；生成提示词和风格清单见该目录的 `prompts.json`。
-- 数据库使用用户隔离、批次归属与同批次简历关联约束。预览与执行 RPC 复核影响集合，关联变化要求重新确认；批量操作使用事务与请求 ID，防止部分迁移和重复生成副本。
+## PDF 与部署
 
-上线时先核对 `.env` 的 `VITE_SUPABASE_URL` / `VITE_EDGE_FUNCTIONS_URL` 与 CLI 项目，目标应为 `resume-parser`（`xvtklyowohmuqrolmgka`）。先通过 Supabase CLI 登录或配置 `SUPABASE_ACCESS_TOKEN`，查看待执行迁移，再应用数据库迁移、发布 `resume-agent` Edge Function 和前端；不要先发布依赖新表的前端。
+编辑时使用轻量 HTML / iframe 预览，导出或后台保存时才生成 PDF。正式 PDF 通过 `/render-resume-pdf` 使用受控 Chromium、A4 页面、嵌入中文字体与矢量文字；预览分析高亮不进入正式输出。
 
-`npm run test:batches` 在隔离的 PGlite PostgreSQL 中执行实际迁移，覆盖回填、用户隔离、移动/复制/删除、重复提交、并发变更和事务回滚。`npm run test:workspace` 需要先启动 `npm run dev -- --host 127.0.0.1 --port 5175`，使用本机 Chrome/Edge；可通过 `WORKSPACE_TEST_URL`、`PDF_CHROMIUM_EXECUTABLE_PATH` 覆盖地址与浏览器路径。浏览器请求接入隔离数据库，不写入远程 Supabase，截图位于 `.cache/batch-check/`。
+- 本地开发：Vite 中间件。
+- Vercel：同源路径重写到 `api/render-resume-pdf.js`，配置见 [vercel.json](./vercel.json)。
+- 独立服务：`npm run pdf:server`，前端通过可选的 `VITE_PDF_RENDER_URL` 指向服务。
 
-### Agent 任务隔离与恢复
+三个入口共用 `scripts/resume-pdf-renderer.mjs` 的字体注入、隔离页面、字体等待、A4 导出和一次浏览器关闭重试。浏览器启动与复用、鉴权和 HTTP 响应由各入口管理。
 
-- Agent 按账号、基础简历和目标岗位独立保存配置、进度、结果、审核决定与草稿。不同组合可以同时分析；切换简历或岗位不会中断其他任务。
-- 编辑区只显示当前简历所选岗位的任务，右下角入口汇总运行数和待审核任务数，可按简历与岗位打开任务。每个组合保留最近一次任务，旧结果从分析历史查看。
-- 手工 JD 使用公司、岗位名称和 JD 内容组成稳定标识。修改未运行的手工输入只更新配置草稿；已运行任务保留在任务列表。
-- 当前浏览器标签页刷新后恢复已保存结果及审核决定；尚未完成的分析提示中断，不会自动重发模型请求。关闭标签页不保证恢复审核决定，可从服务端历史查看结果。缓存不可用时会提示恢复限制。
-- 简历或岗位 JD 变化后，旧结果仍可查看，但校验通过或重新分析前不能应用建议或创建岗位版。取消、清空与重试只作用于指定任务。
-- 岗位版独立保存。并发创建时，岗位关联使用条件更新；若关联已被其他任务修改，则保留所有产物并提示到岗位页手动选择，不覆盖已变更关联。
-- 刷新时创建中的岗位版按运行标识查找已保存产物，防止重复生成。退出或切换账号会终止本地请求并清除当前账号的任务状态。
+生产环境应配置 `PDF_RENDER_ALLOWED_ORIGINS` 为可信来源的逗号分隔列表；配置后不匹配或无 Origin 的请求不返回跨域允许头，POST 仍执行原有 Bearer 鉴权。显式 `*` 允许任意来源；未配置时 Vercel API 保持原有跨域兼容行为，独立服务默认仅允许本地开发来源。详细配置与发布顺序见[运行配置与发布](./docs/runtime-and-release.md)。
 
-相关回归测试：`npm run test -- src/store/resumeAgentIsolation.test.tsx src/store/jdAnalysisHistoryStore.test.ts src/components/Agent`。
+发布前核对目标项目和迁移，先部署兼容的数据库 / Edge Functions / PDF 服务，再发布依赖它们的前端。常规测试不自动发布或写入生产环境。
 
-退出登录前会弹出确认提示；若有未保存的简历修改，确认后需先保存或放弃草稿再退出。
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [AGENTS.md](./AGENTS.md) | 仓库结构、开发约束与代理工作约定 |
+| [日常开发与验收](./docs/development-workflow.md) | 检查分层、异常探索、验收环境与证据边界 |
+| [运行配置与发布](./docs/runtime-and-release.md) | 导入 / AI / PDF 配置、Storage 安全和发布顺序 |
+| [密钥登录与云同步](./docs/auth-system-design.md) | 当前鉴权与账号数据行为 |
+| [界面与交互约定](./docs/product-behavior.md) | 页面行为、控件与细粒度交互要求 |
+| [批次工作空间与迁移](./docs/batch-workspace.md) | 批次、移动 / 复制 / 删除、看板与迁移要求 |
+| [Agent 任务与历史](./docs/agent-task-guide.md) | 任务隔离、恢复、审核与历史清理 |
+| [UI 约定](./docs/ui-conventions.md) | 共用样式、响应式布局与控件 |
+| [待办需求](./docs/pending-requirements.md) | 后续产品需求 |
+
+本地日志、`.cache/`、`.tmp/`、`output/`、覆盖率目录与 CLI 安装产物已配置忽略规则；已受 Git 跟踪的文件仍保留，设计稿按项目资料保留。不要提交真实简历、凭证或敏感日志。

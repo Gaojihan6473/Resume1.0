@@ -1,6 +1,6 @@
 # Resume Agent P0 MVP 需求文档
 
-> 历史规划与决策记录。当前入口、任务恢复及历史行为见 [README](../README.md#agent-任务隔离与恢复) 和 [ResumeAgentLauncher](../src/components/Agent/ResumeAgentLauncher.tsx)。
+> 历史规划与决策记录。当前入口、任务恢复及历史行为见 [Agent 任务指南](./agent-task-guide.md#任务隔离与恢复) 和 [ResumeAgentLauncher](../src/components/Agent/ResumeAgentLauncher.tsx)。
 > 文档级别：P0 / MVP
 > 依赖总览：[Resume Agent 总路线图](./resume-agent-roadmap.md)
 > 更新日期：2026-08-22

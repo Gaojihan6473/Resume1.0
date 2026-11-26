@@ -28,7 +28,7 @@ const serverPort = listener.address().port
 await new Promise((resolve) => listener.close(resolve))
 const child = spawn(process.execPath, ['scripts/pdf-render-server.mjs'], {
   cwd: root,
-  env: { ...process.env, PDF_RENDER_HOST: '127.0.0.1', PDF_RENDER_PORT: String(serverPort), PDF_RENDER_REQUIRE_AUTH: 'false', PDF_RENDER_REUSE_BROWSER: 'false' },
+  env: { ...process.env, PDF_RENDER_HOST: '127.0.0.1', PDF_RENDER_PORT: String(serverPort), PDF_RENDER_REQUIRE_AUTH: 'false', PDF_RENDER_REUSE_BROWSER: 'false', PDF_RENDER_ALLOWED_ORIGINS: 'https://trusted.example' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let serverLog = ''
@@ -68,6 +68,14 @@ try {
     try { if ((await fetch(`${url}/healthz`)).ok) break } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
+  for (const origin of ['https://trusted.example', 'https://untrusted.example', 'null', undefined]) {
+    const preflight = await fetch(`${url}/render-resume-pdf`, {
+      method: 'OPTIONS', headers: origin ? { Origin: origin } : {},
+    })
+    assert.equal(preflight.status, 204)
+    assert.equal(preflight.headers.get('access-control-allow-origin'), origin === 'https://trusted.example' ? origin : null)
+    assert.equal(preflight.headers.get('vary'), 'Origin')
+  }
   const avatar = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="65" height="81"><rect width="65" height="81" fill="#bfdbfe"/></svg>')}`
   const data = {
     basic: { name: '安全回归中文简历', phone: '13800000000', avatarUrl: avatar },
@@ -86,6 +94,10 @@ try {
   assert.deepEqual(fallback, baseline, 'Isolating the document must preserve the existing fallback pagination and text')
   assert.ok(fallback.length > 1)
   assert.ok(fallback.at(-1).text.includes('第120条'))
+
+  const sans = await render({ resumeData: { ...data, style: { ...data.style, fontFamily: 'sans', lineHeight: 1.8 } } }, 'sans-long-chinese.pdf')
+  assert.ok(sans.length > 1)
+  assert.ok(sans.at(-1).text.includes('第120条'), 'Changing font and line height must retain the final paragraph')
 
   const snapshot = buildResumePdfHtml({ basic: data.basic, style: data.style }).replace(/<body>[\s\S]*<\/body>/, `<body><div id="resume-page-stack">${[1, 2].map((number) => `<div class="resume-page-frame" style="width:210mm;height:297mm;overflow:hidden;break-after:${number === 2 ? 'auto' : 'page'}"><main class="resume-preview screen-page-content"><h1>分页快照第${number}页</h1><img src="${avatar}" style="width:65px;height:81px"></main></div>`).join('')}</div></body>`)
   const safePage = await createResumePdfPage(browser)
