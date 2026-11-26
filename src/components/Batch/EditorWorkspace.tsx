@@ -5,6 +5,7 @@ import { useBatchStore } from '../../store/batchStore'
 import { fetchResumes } from '../../lib/api/resumes'
 import { assertBatch, selectBatchForCreation } from '../../lib/api/batches'
 import { createDefaultResumeData } from '../../types/resume'
+import { AppLoading } from '../AppLoading'
 
 export function EditorWorkspace({ children }: { children: ReactNode }) {
   const [params, setParams] = useSearchParams()
@@ -67,6 +68,6 @@ export function EditorWorkspace({ children }: { children: ReactNode }) {
     setParams(next, { replace: true })
   }, [currentResumeId, requestedId, requestedBatch, batchId, params, setParams, loading, error])
   if (error) return <div role="alert" className="m-auto p-8 text-center"><p className="text-sm text-rose-600">{error}</p><button onClick={() => setRetry((value) => value + 1)} className="mt-4 text-sm text-blue-600">重新加载</button><button onClick={() => navigate('/')} className="ml-4 text-sm text-slate-500">返回首页</button></div>
-  if (loading || parseStatus !== 'success') return <p className="m-auto p-8 text-sm text-slate-400">简历加载中…</p>
+  if (loading || parseStatus !== 'success') return <AppLoading />
   return <>{children}</>
 }

@@ -1,6 +1,6 @@
 ﻿import type { ResumeData } from '../types/resume'
 
-import { getResumePdfBlob } from './resumePdf'
+import { getResumePdfBlob, type ResumePdfOptions } from './resumePdf'
 import { isRichHtmlEmpty, sanitizeRichHtml } from './richText'
 
 function normalizePdfFileName(fileName: string): string {
@@ -61,9 +61,10 @@ function normalizeSectionOrder(order: ResumeData['sectionOrder'] | undefined): R
 
 export async function exportToPdf(
   data: ResumeData,
-  fileName: string = 'resume.pdf'
+  fileName: string = 'resume.pdf',
+  options?: ResumePdfOptions,
 ): Promise<void> {
-  const pdfBlob = await getResumePdfBlob(data)
+  const pdfBlob = await getResumePdfBlob(data, undefined, options)
   downloadBlob(pdfBlob, normalizePdfFileName(fileName))
 }
 

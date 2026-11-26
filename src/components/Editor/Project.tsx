@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { RichTextEditor } from './RichTextEditor'
-import { Plus, Trash2, ChevronUp, ChevronDown, FolderKanban } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import type { ProjectItem } from '../../types/resume'
 
 function ProjectCard({
@@ -22,96 +22,95 @@ function ProjectCard({
   onMoveUp: () => void
   onMoveDown: () => void
 }) {
-  const [hovered, setHovered] = useState(false)
-
-  const inputClass = `
-    w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-    transition-all duration-200 input-glow
-    focus:border-blue-400 focus:bg-white bg-gray-50 hover:bg-gray-100
-  `
+  const entryTitle = [item.name, item.role].filter(Boolean).join(' · ') || '未填写项目'
 
   return (
-    <div
-      className={`border rounded-xl p-4 bg-white shadow-sm transition-all duration-200 animate-slide-in ${
-        hovered ? 'shadow-md border-blue-200' : 'border-gray-100'
-      }`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex justify-between items-start mb-4">
-        <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded">
-          #{index + 1}
-        </span>
-        <div className="flex items-center gap-1">
+    <div className="editor-entry-block space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex h-5 shrink-0 items-center rounded-md bg-[#edf3ff] px-1.5 text-[10px] font-bold tabular-nums text-[#326bed]">
+            {String(index + 1).padStart(2, '0')}
+          </span>
+          <span className="editor-entry-title truncate font-semibold text-[#243958]">{entryTitle}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5 text-[#8ea2be]">
           <button
+            type="button"
+            aria-label="上移项目经历"
             onClick={onMoveUp}
             disabled={index === 0}
-            className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-200"
+            className="rounded-md p-1 transition-colors hover:bg-[#edf3ff] hover:text-[#326bed] disabled:cursor-not-allowed disabled:opacity-30"
           >
-            <ChevronUp className="w-4 h-4 text-gray-500" />
+            <ChevronUp className="h-3.5 w-3.5" />
           </button>
           <button
+            type="button"
+            aria-label="下移项目经历"
             onClick={onMoveDown}
             disabled={index === total - 1}
-            className="p-1.5 hover:bg-gray-100 rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-200"
+            className="rounded-md p-1 transition-colors hover:bg-[#edf3ff] hover:text-[#326bed] disabled:cursor-not-allowed disabled:opacity-30"
           >
-            <ChevronDown className="w-4 h-4 text-gray-500" />
+            <ChevronDown className="h-3.5 w-3.5" />
           </button>
           <button
+            type="button"
+            aria-label="删除项目经历"
             onClick={() => onRemove(item.id)}
-            className="p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-all duration-200 btn-press"
+            className="rounded-md p-1 transition-colors hover:bg-rose-50 hover:text-rose-500"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1.5">项目名称</label>
+      <div className="grid grid-cols-1 gap-x-6 gap-y-3.5 sm:grid-cols-2">
+        <label className="editor-field-group">
+          <span className="editor-field-label">项目名称</span>
           <input
             type="text"
             value={item.name}
             onChange={(e) => onUpdate(item.id, { name: e.target.value })}
             placeholder="电商平台重构"
-            className={inputClass}
+            className="editor-field editor-field-primary"
           />
-        </div>
+        </label>
 
-        <div>
-          <label className="block text-xs text-gray-500 mb-1.5">角色</label>
+        <label className="editor-field-group">
+          <span className="editor-field-label">角色</span>
           <input
             type="text"
             value={item.role}
             onChange={(e) => onUpdate(item.id, { role: e.target.value })}
             placeholder="前端开发"
-            className={inputClass}
+            className="editor-field"
           />
-        </div>
+        </label>
 
-        <div>
-          <label className="block text-xs text-gray-500 mb-1.5">时间</label>
-          <div className="flex items-center gap-2">
+        <div className="editor-field-group sm:col-span-2">
+          <span className="editor-field-label">时间</span>
+          <div className="flex items-center gap-1.5">
             <input
               type="text"
+              aria-label="开始时间"
               value={item.startDate}
               onChange={(e) => onUpdate(item.id, { startDate: e.target.value })}
               placeholder="2023.01"
-              className={inputClass}
+              className="editor-field flex-1 tabular-nums"
             />
-            <span className="text-gray-400">-</span>
+            <span className="shrink-0 text-xs text-[#9eb0c9]">—</span>
             <input
               type="text"
+              aria-label="结束时间"
               value={item.endDate}
               onChange={(e) => onUpdate(item.id, { endDate: e.target.value })}
               placeholder="2023.06"
-              className={inputClass}
+              className="editor-field flex-1 tabular-nums"
             />
           </div>
         </div>
 
-        <div className="col-span-2">
-          <label className="block text-xs text-gray-500 mb-1.5">正文内容</label>
+        <div className="sm:col-span-2">
+          <label className="editor-field-label">正文内容</label>
           <RichTextEditor
             value={item.content || ''}
             onChange={(content) => onUpdate(item.id, { content })}
@@ -153,37 +152,42 @@ export function ProjectEditor({
     })
   }, [expanded, focusItemId, focusRequestKey])
 
+  const meta = projects.length > 0
+    ? `${projects.length} 条${projects[0]?.name ? ` · ${projects[0].name}` : ''}`
+    : undefined
+
   return (
     <SortableModuleWrapper
       id="projects"
       title="项目经历"
+      meta={meta}
       expanded={expanded}
       onToggle={onToggle}
       action={
         <button
+          type="button"
           onClick={addProject}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:scale-105 rounded-lg transition-all duration-200 btn-press"
+          className="editor-section-action"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-3.5 w-3.5" />
           添加
         </button>
       }
     >
       {projects.length === 0 ? (
-        <div className="text-center py-10 animate-fade-in">
-          <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3 animate-float">
-            <FolderKanban className="w-7 h-7 text-gray-400" />
-          </div>
-          <p className="text-gray-400 mb-3">暂无项目经历</p>
+        <div className="py-5 text-center">
+          <p className="editor-control-text text-[#869ab6]">暂无项目经历</p>
           <button
+            type="button"
             onClick={addProject}
-            className="text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 hover:scale-105 px-3 py-1.5 rounded-lg transition-all duration-200"
+            className="editor-control-text mt-2.5 inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-[#dce6f6] bg-[#f8faff] px-3 font-medium text-[#326bed] transition-colors hover:border-[#bfd4f6] hover:bg-[#edf3ff]"
           >
+            <Plus className="h-3.5 w-3.5" />
             添加第一个
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-6">
           {projects.map((item, index) => (
             <div
               key={item.id}
@@ -192,15 +196,15 @@ export function ProjectEditor({
               }}
               className={focusItemId === item.id ? 'editor-jd-target' : ''}
             >
-            <ProjectCard
-              item={item}
-              index={index}
-              total={projects.length}
-              onUpdate={updateProject}
-              onRemove={removeProject}
-              onMoveUp={() => moveProject(item.id, 'up')}
-              onMoveDown={() => moveProject(item.id, 'down')}
-            />
+              <ProjectCard
+                item={item}
+                index={index}
+                total={projects.length}
+                onUpdate={updateProject}
+                onRemove={removeProject}
+                onMoveUp={() => moveProject(item.id, 'up')}
+                onMoveDown={() => moveProject(item.id, 'down')}
+              />
             </div>
           ))}
         </div>

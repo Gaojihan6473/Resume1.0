@@ -13,6 +13,11 @@ interface PdfCacheEntry {
   promise?: Promise<Blob>
 }
 
+export interface ResumePdfOptions {
+  requirePreviewSnapshot?: boolean
+}
+
+const INTERACTIVE_SNAPSHOT_TIMEOUT_MS = 5000
 let cache: PdfCacheEntry | null = null
 
 export function getResumePdfTitle(data: ResumeData): string {
@@ -28,13 +33,18 @@ export function createResumePdfSignature(data: ResumeData, title = getResumePdfT
 
 export async function getResumePdfBlob(
   data: ResumeData,
-  title = getResumePdfTitle(data)
+  title = getResumePdfTitle(data),
+  { requirePreviewSnapshot = false }: ResumePdfOptions = {},
 ): Promise<Blob> {
   const normalized = normalizeResumeData(data)
   const resumeSignature = createResumePdfSignature(normalized, title)
   const previewSnapshot =
     getResumePreviewPdfSnapshot(resumeSignature) ??
-    await waitForResumePreviewPdfSnapshot(resumeSignature)
+    await waitForResumePreviewPdfSnapshot(resumeSignature, requirePreviewSnapshot ? INTERACTIVE_SNAPSHOT_TIMEOUT_MS : undefined)
+  if (requirePreviewSnapshot && !previewSnapshot) {
+    throw new Error('简历预览尚未准备好，请稍后重试')
+  }
+
   const html = previewSnapshot?.html ?? buildResumeDocumentHtml(normalized, title)
   const signature = previewSnapshot
     ? `${resumeSignature}:preview:${previewSnapshot.htmlSignature}`

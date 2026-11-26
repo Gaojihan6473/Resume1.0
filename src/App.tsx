@@ -13,6 +13,7 @@ import { LegacyWorkspaceEntry } from './components/Batch/LegacyWorkspaceEntry'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { useHoverSidebar } from './components/Sidebar/useHoverSidebar'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { AppLoading } from './components/AppLoading'
 import { AuthRequiredModal } from './components/AuthRequiredModal'
 import { DirtyConfirmModal } from './components/DirtyConfirmModal'
 import { ToastContainer, useToast } from './components/Toast'
@@ -28,17 +29,6 @@ const Toolbar = lazy(() => import('./components/Toolbar/Toolbar').then(module =>
 const EditorAnalysisLayout = lazy(() => import('./components/Editor/EditorAnalysisLayout').then(module => ({ default: module.EditorAnalysisLayout })))
 
 type DirtyNavTarget = 'home' | 'me' | 'applications' | 'analytics' | 'login'
-
-function AppLoading() {
-  return (
-    <div className="h-screen flex items-center justify-center bg-gray-50" role="status">
-      <div className="text-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="mt-2 text-gray-500">加载中...</p>
-      </div>
-    </div>
-  )
-}
 
 class PageErrorBoundary extends Component<{ children: ReactNode; canGoHome: boolean }, { failed: boolean }> {
   state = { failed: false }
@@ -88,6 +78,8 @@ export function AppContent() {
   const [pendingAction, setPendingAction] = useState<'new' | 'upload' | 'me' | null>(null)
   const [showDirtyModal, setShowDirtyModal] = useState(false)
   const [dirtyNavTarget, setDirtyNavTarget] = useState<DirtyNavTarget | null>(null)
+  const [editorLayoutPopoverOpen, setEditorLayoutPopoverOpen] = useState(false)
+  const [editorTriptych, setEditorTriptych] = useState(false)
 
   // Initialize auth session on app load
   useEffect(() => {
@@ -199,12 +191,14 @@ export function AppContent() {
                     setShowAuthModal(true)
                   }}
                 /></ProtectedRoute>} />
-        <Route path="/editor" element={<ProtectedRoute><div className="flex h-screen flex-col bg-gray-50"><EditorWorkspace>                <div className="flex-1 flex flex-col overflow-hidden relative">
+        <Route path="/editor" element={<ProtectedRoute><div className="editor-page-shell flex h-screen flex-col"><EditorWorkspace>                <div className="flex-1 flex flex-col overflow-hidden relative">
                   {/* 工具栏 */}
                   <Toolbar
                     sidebarTriggerRef={triggerRef}
                     onOpenSidebar={openSidebar}
                     onScheduleCloseSidebar={scheduleCloseSidebar}
+                    onLayoutPopoverChange={setEditorLayoutPopoverOpen}
+                    isTriptych={editorTriptych}
                     onAuthRequired={(action) => {
                       setPendingAction(action)
                       setShowAuthModal(true)
@@ -231,7 +225,11 @@ export function AppContent() {
                     />
 
                     {/* 主内容 */}
-                    <EditorAnalysisLayout previewRef={previewRef} />
+                    <EditorAnalysisLayout
+                      previewRef={previewRef}
+                      showLayoutGuides={editorLayoutPopoverOpen}
+                      onTriptychChange={setEditorTriptych}
+                    />
                   </div>
                 </div>
 </EditorWorkspace></div></ProtectedRoute>} />

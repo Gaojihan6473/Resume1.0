@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react'
 
 interface ModuleWrapperProps {
   title: string
+  meta?: string
   children: ReactNode
   defaultExpanded?: boolean
   expanded?: boolean
@@ -13,6 +14,7 @@ interface ModuleWrapperProps {
 
 export function ModuleWrapper({
   title,
+  meta,
   children,
   defaultExpanded = true,
   expanded: controlledExpanded,
@@ -20,7 +22,6 @@ export function ModuleWrapper({
   action,
 }: ModuleWrapperProps) {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
-  const [isHovered, setIsHovered] = useState(false)
 
   const isControlled = controlledExpanded !== undefined
   const expanded = isControlled ? controlledExpanded : internalExpanded
@@ -41,53 +42,49 @@ export function ModuleWrapper({
   }
 
   return (
-    <div
-      className="mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-all duration-200 hover:shadow-md"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className={`editor-section-block ${expanded ? 'is-expanded' : ''}`}>
       <div
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
-        className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isHovered ? 'bg-gray-50/80' : 'bg-white'
-        }`}
+        className="editor-section-header flex min-h-7 cursor-pointer select-none items-center justify-between gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7da7ee]"
         onClick={handleToggle}
         onKeyDown={handleHeaderKeyDown}
       >
-        <div className="flex items-center gap-2.5">
-          <div
-            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all duration-300 ${
-              expanded
-                ? 'bg-blue-500 text-white rotate-0'
-                : 'bg-gray-100 text-gray-400 -rotate-90'
-            }`}
-          >
-            <ChevronDown className="w-3 h-3" />
-          </div>
-          <span className="font-medium text-gray-700">{title}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span aria-hidden="true" className="editor-static-anchor">
+            <span className="editor-static-dot" />
+          </span>
+          <span className="editor-section-title shrink-0 font-semibold text-[#243958]">{title}</span>
+          {meta && (
+            <span aria-hidden="true" className="editor-section-meta min-w-0 truncate font-normal text-[#6d83a2]">
+              {meta}
+            </span>
+          )}
         </div>
-        {action && (
-          <div
-            onClick={(e) => {
-              e.stopPropagation()
-              if (!expanded) handleToggle()
-            }}
-            className="transition-opacity duration-200"
-          >
-            {action}
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          {action && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!expanded) handleToggle()
+              }}
+            >
+              {action}
+            </div>
+          )}
+          <span aria-hidden="true" className="editor-section-chevron">
+            <ChevronDown className="h-4 w-4" />
+          </span>
+        </div>
       </div>
       <div
-        hidden={!expanded}
-        className={`grid overflow-hidden transition-all duration-300 ease-out ${
-          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
+        aria-hidden={!expanded}
+        inert={!expanded}
+        className={`editor-section-collapse ${expanded ? 'is-expanded' : ''}`}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="p-4 bg-gray-50/50">{children}</div>
+          <div className="pt-3.5 sm:pl-[18px]">{children}</div>
         </div>
       </div>
     </div>

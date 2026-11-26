@@ -15,12 +15,16 @@ import {
   publishResumePreviewPdfSnapshot,
 } from '../../utils/resumePdfPreviewSnapshot'
 import { isRichHtmlEmpty } from '../../utils/richText'
+import { useAutoHideScrollbar } from '../Application/useAutoHideScrollbar'
 import type { ResumeData } from '../../types/resume'
 import type { ResumeAnalysisFocus } from '../../types/analytics'
 
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
-const FIT_SIDE_GAP = 28
+const MIN_AUTO_FIT_ZOOM = 0.45
+const MAX_AUTO_FIT_ZOOM = 1.8
+const FIT_SIDE_GAP_MIN = 24
+const FIT_SIDE_GAP_RATIO = 0.04
 const PAGE_GAP = 16
 const PREVIEW_FONT_READY_TIMEOUT_MS = 1200
 const PREVIEW_LAYOUT_TRANSITION_MS = 300
@@ -74,8 +78,13 @@ const SCREEN_PAGINATION_CSS = `
     position: relative;
     overflow: hidden;
     flex: 0 0 auto;
+    border-radius: 3px;
     background: #ffffff;
-    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+    box-shadow:
+      0 0 0 1px rgba(196, 212, 236, 0.55),
+      0 1px 2px rgba(28, 52, 88, 0.05),
+      0 10px 28px -6px rgba(34, 62, 108, 0.11),
+      0 24px 52px -18px rgba(34, 62, 108, 0.14);
   }
 
   .screen-page-content {
@@ -116,8 +125,11 @@ interface PreviewProps {
   registerAnchor?: (key: string, element: HTMLElement | null) => void
   onScrollContainerChange?: (element: HTMLDivElement | null) => void
   onPageCountChange?: (pageCount: number) => void
+  onPageMetricsChange?: (metrics: { pageCount: number; lastPageFillRatio: number }) => void
+  onFitZoomChange?: (fitZoom: number) => void
   fitToWidth?: boolean
   publishPdfSnapshot?: boolean
+  showMarginGuides?: boolean
 }
 
 interface PreviewFitState {
@@ -194,11 +206,15 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   registerAnchor,
   onScrollContainerChange,
   onPageCountChange,
+  onPageMetricsChange,
+  onFitZoomChange,
   fitToWidth = false,
   publishPdfSnapshot: shouldPublishPdfSnapshot = true,
+  showMarginGuides = false,
 }, ref) => {
   const { resumeData: storeResumeData, zoom, setZoom } = useResumeStore()
   const resumeData = dataOverride ?? storeResumeData
+  const scroll = useAutoHideScrollbar()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const fitRestoreTimeoutRef = useRef<number | null>(null)
@@ -227,6 +243,9 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   const [documentHeight, setDocumentHeight] = useState(initialCachedPreviewRef.current?.height || A4_HEIGHT)
   const [previewReady, setPreviewReady] = useState(Boolean(initialCachedPreviewRef.current))
   const [isRestoringFitZoom, setIsRestoringFitZoom] = useState(false)
+  const [isScrolledTop, setIsScrolledTop] = useState(false)
+  const initialAutoFitAppliedRef = useRef(false)
+  const lastAutoFitZoomRef = useRef<number | null>(null)
 
   useImperativeHandle(ref, () => scrollContainerRef.current as HTMLDivElement)
 
@@ -293,7 +312,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
   }, [isVisibleInPageFrame, registerAnchor])
 
   const publishPdfSnapshot = useCallback((doc: Document) => {
-    if (!canCachePreview) return
+    if (!shouldPublishPdfSnapshot) return
     if (doc.fonts && doc.fonts.status !== 'loaded') return
 
     const pdfHtml = buildResumePreviewPdfHtml(doc)
@@ -303,7 +322,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       createResumePdfSignature(resumeData, title),
       pdfHtml,
     )
-  }, [canCachePreview, resumeData, title])
+  }, [resumeData, shouldPublishPdfSnapshot, title])
 
   const measureCssLength = useCallback((doc: Document, value: string, fallback: number) => {
     if (!value.trim()) return fallback
@@ -791,15 +810,31 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
 
     const finalHeight = Math.max(A4_HEIGHT, nextHeight)
+    const finalPageCount = Math.max(1, pages.length)
+    let lastPageFillRatio = 0
+    const lastFrame = pages[pages.length - 1]
+    const lastPageContent = lastFrame?.firstElementChild as HTMLElement | null
+    if (lastPageContent && pageHeight > 0) {
+      const pageRect = lastPageContent.getBoundingClientRect()
+      let contentBottom = pageRect.top
+      Array.from(lastPageContent.children).forEach((child) => {
+        const rect = child.getBoundingClientRect()
+        if (rect.width === 0 && rect.height === 0) return
+        contentBottom = Math.max(contentBottom, rect.bottom)
+      })
+      const usedHeight = Math.max(0, contentBottom - pageRect.top)
+      lastPageFillRatio = Math.min(1, Math.max(0, usedHeight / pageHeight))
+    }
     setDocumentHeight(finalHeight)
-    onPageCountChange?.(Math.max(1, pages.length))
+    onPageCountChange?.(finalPageCount)
+    onPageMetricsChange?.({ pageCount: finalPageCount, lastPageFillRatio })
     if (canCachePreview) {
       cachePreviewDocument(previewCacheKey, previewHtml, doc, finalHeight)
     }
     publishPdfSnapshot(doc)
     syncIframeAnchors()
     setPreviewReady(true)
-  }, [canCachePreview, measureCssLength, onPageCountChange, previewCacheKey, previewHtml, publishPdfSnapshot, syncIframeAnchors])
+  }, [canCachePreview, measureCssLength, onPageCountChange, onPageMetricsChange, previewCacheKey, previewHtml, publishPdfSnapshot, syncIframeAnchors])
 
   const renderPreviewDocument = useCallback(() => {
     const iframe = iframeRef.current
@@ -808,13 +843,36 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
 
     const cachedPreview = canCachePreview ? getCachedPreviewDocument(previewCacheKey, previewHtml) : null
     if (cachedPreview && restoreCachedPreviewDocument(doc, cachedPreview)) {
-      renderGenerationRef.current += 1
+      const generation = ++renderGenerationRef.current
       cancelScheduledFrames()
       styleTextRef.current = (doc.getElementById('resume-preview-style') as HTMLStyleElement | null)?.textContent || ''
       setDocumentHeight(cachedPreview.height)
-      onPageCountChange?.(Math.max(1, doc.querySelectorAll('#resume-page-stack .resume-page-frame').length))
+      const frames = Array.from(doc.querySelectorAll<HTMLElement>('#resume-page-stack .resume-page-frame'))
+      const cachedPageCount = Math.max(1, frames.length)
+      let cachedFillRatio = 0
+      const lastContent = frames[frames.length - 1]?.firstElementChild as HTMLElement | null
+      if (lastContent) {
+        const pageRect = lastContent.getBoundingClientRect()
+        let contentBottom = pageRect.top
+        Array.from(lastContent.children).forEach((child) => {
+          const rect = child.getBoundingClientRect()
+          if (rect.width === 0 && rect.height === 0) return
+          contentBottom = Math.max(contentBottom, rect.bottom)
+        })
+        if (pageRect.height > 0) {
+          cachedFillRatio = Math.min(1, Math.max(0, (contentBottom - pageRect.top) / pageRect.height))
+        }
+      }
+      onPageCountChange?.(cachedPageCount)
+      onPageMetricsChange?.({ pageCount: cachedPageCount, lastPageFillRatio: cachedFillRatio })
       setPreviewReady(true)
       publishPdfSnapshot(doc)
+      if (doc.fonts?.status === 'loading') {
+        void doc.fonts.ready.then(() => {
+          if (renderGenerationRef.current !== generation || iframeRef.current?.contentDocument !== doc) return
+          publishPdfSnapshot(doc)
+        })
+      }
       syncIframeAnchors()
       return cancelScheduledFrames
     }
@@ -898,6 +956,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     previewCacheKey,
     previewHtml,
     onPageCountChange,
+    onPageMetricsChange,
     publishPdfSnapshot,
     scheduleFrame,
     syncIframeAnchors,
@@ -918,9 +977,51 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     }
   }, [cancelScheduledFrames, registerAnchor])
 
+  const sideGap = Math.max(FIT_SIDE_GAP_MIN, Math.round(containerWidth * FIT_SIDE_GAP_RATIO))
   const fitZoom = containerWidth > 0
-    ? Math.max(0.45, (containerWidth - FIT_SIDE_GAP * 2) / A4_WIDTH)
-    : zoom
+    ? Math.max(MIN_AUTO_FIT_ZOOM, (containerWidth - sideGap * 2) / A4_WIDTH)
+    : 1
+  const recommendedFitZoom = Math.min(
+    MAX_AUTO_FIT_ZOOM,
+    Math.max(MIN_AUTO_FIT_ZOOM, Math.floor(fitZoom * 100) / 100),
+  )
+
+  useLayoutEffect(() => {
+    onFitZoomChange?.(recommendedFitZoom)
+  }, [onFitZoomChange, recommendedFitZoom])
+
+  useLayoutEffect(() => {
+    if (containerWidth <= 0) return
+    if (Math.abs(zoom - recommendedFitZoom) < 0.001) {
+      lastAutoFitZoomRef.current = recommendedFitZoom
+    }
+  }, [containerWidth, recommendedFitZoom, zoom])
+
+  useLayoutEffect(() => {
+    if (containerWidth <= 0 || fitToWidth) return
+    const currentZoom = useResumeStore.getState().zoom
+
+    if (!initialAutoFitAppliedRef.current) {
+      initialAutoFitAppliedRef.current = true
+      if (Math.abs(currentZoom - 1) > 0.001) return
+      lastAutoFitZoomRef.current = recommendedFitZoom
+      if (Math.abs(recommendedFitZoom - currentZoom) >= 0.005) {
+        setZoom(recommendedFitZoom)
+      }
+      return
+    }
+
+    // Keep tracking container resizes automatically as long as user hasn't manually overridden zoom.
+    const isFollowingAutoFit =
+      lastAutoFitZoomRef.current !== null &&
+      Math.abs(currentZoom - lastAutoFitZoomRef.current) < 0.001
+    if (!isFollowingAutoFit) return
+
+    if (Math.abs(recommendedFitZoom - currentZoom) >= 0.005) {
+      lastAutoFitZoomRef.current = recommendedFitZoom
+      setZoom(recommendedFitZoom)
+    }
+  }, [containerWidth, fitToWidth, recommendedFitZoom, setZoom])
 
   useLayoutEffect(() => {
     const previous = fitStateRef.current
@@ -943,11 +1044,19 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
       }
 
       if (zoomToRestore !== null) {
+        const targetZoom =
+          lastAutoFitZoomRef.current !== null &&
+          Math.abs(zoomToRestore - lastAutoFitZoomRef.current) < 0.001
+            ? recommendedFitZoom
+            : zoomToRestore
         if (fitRestoreTimeoutRef.current !== null) {
           window.clearTimeout(fitRestoreTimeoutRef.current)
         }
         setIsRestoringFitZoom(true)
-        setZoom(zoomToRestore)
+        if (Math.abs(targetZoom - recommendedFitZoom) < 0.001) {
+          lastAutoFitZoomRef.current = recommendedFitZoom
+        }
+        setZoom(targetZoom)
         fitRestoreTimeoutRef.current = window.setTimeout(() => {
           fitRestoreTimeoutRef.current = null
           setIsRestoringFitZoom(false)
@@ -963,11 +1072,11 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     if (isRestoringFitZoom) setIsRestoringFitZoom(false)
 
     const becameFitToWidth = fitToWidth && !previous.fitToWidth
-    const widthShrankWhileFitting =
+    const widthChangedWhileFitting =
       fitToWidth &&
       previous.fitToWidth &&
       containerWidth > 0 &&
-      containerWidth < previous.containerWidth - 1
+      Math.abs(containerWidth - previous.containerWidth) > 1
     const zoomBeforeFit = becameFitToWidth ? currentZoom : previous.zoomBeforeFit
     const userChangedAutoZoom =
       previous.lastAutoZoom !== null &&
@@ -983,30 +1092,35 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
     if (
       containerWidth <= 0 ||
       userChangedAutoZoom ||
-      (!becameFitToWidth && !widthShrankWhileFitting)
+      (!becameFitToWidth && !widthChangedWhileFitting)
     ) {
       return
     }
 
-    if (fitZoom < currentZoom - 0.001) {
-      fitStateRef.current.lastAutoZoom = fitZoom
-      setZoom(fitZoom)
+    if (Math.abs(recommendedFitZoom - currentZoom) >= 0.005) {
+      fitStateRef.current.lastAutoZoom = recommendedFitZoom
+      setZoom(recommendedFitZoom)
     }
-  }, [containerWidth, fitToWidth, fitZoom, isRestoringFitZoom, setZoom])
+  }, [containerWidth, fitToWidth, isRestoringFitZoom, recommendedFitZoom, setZoom])
 
   if (!hasPreviewableContent(resumeData)) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-100">
-        <div className="text-center text-gray-400">
-          <p className="text-lg mb-2">暂无简历内容</p>
-          <p className="text-sm">上传简历文件开始编辑</p>
+      <div className="flex h-full items-center justify-center bg-transparent">
+        <div className="text-center text-[#7c91b0]">
+          <p className="mb-1.5 text-base font-semibold text-[#4a6387]">暂无简历内容</p>
+          <p className="text-xs">在左侧输入经历或上传简历文件，右侧将实时生成 A4 预览</p>
         </div>
       </div>
     )
   }
 
   const scaledPageWidth = A4_WIDTH * zoom
+  const scaledPageHeight = A4_HEIGHT * zoom
   const scaledDocumentHeight = documentHeight * zoom
+  const verticalPadPx = resumeData.style.pagePadding
+  const horizontalPadPx = resumeData.style.pageHorizontalPadding ?? resumeData.style.pagePadding
+  const scaledPadY = Math.round(verticalPadPx * zoom)
+  const scaledPadX = Math.round(horizontalPadPx * zoom)
   const previewScaleTransition = '300ms cubic-bezier(0.4, 0, 0.2, 1)'
   const shouldAnimatePreviewScale = !fitToWidth && isRestoringFitZoom
 
@@ -1016,7 +1130,14 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
         scrollContainerRef.current = element
         onScrollContainerChange?.(element)
       }}
-      className="h-full min-h-0 overflow-auto bg-gray-200 p-4"
+      onScroll={(event) => {
+        scroll.onScroll(event)
+        const scrolled = event.currentTarget.scrollTop > 2
+        setIsScrolledTop((prev) => (prev === scrolled ? prev : scrolled))
+      }}
+      data-scrolling={scroll.isScrolling ? 'true' : 'false'}
+      data-scrolled-top={isScrolledTop ? 'true' : 'false'}
+      className="editor-immersive-scroll editor-preview-viewport h-full min-h-0 overflow-auto bg-transparent px-6 pt-6 pb-20"
     >
       <div className="flex w-max min-w-full justify-center">
         <div
@@ -1032,7 +1153,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
           {!previewReady && (
             <div
               aria-hidden="true"
-              className="absolute left-0 top-0 flex items-center justify-center bg-white shadow-[0_10px_22px_rgba(15,23,42,0.12)]"
+              className="absolute left-0 top-0 flex items-center justify-center rounded border border-[#dce6f6]/60 bg-white shadow-[0_8px_22px_-4px_rgba(54,86,138,0.08)]"
               style={{
                 width: A4_WIDTH,
                 height: A4_HEIGHT,
@@ -1043,8 +1164,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
                   : 'none',
               }}
             >
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-4 py-2 text-sm text-slate-500 shadow-sm">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+              <div className="flex items-center gap-2 rounded-full border border-[#dce6f6] bg-white/95 px-4 py-2 text-sm text-[#5b7294] shadow-sm">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#326bed] border-t-transparent" />
                 <span>预览生成中</span>
               </div>
             </div>
@@ -1072,6 +1193,29 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(({
               transformOrigin: 'top left',
             }}
           />
+          {previewReady && (
+            <div
+              aria-hidden="true"
+              className={`editor-margin-guides ${showMarginGuides ? 'is-visible' : ''}`}
+              style={{
+                width: scaledPageWidth,
+                height: Math.min(scaledPageHeight, scaledDocumentHeight),
+              }}
+            >
+              <div className="editor-margin-guide-h" style={{ top: scaledPadY }}>
+                <span className="editor-margin-guide-tag" style={{ right: 4, top: -15 }}>
+                  上 {verticalPadPx}px
+                </span>
+              </div>
+              <div className="editor-margin-guide-h" style={{ bottom: scaledPadY }} />
+              <div className="editor-margin-guide-v" style={{ left: scaledPadX }}>
+                <span className="editor-margin-guide-tag" style={{ left: 4, top: 4 }}>
+                  左 {horizontalPadPx}px
+                </span>
+              </div>
+              <div className="editor-margin-guide-v" style={{ right: scaledPadX }} />
+            </div>
+          )}
         </div>
       </div>
     </div>

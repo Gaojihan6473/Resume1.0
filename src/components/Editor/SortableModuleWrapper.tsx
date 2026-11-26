@@ -1,6 +1,6 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { useState, useEffect } from 'react'
-import { ChevronDown, GripVertical } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useResumeStore } from '../../store/resumeStore'
@@ -9,6 +9,7 @@ import type { SectionId } from '../../types/resume'
 interface SortableModuleWrapperProps {
   id: SectionId
   title: string
+  meta?: string
   defaultExpanded?: boolean
   expanded?: boolean
   onToggle?: () => void
@@ -19,6 +20,7 @@ interface SortableModuleWrapperProps {
 export function SortableModuleWrapper({
   id,
   title,
+  meta,
   defaultExpanded = false,
   expanded: controlledExpanded,
   onToggle,
@@ -27,7 +29,6 @@ export function SortableModuleWrapper({
 }: SortableModuleWrapperProps) {
   const parseStatus = useResumeStore((s) => s.parseStatus)
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
-  const [isHovered, setIsHovered] = useState(false)
 
   const isControlled = controlledExpanded !== undefined
   const expanded = isControlled ? controlledExpanded : internalExpanded
@@ -71,63 +72,74 @@ export function SortableModuleWrapper({
     <div
       ref={setNodeRef}
       style={style}
-      className={`mx-[6px] mb-3 w-[calc(100%-12px)] overflow-hidden rounded-[28px] border border-gray-200 shadow-sm transition-shadow duration-200 hover:shadow-md ${
-        isDragging ? 'opacity-40 scale-[1.01] shadow-lg z-50' : ''
+      className={`editor-section-block ${expanded ? 'is-expanded' : ''} ${
+        isDragging ? 'relative z-50 rounded-xl bg-white/95 opacity-55 shadow-lg' : ''
       }`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <div
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
-        className={`flex h-[62px] items-center justify-between px-4 py-3 cursor-pointer transition-all duration-200 ${
-          isHovered && !isDragging ? 'bg-gray-50/80' : 'bg-white'
-        }`}
+        className="editor-section-header flex min-h-7 cursor-pointer select-none items-center justify-between gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7da7ee]"
         onClick={handleToggle}
         onKeyDown={handleHeaderKeyDown}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <button
             type="button"
             {...attributes}
             {...listeners}
+            title="按住上下拖动调整顺序"
             onClick={(e) => e.stopPropagation()}
-            className="p-1 hover:bg-gray-100 rounded cursor-grab active:cursor-grabbing touch-none select-none transition-colors duration-200"
+            className="editor-drag-handle"
           >
-            <GripVertical className="w-4 h-4 text-gray-400" />
+            <span aria-hidden="true" className="editor-drag-bar-idle" />
+            <svg
+              aria-hidden="true"
+              className="editor-drag-dots-hover"
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+            >
+              <circle cx="5.5" cy="3.5" r="1.2" />
+              <circle cx="10.5" cy="3.5" r="1.2" />
+              <circle cx="5.5" cy="8" r="1.2" />
+              <circle cx="10.5" cy="8" r="1.2" />
+              <circle cx="5.5" cy="12.5" r="1.2" />
+              <circle cx="10.5" cy="12.5" r="1.2" />
+            </svg>
           </button>
-          <div
-            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all duration-300 ${
-              expanded
-                ? 'bg-blue-500 text-white rotate-0'
-                : 'bg-gray-100 text-gray-400 -rotate-90'
-            }`}
-          >
-            <ChevronDown className="w-3 h-3" />
-          </div>
-          <span className="font-medium text-gray-700">{title}</span>
+          <span className="editor-section-title shrink-0 font-semibold text-[#243958]">{title}</span>
+          {meta && (
+            <span aria-hidden="true" className="editor-section-meta min-w-0 truncate font-normal tabular-nums text-[#6d83a2]">
+              {meta}
+            </span>
+          )}
         </div>
-        {action && (
-          <div
-            onClick={(e) => {
-              e.stopPropagation()
-              if (!expanded) handleToggle()
-            }}
-            className="transition-opacity duration-200"
-          >
-            {action}
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          {action && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!expanded) handleToggle()
+              }}
+            >
+              {action}
+            </div>
+          )}
+          <span aria-hidden="true" className="editor-section-chevron">
+            <ChevronDown className="h-4 w-4" />
+          </span>
+        </div>
       </div>
       <div
-        hidden={!expanded}
-        className={`grid overflow-hidden transition-all duration-300 ease-out ${
-          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
+        aria-hidden={!expanded}
+        inert={!expanded}
+        className={`editor-section-collapse ${expanded ? 'is-expanded' : ''}`}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="p-4 bg-gray-50/50">{children}</div>
+          <div className="pt-4 sm:pl-[18px]">{children}</div>
         </div>
       </div>
     </div>

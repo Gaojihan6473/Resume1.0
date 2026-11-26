@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import type { ResumeAgentPatch } from '../types/resumeAgent'

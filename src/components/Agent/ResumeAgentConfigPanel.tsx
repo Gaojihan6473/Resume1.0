@@ -231,7 +231,7 @@ export function ResumeAgentConfigPanel({
           {agent.status === 'completed' && <button type="button" onClick={agent.clearTaskForRetry} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50"><RotateCcw className="h-4 w-4" />开始新任务</button>}
         </div>
       ) : (
-        <button type="button" disabled={preparing || agent.status === 'confirming' || !currentResumeId || isDirty || !agent.jdText.trim()} onClick={() => void prepareConfirmation()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" disabled={preparing || agent.status === 'confirming' || !currentResumeId || isDirty || !agent.jdText.trim()} onClick={() => void prepareConfirmation()} className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] bg-[#326bed] px-4 py-2.5 text-sm font-medium text-white shadow-[0_4px_12px_rgba(50,107,237,0.16)] transition hover:bg-[#245bd4] disabled:cursor-not-allowed disabled:opacity-50">
           {preparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}继续确认
         </button>
       )}

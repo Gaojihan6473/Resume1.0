@@ -1,15 +1,17 @@
 import { useResumeStore } from '../../store/resumeStore'
 import { SortableModuleWrapper } from './SortableModuleWrapper'
 import { RichTextEditor } from './RichTextEditor'
+import { formatSummaryMeta } from './EditorHorizonFooter'
 
 export function SummaryEditor({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   const { resumeData, updateSummary } = useResumeStore()
   const { summary } = resumeData
+  const meta = formatSummaryMeta(summary.content)
 
   return (
-    <SortableModuleWrapper id="summary" title="个人总结" expanded={expanded} onToggle={onToggle}>
-      <div className="space-y-2">
-        <label className="block text-xs text-gray-500">正文内容</label>
+    <SortableModuleWrapper id="summary" title="个人总结" meta={meta} expanded={expanded} onToggle={onToggle}>
+      <div className="space-y-1.5">
+        <label className="editor-field-label">正文内容</label>
         <RichTextEditor
           value={summary.content || ''}
           onChange={(content) => updateSummary({ content })}

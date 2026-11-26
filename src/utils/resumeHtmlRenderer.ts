@@ -530,10 +530,10 @@ export function buildResumePdfHtml(
       box-shadow: 0 0 0 2pt rgba(96, 165, 250, 0.18);
     }
     .analysis-marker {
+      /* Highlights must preserve text wrapping in the paginated preview. */
       border-radius: 2pt;
       background: #fde68a;
       color: #78350f;
-      padding: 0 1pt;
     }
     .analysis-marker-flash {
       animation: analysisMarkerFlash 560ms ease-in-out 3;

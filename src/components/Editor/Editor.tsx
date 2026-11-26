@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import {
   DndContext,
@@ -20,10 +20,19 @@ import { InternshipEditor } from './Internship'
 import { ProjectEditor } from './Project'
 import { SummaryEditor } from './Summary'
 import { SkillsEditor } from './Skills'
+import { EditorHorizonFooter } from './EditorHorizonFooter'
+import { useAutoHideScrollbar } from '../Application/useAutoHideScrollbar'
+import type { Application } from '../../types/application'
 import type { SectionId } from '../../types/resume'
-import { FileText, Pencil } from 'lucide-react'
+import { FilePenLine, Pencil, Sparkles } from 'lucide-react'
+import './EditorWorkspace.css'
 
 export type EditorMainTab = 'edit' | 'jd' | 'agent'
+
+export interface ResumePageMetrics {
+  pageCount: number
+  lastPageFillRatio: number
+}
 
 type AccordionEditorProps = {
   expanded: boolean
@@ -45,6 +54,11 @@ interface EditorProps {
   onTabChange?: (tab: EditorMainTab) => void
   showAgentTab?: boolean
   jdPanel?: ReactNode
+  pageMetrics?: ResumePageMetrics | null
+  linkedApplications?: Application[]
+  hasSavedResume?: boolean
+  onOpenApplication?: (applicationId: string) => void
+  onOpenAllApplications?: () => void
   focusTarget?: {
     section: SectionId
     itemId?: string
@@ -57,21 +71,31 @@ export function Editor({
   onTabChange,
   showAgentTab = false,
   jdPanel,
+  pageMetrics,
+  linkedApplications = [],
+  hasSavedResume = false,
+  onOpenApplication,
+  onOpenAllApplications,
   focusTarget,
 }: EditorProps = {}) {
   const { resumeData, reorderSections, setResumeTitle, parseWarnings } = useResumeStore()
   const { sectionOrder, resumeTitle } = resumeData
-  const [isHovered, setIsHovered] = useState(false)
   const [expandedSection, setExpandedSection] = useState<SectionId | 'basic' | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const basicInfoRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({} as Record<SectionId, HTMLDivElement | null>)
-  const tabHighlightStyle = {
-    '--active-tab-index': activeTab === 'agent' ? 1 : 0,
-  } as CSSProperties
+  const scroll = useAutoHideScrollbar()
 
   const handleSetExpandedSection = (newSection: SectionId | 'basic' | null) => {
     setExpandedSection(newSection)
+  }
+
+  const handleSelectSectionFromFooter = (section: SectionId | 'basic') => {
+    setExpandedSection(section)
+    requestAnimationFrame(() => {
+      const targetElement = section === 'basic' ? basicInfoRef.current : sectionRefs.current[section]
+      targetElement?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    })
   }
 
   useEffect(() => {
@@ -103,109 +127,183 @@ export function Editor({
     }
   }
 
+  const pageCount = Math.max(1, pageMetrics?.pageCount ?? 1)
+  const lastFillPercent = Math.round(Math.min(100, Math.max(0, (pageMetrics?.lastPageFillRatio ?? 0) * 100)))
+  const isOverflowHint = pageCount > 1 && lastFillPercent > 0 && lastFillPercent <= 35
+  const isNearFullSinglePage = pageCount === 1 && lastFillPercent >= 95
+  const showWarningBar = isOverflowHint || isNearFullSinglePage
+  const metricsLabel = pageMetrics
+    ? pageCount === 1
+      ? `1 页 · ${lastFillPercent}%`
+      : `${pageCount} 页 · 末页 ${lastFillPercent}%`
+    : null
+  const metricsTooltip = pageMetrics
+    ? isOverflowHint
+      ? `共 ${pageCount} 页，末页占 ${lastFillPercent}%，可微调行高或页边距收页`
+      : isNearFullSinglePage
+        ? `当前 1 页占 ${lastFillPercent}%，接近满页`
+        : `共 ${pageCount} 页，末页占 ${lastFillPercent}%`
+    : undefined
+
   return (
     <div
       ref={containerRef}
-      className={`h-full bg-gray-50 p-4 ${
-        activeTab !== 'edit'
-          ? 'flex min-h-0 flex-col overflow-hidden'
-          : 'overflow-y-auto'
-      }`}
+      className="editor-single-panel editor-form-panel flex h-full min-h-0 flex-col overflow-hidden"
     >
-      <div
-        className="sticky top-1 z-50 mb-5 flex min-w-0 shrink-0 justify-start"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <div className="editor-liquid-island">
-          <label className="editor-liquid-name">
-            <FileText className="h-4 w-4 shrink-0 text-cyan-500" />
-            <input
-              type="text"
-              value={resumeTitle}
-              onChange={(e) => setResumeTitle(e.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
-              placeholder="输入简历名称..."
-            />
-            <Pencil className={`editor-liquid-name-edit h-3.5 w-3.5 shrink-0 text-slate-400 transition-opacity ${isHovered ? 'opacity-100' : 'opacity-0'}`} />
-          </label>
+      <div className="editor-panel-scale flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* 文档身份层：纯粹留给简历标题 + 右侧微缩页数充盈仪 */}
+        <div className="editor-panel-header shrink-0 pb-2 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <label className="group -ml-1.5 flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-[#f4f8ff] focus-within:bg-[#f0f5ff]">
+              <input
+                type="text"
+                value={resumeTitle}
+                onChange={(e) => setResumeTitle(e.target.value)}
+                className="editor-doc-title-input min-w-0 flex-1 bg-transparent font-bold tracking-[-0.015em] text-[#243958] outline-none placeholder:font-normal placeholder:text-[#93a5bf]"
+                placeholder="输入简历名称..."
+              />
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-[#8397b4] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100" />
+            </label>
 
-          {onTabChange && (
-            <>
-              <span className="relative z-[1] h-7 w-px shrink-0 rounded-full bg-gradient-to-b from-transparent via-slate-300/70 to-transparent" />
+            {metricsLabel && (
               <div
-                className={`editor-liquid-tabs ${showAgentTab ? '' : 'editor-liquid-tabs-single'} ${activeTab === 'jd' ? 'editor-liquid-tabs-no-active' : ''}`}
-                style={tabHighlightStyle}
+                title={metricsTooltip}
+                className={`editor-page-meter shrink-0 ${showWarningBar ? 'is-warning' : ''}`}
               >
+                <div className="editor-rhythm-bar" aria-hidden="true">
+                  {Array.from({ length: Math.min(pageCount, 4) }).map((_, index, list) => {
+                    const isLast = index === list.length - 1
+                    const width = pageMetrics ? (isLast ? `${lastFillPercent}%` : '100%') : '0%'
+                    return (
+                      <div key={index} className="editor-rhythm-seg">
+                        <div
+                          className={`editor-rhythm-seg-fill ${isLast && showWarningBar ? 'is-warning' : ''}`}
+                          style={{ width }}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+                <span>{metricsLabel}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 模式切换底标导航层：锚定在发丝分割线上，消除漂浮胶囊 */}
+        <div className="editor-panel-tabbar shrink-0">
+          {onTabChange ? (
+            <div className="editor-panel-tabs">
               <EditorTabButton
                 active={activeTab === 'edit'}
                 onClick={() => onTabChange('edit')}
+                icon={<FilePenLine className="editor-panel-tab-icon" aria-hidden="true" />}
               >
                 简历编辑
               </EditorTabButton>
               {showAgentTab && (
                 <EditorTabButton
                   active={activeTab === 'agent'}
+                  variant="agent"
                   onClick={() => onTabChange('agent')}
+                  icon={<Sparkles className="editor-panel-tab-icon" aria-hidden="true" />}
                 >
                   Agent 定岗
                 </EditorTabButton>
               )}
-              </div>
-            </>
+            </div>
+          ) : (
+            <div />
           )}
-        </div>
-      </div>
 
-      {activeTab !== 'edit' ? (
-        jdPanel
-      ) : (
-        <>
-          {parseWarnings.length > 0 && <div role="status" className="mx-4 mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
-          </div>}
-          <div ref={basicInfoRef}>
-            <BasicInfoEditor
-              expanded={expandedSection === 'basic'}
-              onToggle={() => handleSetExpandedSection(expandedSection === 'basic' ? null : 'basic')}
-            />
+          <span className="editor-tab-hint hidden truncate pb-2.5 text-[#90a3be] sm:inline">
+            {activeTab === 'edit' ? '悬停标题行，按住左侧抓手调序' : '右侧审阅建议并与预览联动'}
+          </span>
+        </div>
+
+        {activeTab !== 'edit' ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {jdPanel}
           </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
+        ) : (
+          <div
+            onScroll={scroll.onScroll}
+            data-scrolling={scroll.isScrolling ? 'true' : 'false'}
+            className="editor-immersive-scroll min-h-0 flex-1 overflow-y-auto"
           >
-            <SortableContext
-              items={sectionOrder}
-              strategy={verticalListSortingStrategy}
-            >
-              {sectionOrder.map((sectionId) => {
-                const Component = MODULE_COMPONENTS[sectionId]
-                return Component ? (
-                  <div key={sectionId} ref={(el) => { sectionRefs.current[sectionId] = el }}>
-                    <Component
-                      expanded={expandedSection === sectionId}
-                      onToggle={() => handleSetExpandedSection(expandedSection === sectionId ? null : sectionId)}
-                      focusItemId={focusTarget?.section === sectionId ? focusTarget.itemId : undefined}
-                      focusRequestKey={focusTarget?.section === sectionId ? focusTarget.requestKey : undefined}
+            <div className="flex min-h-full flex-col">
+              <div className="editor-panel-body">
+                {parseWarnings.length > 0 && (
+                  <div
+                    role="status"
+                    className="editor-control-text mt-3 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3.5 py-2.5 leading-5 text-amber-800"
+                  >
+                    {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                  </div>
+                )}
+                <div className="editor-section-list pb-3">
+                  <div ref={basicInfoRef}>
+                    <BasicInfoEditor
+                      expanded={expandedSection === 'basic'}
+                      onToggle={() => handleSetExpandedSection(expandedSection === 'basic' ? null : 'basic')}
                     />
                   </div>
-                ) : null
-              })}
-            </SortableContext>
-          </DndContext>
-        </>
-      )}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={sectionOrder}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {sectionOrder.map((sectionId) => {
+                        const Component = MODULE_COMPONENTS[sectionId]
+                        return Component ? (
+                          <div key={sectionId} ref={(el) => { sectionRefs.current[sectionId] = el }}>
+                            <Component
+                              expanded={expandedSection === sectionId}
+                              onToggle={() => handleSetExpandedSection(expandedSection === sectionId ? null : sectionId)}
+                              focusItemId={focusTarget?.section === sectionId ? focusTarget.itemId : undefined}
+                              focusRequestKey={focusTarget?.section === sectionId ? focusTarget.requestKey : undefined}
+                            />
+                          </div>
+                        ) : null
+                      })}
+                    </SortableContext>
+                  </DndContext>
+                </div>
+              </div>
+
+              <EditorHorizonFooter
+                resumeData={resumeData}
+                pageMetrics={pageMetrics}
+                linkedApplications={linkedApplications}
+                hasSavedResume={hasSavedResume}
+                showAgentTab={showAgentTab}
+                onSelectSection={handleSelectSectionFromFooter}
+                onOpenAgent={onTabChange ? () => onTabChange('agent') : undefined}
+                onOpenApplication={onOpenApplication}
+                onOpenAllApplications={onOpenAllApplications}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 function EditorTabButton({
   active,
+  variant = 'edit',
+  icon,
   onClick,
   children,
 }: {
   active: boolean
+  variant?: 'edit' | 'agent'
+  icon?: ReactNode
   onClick: () => void
   children: ReactNode
 }) {
@@ -214,9 +312,10 @@ function EditorTabButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`editor-liquid-tab ${active ? 'editor-liquid-tab-active' : ''}`}
+      className={`editor-panel-tab ${active ? 'is-active' : ''} ${variant === 'agent' ? 'is-agent' : ''}`}
     >
-      {children}
+      {icon}
+      <span>{children}</span>
     </button>
   )
 }

@@ -1,7 +1,9 @@
 ﻿import { useState, useRef, useCallback } from 'react'
 import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
-import { Upload as UploadIcon, X, File, Sparkles } from 'lucide-react'
+import { ArrowUp, Sparkles, X } from 'lucide-react'
+import { FishMascot } from '../Brand/FishMascot'
+import '../Editor/EditorWorkspace.css'
 
 interface UploadProps {
   embedded?: boolean
@@ -20,12 +22,10 @@ export function Upload({
   embedded = false,
   showBottomHint = true,
   onAuthRequired,
-  emptyTitle = '点击或拖拽文件到这里',
+  emptyTitle = '点击选择文件，或拖拽简历到这里',
   emptyActiveTitle = '松开即可上传',
-  emptyDescription = '支持 PDF、DOCX、DOC、TXT 文件',
-  emptyActionLabel = '上传简历',
+  emptyDescription = '支持 PDF、DOCX、DOC、TXT · 自动识别经历与技能模块',
   emptyBadge,
-  emphasizeAction = false,
   compact = false,
 }: UploadProps) {
   const { parseFile, cancelParse, parseStatus, parseError, parseStage, parseWarnings, setCurrentFile } = useResumeStore()
@@ -103,6 +103,14 @@ export function Upload({
     setIsDragActive(false)
   }, [])
 
+  const openFilePicker = () => {
+    if (requestAuthIfNeeded()) return
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
   const handleRemoveFile = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isParsing) {
@@ -118,222 +126,174 @@ export function Upload({
   const isParsing = parseStatus === 'parsing'
   const hasFile = file !== null
   const showParseButton = hasFile && !isParsing && parseStatus !== 'success'
-  const embeddedHasFile = embedded && hasFile
-  const fileExtension = file?.name.split('.').pop()?.toUpperCase() ?? ''
+  const fileExtension = file?.name.split('.').pop()?.toUpperCase() || 'FILE'
   const fileSizeText = file
     ? file.size >= 1024 * 1024
       ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
       : `${(file.size / 1024).toFixed(1)} KB`
     : ''
-  const dropzoneHeightClass = embedded
-    ? embeddedHasFile
-      ? 'min-h-[188px]'
-      : compact
-      ? 'min-h-[190px] flex-1'
-      : 'min-h-[248px] flex-1'
-    : ''
-  const dropzonePaddingClass = embedded
-    ? embeddedHasFile
-      ? 'px-5 py-4 md:px-6 md:py-5'
-      : compact
-      ? 'p-5'
-      : 'p-6'
-    : 'p-10'
-  const dropzoneVisualClass = embedded
-    ? hasFile
-      ? 'rounded-[28px] border-blue-200/80 bg-white/85 shadow-[0_18px_55px_rgba(37,99,235,0.10)] hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.15)]'
-    : isDragActive
-      ? 'rounded-[28px] upload-drag-active border-blue-400 bg-blue-50/80 shadow-[0_24px_70px_rgba(37,99,235,0.18)]'
-      : `rounded-[28px] border-blue-200/70 bg-[linear-gradient(135deg,rgba(239,246,255,0.98),rgba(255,255,255,0.84)_56%,rgba(219,234,254,0.92))] shadow-[0_18px_55px_rgba(37,99,235,0.13)] hover:-translate-y-1 hover:bg-white hover:border-blue-300 hover:shadow-[0_24px_70px_rgba(37,99,235,0.18)] ${emphasizeAction ? 'ring-1 ring-blue-300/70' : ''}`
-    : hasFile
-    ? 'border-green-300 bg-green-50/50'
-    : isDragActive
-    ? 'upload-drag-active border-blue-400 bg-blue-50/50'
-    : 'border-dashed border-gray-200 hover:border-blue-300 hover:bg-gray-50/50'
-  const emptyIconBoxClass = compact ? 'h-16 w-16 rounded-[22px]' : 'h-[76px] w-[76px] rounded-[24px]'
-  const emptyIconClass = compact ? 'h-8 w-8' : 'h-9 w-9'
-  const emptyTitleClass = compact ? 'text-lg' : 'text-xl'
-  const emptyActionClass = compact ? 'mt-5 h-10 px-6' : 'mt-6 h-11 px-8'
 
   return (
     <div
-      className={embedded ? 'flex h-full w-full min-w-0 flex-col' : 'w-full max-w-lg mx-auto px-6'}
+      className={embedded ? 'flex w-full min-w-0 flex-col' : 'mx-auto w-full max-w-lg px-6'}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
     >
-      <div
-        className={`group relative overflow-hidden border-2 rounded-2xl text-center cursor-pointer transition-all duration-300 btn-press ${dropzoneHeightClass} ${dropzonePaddingClass} ${dropzoneVisualClass}`}
-        onClick={() => {
-          if (requestAuthIfNeeded()) return
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.docx,.doc,.txt"
+        onChange={handleFileChange}
+        className="hidden"
+      />
 
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ''
-            fileInputRef.current.click()
-          }
-        }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.docx,.doc,.txt"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-
-        {hasFile ? (
-          <div className="relative flex h-full w-full flex-col justify-between animate-scale-in">
-            <div className="flex items-center justify-between pt-1">
-              <p className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-emerald-600">
-                已选择文件
+      {isParsing ? (
+        <div className="py-7 text-center" role="status" aria-live="polite">
+          <div className="relative mx-auto flex h-24 w-[74px] flex-col gap-2 overflow-hidden rounded-xl border border-[#bcd5fa] bg-white p-3 shadow-[0_14px_30px_rgba(50,107,237,0.14)]">
+            <div className="upload-scan-beam" aria-hidden="true" />
+            <div className="h-1.5 w-7 rounded-full bg-[#326bed]/65" />
+            <div className="h-1 w-full rounded-full bg-[#dce6f6]" />
+            <div className="h-1 w-4/5 rounded-full bg-[#dce6f6]" />
+            <div className="h-1 w-11/12 rounded-full bg-[#e6eef9]" />
+            <div className="h-1 w-3/5 rounded-full bg-[#e6eef9]" />
+          </div>
+          <p className="mt-4 text-sm font-semibold text-[#243958]">
+            {parseStage ? `${parseStage}，请稍候…` : '正在识别简历结构与关键经历…'}
+          </p>
+          <div className="mt-2.5 flex items-center justify-center gap-3 text-[11px] text-[#7c91b0]">
+            <span className="font-medium text-[#326bed]">01 读取文档</span>
+            <span aria-hidden="true" className="text-[#cbd8ee]">→</span>
+            <span className="font-medium text-[#326bed]">02 提取模块</span>
+            <span aria-hidden="true" className="text-[#cbd8ee]">→</span>
+            <span>03 生成 A4 预览</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleRemoveFile}
+            className="mt-4 inline-flex h-8 cursor-pointer items-center rounded-lg px-3 text-xs font-medium text-[#6d82a0] transition-colors hover:bg-[#f0f5ff] hover:text-[#243958]"
+          >
+            取消解析
+          </button>
+        </div>
+      ) : hasFile ? (
+        <div className="space-y-5">
+          <div className="flex items-center gap-4 border-y border-[#edf2fa] py-5">
+            <div className="flex h-14 w-11 shrink-0 flex-col justify-between rounded-lg border border-[#d6e3f7] bg-[#f8fbff] p-2">
+              <div className="space-y-1">
+                <div className="h-1 w-4 rounded-full bg-[#326bed]/80" />
+                <div className="h-1 w-full rounded-full bg-[#dfe8f7]" />
+                <div className="h-1 w-3/4 rounded-full bg-[#dfe8f7]" />
+              </div>
+              <span className="text-[9px] font-bold text-[#326bed]">{fileExtension.slice(0, 4)}</span>
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-semibold text-[#243958]" title={file.name}>
+                {file.name}
               </p>
+              <p className="mt-1 text-xs tabular-nums text-[#7c91b0]">
+                {fileSizeText} · 将拆解基本信息、教育、经历与技能
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
-                onClick={handleRemoveFile}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 border border-transparent hover:border-red-100 transition-all duration-200 btn-press shrink-0"
+                type="button"
+                onClick={openFilePicker}
+                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-medium text-[#5b7294] transition-colors hover:bg-[#f0f5ff] hover:text-[#326bed]"
               >
-                <X className="w-4 h-4" />
+                更换
+              </button>
+              <button
+                type="button"
+                aria-label="移除文件"
+                onClick={handleRemoveFile}
+                className="cursor-pointer rounded-lg p-1.5 text-[#8ea2be] transition-colors hover:bg-rose-50 hover:text-rose-500"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
-
-            <div className="flex flex-1 items-center justify-center py-3">
-              <div className="flex w-full max-w-[460px] items-center gap-4 transition-all duration-300 group-hover:-translate-y-0.5">
-                <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center shadow-sm shrink-0 transition-transform duration-300 group-hover:scale-110">
-                  <File className="w-7 h-7 text-slate-400" />
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-xl leading-tight font-semibold text-slate-900" title={file.name}>
-                    {file.name}
-                  </p>
-                  <p className="mt-2 text-sm font-medium tracking-wide text-slate-500">
-                    {fileSizeText}
-                    {fileExtension ? ` · ${fileExtension}` : ''}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-end justify-end pb-1">
-              <span className="inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-slate-400 border border-slate-200 bg-slate-50 px-2.5 py-1 rounded-full">
-                点击卡片可重新选择
-              </span>
-            </div>
           </div>
-        ) : embedded ? (
-          <>
-            {emptyBadge && (
-              <div className="absolute left-5 top-5 z-[2] rounded-full border border-blue-200 bg-white/85 px-3 py-1 text-[11px] font-semibold text-blue-600 shadow-sm shadow-blue-100 backdrop-blur">
-                {emptyBadge}
-              </div>
-            )}
-            <div className="pointer-events-none absolute left-7 top-7 grid grid-cols-5 gap-2 opacity-35">
-              {Array.from({ length: 25 }).map((_, index) => (
-                <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-300" />
-              ))}
-            </div>
-            <div className="pointer-events-none absolute -right-4 bottom-5 h-24 w-32 rotate-[-24deg] rounded-[40px] border-4 border-blue-100/90" />
-            <div className="pointer-events-none absolute bottom-7 right-9 h-16 w-20 rotate-[-16deg] border-b-8 border-r-8 border-blue-100/80" />
 
-            <div className="relative z-[1] grid h-full w-full min-w-0 items-center gap-6 md:grid-cols-[minmax(128px,170px)_minmax(0,1fr)]">
-              <div className="flex items-center justify-center">
-                <div className="relative">
-                  <div className="absolute -bottom-4 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] bg-blue-200/45 blur-sm" />
-                  <div className="absolute -bottom-5 left-1/2 h-10 w-28 -translate-x-1/2 rounded-[50%] border border-blue-200 bg-white/45" />
-                  <div className={`relative flex ${emptyIconBoxClass} items-center justify-center bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 text-white shadow-xl shadow-blue-300/80 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-105'}`}>
-                    <UploadIcon className={`${emptyIconClass} transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="min-w-0 text-center md:text-left">
-                <h2 className={`${emptyTitleClass} font-bold text-slate-900`}>
-                  {isDragActive ? emptyActiveTitle : emptyTitle}
-                </h2>
-                <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
-                  {emptyDescription}
-                </p>
-                <span className={`${emptyActionClass} inline-flex min-w-36 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm font-semibold text-white shadow-lg shadow-blue-200 transition-all duration-300 group-hover:from-blue-500 group-hover:to-blue-600 group-hover:shadow-xl group-hover:shadow-blue-300 ${emphasizeAction ? 'shadow-xl shadow-blue-300 ring-4 ring-blue-100/80 group-hover:ring-blue-200/80' : ''}`}>
-                  {emptyActionLabel}
-                </span>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-5">
-            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-blue-200 transition-all duration-300 ${isDragActive ? 'scale-110 animate-float' : 'group-hover:scale-110'}`}>
-              <UploadIcon className={`w-8 h-8 text-white transition-transform duration-300 ${isDragActive ? 'scale-110' : ''}`} />
-            </div>
-            <div className="min-h-[62px] text-center">
-              <p className="text-gray-700 font-medium mb-1">
-                {isDragActive ? '拖拽以上传文件' : '点击或拖拽文件到这里'}
-              </p>
-              <p className="text-sm leading-6 text-gray-400">
-                支持 PDF、DOCX、DOC、TXT 文件
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {parseError && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm animate-shake">
-          {parseError}
-        </div>
-      )}
-      {parseWarnings.length > 0 && <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
-      </div>}
-
-      {embedded && (showParseButton || isParsing) ? (
-        <div className={`mt-4 flex items-center justify-center ${embeddedHasFile ? 'flex-1 items-end' : ''}`}>
           {showParseButton && (
-            <button
-              onClick={handleParse}
-              className="w-full py-3.5 text-[17px] bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:from-blue-600 hover:via-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 btn-press"
-            >
-              <Sparkles className="w-4 h-4 animate-pulse" />
-              开始智能解析
-            </button>
-          )}
-
-          {isParsing && (
-            <div className="w-full py-3.5 px-4 text-[17px] bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 text-blue-600 rounded-xl font-medium flex items-center justify-center gap-3 animate-pulse">
-              <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
-              <span>{parseStage || '识别内容'}，请稍候...</span>
-            </div>
-          )}
-        </div>
-      ) : !embedded ? (
-        <>
-          {showParseButton && (
-            <div>
+            <div className="flex justify-end">
               <button
+                type="button"
                 onClick={handleParse}
-                className="mt-6 w-full py-3.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:from-blue-600 hover:via-indigo-600 hover:to-purple-600 transition-all duration-300 shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-0.5 flex items-center justify-center gap-2 btn-press"
+                className="editor-top-btn-primary h-10 px-5 text-xs"
               >
-                <Sparkles className="w-4 h-4 animate-pulse" />
+                <Sparkles className="h-3.5 w-3.5" />
                 开始智能解析
               </button>
             </div>
           )}
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={openFilePicker}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              openFilePicker()
+            }
+          }}
+          className={`upload-drop-area relative cursor-pointer rounded-2xl border-[1.5px] border-dashed border-[#c2d7f8] bg-[radial-gradient(ellipse_at_50%_0%,rgba(232,241,255,0.68),transparent_70%),#fafcff] text-center transition-colors hover:border-[#326bed] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7da7ee] ${
+            isDragActive ? 'is-drag-active border-[#326bed] bg-[#edf4ff]' : ''
+          } ${compact ? 'px-5 py-7' : 'px-6 py-9'}`}
+        >
+          {emptyBadge && (
+            <span className="absolute left-4 top-4 rounded-full border border-[#d6e4fa] bg-white/90 px-2.5 py-0.5 text-[11px] font-medium text-[#326bed]">
+              {emptyBadge}
+            </span>
+          )}
 
-          {isParsing && (
-            <div>
-              <div className="mt-6 w-full py-3.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 text-blue-600 rounded-xl font-medium flex items-center justify-center gap-3">
-                <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
-                <span>{parseStage || '识别内容'}，请稍候...</span>
+          <FishMascot className="upload-fish-float pointer-events-none absolute right-5 top-4 h-9 w-11 opacity-90" />
+
+          <div className="upload-paper-stack" aria-hidden="true">
+            <div className="upload-paper-sheet upload-sheet-left" />
+            <div className="upload-paper-sheet upload-sheet-right" />
+            <div className="upload-paper-sheet upload-sheet-front flex flex-col justify-between p-2.5 text-left">
+              <div className="space-y-1.5">
+                <div className="h-1.5 w-6 rounded-full bg-[#326bed]/80" />
+                <div className="h-1 w-full rounded-full bg-[#dce6f6]" />
+                <div className="h-1 w-4/5 rounded-full bg-[#e6eef9]" />
+                <div className="h-1 w-3/5 rounded-full bg-[#e6eef9]" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[8px] font-bold text-[#557cbe]">A4</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#edf3ff] text-[#326bed]">
+                  <ArrowUp className="h-2.5 w-2.5" strokeWidth={2.5} />
+                </span>
               </div>
             </div>
-          )}
-        </>
-      ) : null}
+          </div>
 
-      {showBottomHint && (
-        <div className="mt-10 text-center animate-fade-in">
-          <p className="text-sm text-gray-400">
-            解析完成后可精细编辑内容、调整样式
+          <p className="mt-4 text-[15px] font-semibold text-[#243958]">
+            {isDragActive ? emptyActiveTitle : emptyTitle}
+          </p>
+          <p className="mt-1.5 text-xs text-[#7c91b0]">
+            {emptyDescription}
           </p>
         </div>
+      )}
+
+      {parseError && (
+        <div role="alert" className="mt-4 rounded-xl border border-rose-200/80 bg-rose-50/80 px-3.5 py-2.5 text-xs leading-5 text-rose-700">
+          {parseError}
+        </div>
+      )}
+      {parseWarnings.length > 0 && (
+        <div role="status" className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/80 px-3.5 py-2.5 text-xs leading-5 text-amber-800">
+          {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+        </div>
+      )}
+
+      {showBottomHint && (
+        <p className="mt-6 text-center text-xs text-[#869ab6]">
+          解析完成后可精细编辑内容、调整样式
+        </p>
       )}
     </div>
   )

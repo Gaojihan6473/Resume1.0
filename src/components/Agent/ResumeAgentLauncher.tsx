@@ -443,7 +443,7 @@ export function ResumeAgentGlobalLauncher() {
     }
   }, [closeOverlay, overlayOpen])
 
-  if (!RESUME_AGENT_ENABLED || !isAuthenticated || location.pathname === '/login') return null
+  if (!RESUME_AGENT_ENABLED || !isAuthenticated || location.pathname === '/login' || location.pathname === '/editor') return null
 
   const handleLauncherClick = () => {
     restoreLauncherFocusRef.current = false

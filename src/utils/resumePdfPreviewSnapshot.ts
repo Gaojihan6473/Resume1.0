@@ -85,6 +85,7 @@ const PREVIEW_PDF_PRINT_CSS = `
     padding: 0 !important;
     overflow: hidden !important;
     background: #ffffff !important;
+    border-radius: 0 !important;
     box-shadow: none !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
@@ -121,6 +122,13 @@ export function buildResumePreviewPdfHtml(doc: Document): string | null {
   printableStack.removeAttribute('data-preview-staging')
   printableStack.querySelectorAll<HTMLElement>('[data-preview-staging]').forEach((element) => {
     element.removeAttribute('data-preview-staging')
+  })
+  printableStack.querySelectorAll('.analysis-focus').forEach((element) => {
+    const focusClasses = Array.from(element.classList).filter((name) => name.startsWith('analysis-focus'))
+    element.classList.remove(...focusClasses)
+  })
+  printableStack.querySelectorAll('mark.analysis-marker').forEach((marker) => {
+    marker.replaceWith(...marker.childNodes)
   })
 
   const lang = doc.documentElement.getAttribute('lang') || 'zh-CN'

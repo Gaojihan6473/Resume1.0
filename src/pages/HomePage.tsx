@@ -5,7 +5,6 @@ import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
   FilePlus,
   FileText,
-  Sparkles,
   Upload as UploadIcon,
   X,
   ChevronLeft,
@@ -1065,71 +1064,58 @@ function UploadResumeModal({
   onClose: () => void
   onAuthRequired: () => void
 }) {
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open, onClose])
+
   if (!open) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#192d48]/28 px-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
-        className="max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl shadow-slate-900/20"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-resume-modal-title"
+        className="max-h-[88vh] w-full max-w-[540px] overflow-y-auto rounded-[20px] border border-[#dce6f6] bg-[#fffffffa] p-6 shadow-[0_24px_64px_rgba(25,45,72,0.18)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-800">上传简历</h3>
-            <p className="mt-1 text-xs font-medium text-slate-400">选择文件后可继续使用智能解析</p>
+            <h3 id="upload-resume-modal-title" className="text-[17px] font-bold tracking-tight text-[#243958]">
+              上传简历
+            </h3>
+            <p className="mt-1 text-xs text-[#7c91b0]">
+              拖入文件即可自动提取结构，原稿独立保留
+            </p>
           </div>
           <button
+            type="button"
+            aria-label="关闭上传弹窗"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="cursor-pointer rounded-lg p-1.5 text-[#869ab6] transition-colors hover:bg-[#f0f5ff] hover:text-[#243958]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-5">
-          <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
-            <div className="h-full min-w-0">
-              <Upload embedded showBottomHint={false} onAuthRequired={onAuthRequired} />
-            </div>
-
-            <aside className="flex min-h-[248px] flex-col justify-between rounded-[24px] border border-slate-200 bg-[linear-gradient(145deg,rgba(248,250,252,0.98),rgba(239,246,255,0.86)_54%,rgba(245,243,255,0.92))] p-5 shadow-sm shadow-slate-100">
-              <div>
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-200">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">智能解析</h4>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  上传后会提取基本信息、教育经历、实习经历、项目经历与技能内容。
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 text-[11px] font-semibold text-slate-400">支持格式</p>
-                  <div className="flex flex-wrap gap-2">
-                    {['PDF', 'DOCX', 'DOC', 'TXT'].map((format) => (
-                      <span
-                        key={format}
-                        className="rounded-lg border border-blue-100 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-blue-600"
-                      >
-                        {format}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/80 bg-white/65 p-3">
-                  <p className="text-[11px] font-semibold text-slate-500">解析完成后</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    直接进入编辑页，可继续调整内容、样式并生成预览。
-                  </p>
-                </div>
-              </div>
-            </aside>
-          </div>
+        <div className="mt-5">
+          <Upload embedded showBottomHint={false} onAuthRequired={onAuthRequired} />
         </div>
+
+        <p className="mt-5 text-center text-[11px] text-[#869ab6]">
+          解析完成后自动进入编辑器 · 随时可衍生不同岗位专属版本
+        </p>
       </div>
     </div>
   )

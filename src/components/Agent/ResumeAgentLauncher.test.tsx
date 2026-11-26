@@ -272,10 +272,19 @@ describe('ResumeAgentLauncher', () => {
     expect(container.querySelector('.agent-corner-launcher-wrap')).toHaveAttribute('data-avoid-bottom-nav', 'true')
   })
 
-  it('stays hidden on the login page', () => {
+  it('stays hidden on the login and editor pages', () => {
     seedStores()
     render(
       <MemoryRouter initialEntries={['/login']}>
+        <ResumeAgentGlobalLauncher />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: /打开小鱼 Agent/ })).not.toBeInTheDocument()
+
+    cleanup()
+    render(
+      <MemoryRouter initialEntries={['/editor?resumeId=resume-1']}>
         <ResumeAgentGlobalLauncher />
       </MemoryRouter>,
     )

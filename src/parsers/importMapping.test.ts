@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { assembleImport, decodeImportResponse, retainUnresolved } from './importMapping'
 import type { ImportGroup } from './importMapping'

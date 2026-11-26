@@ -44,7 +44,7 @@ npm run check:acceptance -- --workspace
 npm run check:acceptance -- --pdf
 ```
 
-验收入口只监听 `127.0.0.1`，自动选择空闲端口，等待服务就绪并在成功、失败或中断时清理进程树；每个验收套件最多运行 5 分钟，超时按失败报告。Vitest 默认使用 1 个 worker，避免受限机器上多个 jsdom 套件争用资源导致 UI 定时器超时，功能断言与单用例超时不放宽；机器资源充分时可显式覆盖 `--maxWorkers`。同一台机器先跑核心检查再跑浏览器验收，CI 两类任务使用独立 runner。验收入口强制使用合成 Supabase 项目配置、隔离 PostgreSQL 和模拟登录/Storage/AI；不需要 `.env` 或生产凭证。已有 Chrome/Edge 可直接运行；没有浏览器时使用锁定依赖对应的 Chromium：
+验收入口只监听 `127.0.0.1`，自动选择空闲端口，等待服务就绪并在成功、失败或中断时清理进程树；每个验收套件最多运行 5 分钟，超时按失败报告。Vitest 按测试类型拆分环境：纯逻辑测试（`*.test.ts` / `scripts/*pdf*.test.mjs`）默认运行在轻量 `node` 环境，组件测试（`*.test.tsx`）运行在 `jsdom` 环境并挂载 `jest-dom`；若纯 `.test.ts` / `.test.mjs` 用例依赖浏览器全局对象（如 `window`、`DOMParser`、`localStorage`），在文件首行显式声明 `// @vitest-environment jsdom`。默认并发上限保守设为本地 3 个、CI 2 个 worker，避免多个 `jsdom` 套件争用资源导致 UI 定时器超时，功能断言与单用例超时不放宽；需要时仍可通过 `--maxWorkers` 显式覆盖。同一台机器先跑核心检查再跑浏览器验收，CI 两类任务使用独立 runner。验收入口强制使用合成 Supabase 项目配置、隔离 PostgreSQL 和模拟登录/Storage/AI；不需要 `.env` 或生产凭证。已有 Chrome/Edge 可直接运行；没有浏览器时使用锁定依赖对应的 Chromium：
 
 ```bash
 node node_modules/playwright-core/cli.js install chromium

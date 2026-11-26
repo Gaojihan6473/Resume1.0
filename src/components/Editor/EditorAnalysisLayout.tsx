@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { batchPath } from '../../utils/batchWorkspace'
 import {
   AlertCircle,
   ChevronDown,
   Loader2,
+  Minus,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   RefreshCw,
   Sparkles,
 } from 'lucide-react'
@@ -46,11 +49,17 @@ import { Preview } from '../Preview/Preview'
 import { ResumeAgentConfigPanel } from '../Agent/ResumeAgentConfigPanel'
 import { ResumeAgentHeaderNotice } from '../Agent/ResumeAgentHeaderNotice'
 import { ResumeAgentTaskPanel } from '../Agent/ResumeAgentTaskPanel'
-import { Editor, type EditorMainTab } from './Editor'
+import { Editor, type EditorMainTab, type ResumePageMetrics } from './Editor'
 import { CustomSelect } from '../Application/CustomSelect'
+import { useAutoHideScrollbar } from '../Application/useAutoHideScrollbar'
+
+const MIN_PREVIEW_ZOOM = 0.45
+const MAX_PREVIEW_ZOOM = 1.8
 
 interface EditorAnalysisLayoutProps {
   previewRef: RefObject<HTMLDivElement | null>
+  showLayoutGuides?: boolean
+  onTriptychChange?: (isTriptych: boolean) => void
 }
 
 interface HistoryBadge {
@@ -84,12 +93,18 @@ const NOTICE_AUTO_COLLAPSE_MS = 5000
 const SUGGESTION_LOCK_CLEAR_MS = 3000
 const SUGGESTION_LOCK_FADE_MS = 420
 
-export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) {
+export function EditorAnalysisLayout({ previewRef, showLayoutGuides = false, onTriptychChange }: EditorAnalysisLayoutProps) {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<EditorMainTab>('edit')
   const [jdMode, setJdMode] = useState<'quick' | 'agent'>('quick')
   const [basePageCount, setBasePageCount] = useState<number | null>(null)
   const [draftPageCount, setDraftPageCount] = useState<number | null>(null)
+  const [pageMetrics, setPageMetrics] = useState<ResumePageMetrics | null>(null)
+  const [recommendedFitZoom, setRecommendedFitZoom] = useState(1)
+  const [manualGuidesVisible, setManualGuidesVisible] = useState(false)
+  const [isZoomInputFocused, setIsZoomInputFocused] = useState(false)
+  const rightScroll = useAutoHideScrollbar()
   const [hoverTarget, setHoverTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [lockedTarget, setLockedTarget] = useState<SuggestionInteractionTarget | null>(null)
   const [flashTarget, setFlashTarget] = useState<SuggestionInteractionTarget | null>(null)
@@ -107,12 +122,32 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const {
     resumeData,
+    zoom,
+    setZoom,
     currentResumeId,
     isDirty,
     updateInternship,
     updateProject,
     updateSummary,
   } = useResumeStore()
+  const [zoomInput, setZoomInput] = useState(() => `${Math.round(zoom * 100)}%`)
+
+  useEffect(() => {
+    if (!isZoomInputFocused) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+    }
+  }, [zoom, isZoomInputFocused])
+
+  const commitZoomInput = () => {
+    const parsedZoom = Number.parseFloat(zoomInput.replace('%', '').trim())
+    if (!Number.isFinite(parsedZoom)) {
+      setZoomInput(`${Math.round(zoom * 100)}%`)
+      return
+    }
+    const clampedZoom = Math.min(MAX_PREVIEW_ZOOM * 100, Math.max(MIN_PREVIEW_ZOOM * 100, parsedZoom))
+    setZoom(clampedZoom / 100)
+    setZoomInput(`${Math.round(clampedZoom)}%`)
+  }
   const { applications: allApplications, isLoading, fetchApplications } = useApplicationStore()
   const cachedResumes = useResumeStore((state) => state.cachedResumes)
   const draftBatchId = useBatchStore((state) => state.draftBatchId)
@@ -265,6 +300,17 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
     [applications]
   )
 
+  const linkedApplications = useMemo(
+    () => (
+      currentResumeId
+        ? applications
+          .filter((app) => app.resume_id === currentResumeId)
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        : []
+    ),
+    [applications, currentResumeId]
+  )
+
   const resumeText = useMemo(() => buildResumeText(resumeData), [resumeData])
 
   useEffect(() => {
@@ -399,9 +445,10 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
 
   const isAgentMode = jdMode === 'agent'
   const rightPanelCollapsed = isAgentMode ? agent.isRightPanelCollapsed : visibleIsRightPanelCollapsed
-  const gridClass = rightPanelCollapsed
-    ? 'grid-cols-[45%_minmax(0,1fr)_0]'
-    : 'grid-cols-[minmax(0,0.92fr)_minmax(0,1.16fr)_minmax(0,0.92fr)]'
+
+  useEffect(() => {
+    onTriptychChange?.(!rightPanelCollapsed)
+  }, [onTriptychChange, rightPanelCollapsed])
 
   const isAgentDraftVisible = isAgentMode && agentInputsValid && agent.resumeId === currentResumeId && agent.previewMode === 'draft' && Boolean(agent.agentDraftResumeData)
   const isAgentStale = !agentInputsValid
@@ -1110,11 +1157,20 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
   }, [cancelLockedTargetClear])
 
   return (
-    <div className={`flex-1 grid h-full min-h-0 overflow-hidden transition-[grid-template-columns] duration-300 ease-in-out ${gridClass}`}>
-      <div className="min-h-0 min-w-0 border-r border-gray-200 overflow-hidden flex flex-col bg-white">
+    <div className={`editor-workspace-grid ${rightPanelCollapsed ? '' : 'is-triptych'}`}>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden pb-5 pt-2.5">
         <Editor
           activeTab={activeTab}
           showAgentTab={RESUME_AGENT_ENABLED}
+          pageMetrics={pageMetrics}
+          linkedApplications={linkedApplications}
+          hasSavedResume={Boolean(currentResumeId)}
+          onOpenApplication={(applicationId) => {
+            navigate(batchPath(`/applications?applicationId=${applicationId}`, batchId))
+          }}
+          onOpenAllApplications={currentResumeId ? () => {
+            navigate(batchPath(`/applications?resumeId=${currentResumeId}`, batchId))
+          } : undefined}
           onTabChange={(nextTab) => {
             if (isAgentMode && ['running', 'review', 'creating'].includes(agent.status) && nextTab === 'edit') {
               toast('审核期间不能手工编辑 Agent 草稿；可切换预览核对基础简历', 'info')
@@ -1127,7 +1183,7 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
           focusTarget={editorFocusRequest}
           jdPanel={(
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <div className="editor-immersive-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
                 {isAgentMode && RESUME_AGENT_ENABLED ? (
                   <ResumeAgentConfigPanel key={`${currentResumeId}:${agent.applicationId}:${agent.runId}`} applications={applicationsWithJD} historyRecords={historyRecords} currentResumeId={currentResumeId} resumeData={resumeData} isDirty={isDirty} />
                 ) : (
@@ -1158,62 +1214,141 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
         />
       </div>
 
-      <section className="relative min-h-0 min-w-0 overflow-hidden preview-container bg-gray-100">
-        <Preview
-          ref={previewRef}
-          analysisFocus={analysisFocus}
-          registerAnchor={registerAnchor}
-          fitToWidth={!rightPanelCollapsed}
-          dataOverride={isAgentDraftVisible ? agent.agentDraftResumeData || undefined : undefined}
-          publishPdfSnapshot={!isAgentDraftVisible}
-          onPageCountChange={isAgentDraftVisible ? setDraftPageCount : setBasePageCount}
-          onScrollContainerChange={(element) => {
-            previewScrollRef.current = element
-          }}
-        />
+      <section className="preview-container flex min-h-0 min-w-0 flex-col overflow-hidden pb-5 pt-2.5">
+        <div className="editor-preview-tray relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <Preview
+            ref={previewRef}
+            analysisFocus={analysisFocus}
+            registerAnchor={registerAnchor}
+            fitToWidth={!rightPanelCollapsed}
+            showMarginGuides={Boolean(showLayoutGuides || manualGuidesVisible)}
+            dataOverride={isAgentDraftVisible ? agent.agentDraftResumeData || undefined : undefined}
+            publishPdfSnapshot={!isAgentDraftVisible}
+            onPageCountChange={isAgentDraftVisible ? setDraftPageCount : setBasePageCount}
+            onPageMetricsChange={setPageMetrics}
+            onFitZoomChange={setRecommendedFitZoom}
+            onScrollContainerChange={(element) => {
+              previewScrollRef.current = element
+            }}
+          />
 
-        {isAgentMode && agentInputsValid && agent.agentDraftResumeData && (
-          <div
-            role="group"
-            aria-label="简历预览版本"
-            className="absolute left-1/2 top-3 z-30 grid w-[210px] -translate-x-1/2 grid-cols-2 rounded-full border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur"
-          >
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-sm transition-[transform,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
-                agent.previewMode === 'draft'
-                  ? 'translate-x-full bg-cyan-50 shadow-cyan-100/70'
-                  : 'translate-x-0 bg-slate-100 shadow-slate-200/70'
-              }`}
-            />
-            <button
-              type="button"
-              aria-pressed={agent.previewMode === 'base'}
-              onClick={() => agent.setPreviewMode('base')}
-              className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-300 motion-reduce:transition-none ${
-                agent.previewMode === 'base' ? 'text-slate-800' : 'text-slate-500 hover:text-slate-700'
-              }`}
+          {isAgentMode && agentInputsValid && agent.agentDraftResumeData && (
+            <div
+              role="group"
+              aria-label="简历预览版本"
+              className="absolute left-1/2 top-3 z-30 grid w-[210px] -translate-x-1/2 grid-cols-2 rounded-full border border-[#dce6f6] bg-white/90 p-1 shadow-sm backdrop-blur"
             >
-              基础简历
-            </button>
-            <button
-              type="button"
-              aria-pressed={agent.previewMode === 'draft'}
-              onClick={() => agent.setPreviewMode('draft')}
-              className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-300 motion-reduce:transition-none ${
-                agent.previewMode === 'draft' ? 'text-cyan-700' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Agent 草稿
-            </button>
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-full shadow-xs transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+                  agent.previewMode === 'draft'
+                    ? 'translate-x-full bg-[#edf3ff]'
+                    : 'translate-x-0 bg-[#f2f6fc]'
+                }`}
+              />
+              <button
+                type="button"
+                aria-pressed={agent.previewMode === 'base'}
+                onClick={() => agent.setPreviewMode('base')}
+                className={`relative z-10 cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+                  agent.previewMode === 'base' ? 'text-[#243958]' : 'text-[#6d82a0] hover:text-[#243958]'
+                }`}
+              >
+                基础简历
+              </button>
+              <button
+                type="button"
+                aria-pressed={agent.previewMode === 'draft'}
+                onClick={() => agent.setPreviewMode('draft')}
+                className={`relative z-10 cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-200 ${
+                  agent.previewMode === 'draft' ? 'text-[#326bed]' : 'text-[#6d82a0] hover:text-[#243958]'
+                }`}
+              >
+                Agent 草稿
+              </button>
+            </div>
+          )}
+
+          {/* 底部轻透纯悬浮磨砂 Dock：缩放 / 适应 / 边距线 */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-3.5 z-20 flex justify-center">
+            <div className="editor-canvas-dock pointer-events-auto inline-flex h-8.5 items-center gap-1 px-2 text-xs text-[#4a6387]">
+              <button
+                type="button"
+                title="缩小"
+                aria-label="缩小"
+                onClick={() => setZoom(Math.max(MIN_PREVIEW_ZOOM, zoom - 0.1))}
+                className="inline-flex h-6.5 w-6.5 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-[#edf3ff] hover:text-[#326bed]"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <label className="flex h-6 items-center justify-center rounded-md border border-transparent transition-colors focus-within:border-[#8fb2f0] focus-within:bg-[#f0f5ff]">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={zoomInput}
+                  onChange={(event) => setZoomInput(event.target.value)}
+                  onFocus={(event) => {
+                    setIsZoomInputFocused(true)
+                    event.currentTarget.select()
+                  }}
+                  onBlur={() => {
+                    commitZoomInput()
+                    setIsZoomInputFocused(false)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.currentTarget.blur()
+                    } else if (event.key === 'Escape') {
+                      setZoomInput(`${Math.round(zoom * 100)}%`)
+                      event.currentTarget.blur()
+                    }
+                  }}
+                  aria-label="预览缩放百分比"
+                  title={`输入 ${MIN_PREVIEW_ZOOM * 100}%–${MAX_PREVIEW_ZOOM * 100}%`}
+                  className="w-10 bg-transparent text-center font-mono text-[11.5px] font-semibold tabular-nums text-[#243958] outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                title="放大"
+                aria-label="放大"
+                onClick={() => setZoom(Math.min(MAX_PREVIEW_ZOOM, zoom + 0.1))}
+                className="inline-flex h-6.5 w-6.5 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-[#edf3ff] hover:text-[#326bed]"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+              <span aria-hidden="true" className="mx-0.5 h-3 w-px bg-[#dce6f6]" />
+              <button
+                type="button"
+                title="适应预览窗口宽度"
+                onClick={() => setZoom(recommendedFitZoom)}
+                className="cursor-pointer rounded-full px-2 py-0.5 text-[11.5px] font-medium text-[#556e91] transition-colors hover:bg-[#edf3ff] hover:text-[#326bed]"
+              >
+                适应
+              </button>
+              <span aria-hidden="true" className="mx-0.5 h-3 w-px bg-[#dce6f6]" />
+              <button
+                type="button"
+                aria-pressed={manualGuidesVisible}
+                onClick={() => setManualGuidesVisible((visible) => !visible)}
+                className={`cursor-pointer rounded-full px-2 py-0.5 text-[11.5px] font-medium transition-colors ${
+                  manualGuidesVisible || showLayoutGuides
+                    ? 'bg-[#edf3ff] text-[#326bed]'
+                    : 'text-[#556e91] hover:bg-[#edf3ff] hover:text-[#326bed]'
+                }`}
+              >
+                边距线
+              </button>
+            </div>
           </div>
-        )}
-
+        </div>
       </section>
 
       <aside
-        className={`min-h-0 min-w-0 overflow-hidden border-l border-slate-200 bg-slate-50 ${
-          rightPanelCollapsed ? 'pointer-events-none invisible opacity-0' : 'visible opacity-100'
+        className={`flex min-h-0 min-w-0 flex-col overflow-hidden ${
+          rightPanelCollapsed
+            ? 'pointer-events-none invisible p-0 opacity-0'
+            : 'visible pb-5 pt-2.5 opacity-100'
         }`}
         style={{
           transition: rightPanelCollapsed
@@ -1221,111 +1356,130 @@ export function EditorAnalysisLayout({ previewRef }: EditorAnalysisLayoutProps) 
             : 'opacity 180ms ease 90ms, visibility 0s linear',
         }}
       >
-        {isAgentMode ? (
-          <div className="h-full min-w-80 overflow-y-auto overflow-x-hidden">
-            <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
-              {agentHeaderNotices.length > 0 ? (
-                <div className="min-w-0 flex-1">
-                  <ResumeAgentHeaderNotice key={agentHeaderNoticeKey} notices={agentHeaderNotices} />
-                </div>
-              ) : null}
-              <button type="button" onClick={() => agent.setRightPanelCollapsed(true)} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 hover:bg-white hover:text-slate-700"><PanelRightClose className="h-3.5 w-3.5" />收起</button>
+        <div className="editor-single-panel flex min-h-0 flex-1 flex-col overflow-hidden">
+          {isAgentMode ? (
+            <div
+              onScroll={rightScroll.onScroll}
+              data-scrolling={rightScroll.isScrolling ? 'true' : 'false'}
+              className="editor-immersive-scroll flex h-full min-w-72 flex-col overflow-y-auto overflow-x-hidden"
+            >
+              <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-[#edf2fa] bg-white/92 px-4 py-3 backdrop-blur">
+                {agentHeaderNotices.length > 0 ? (
+                  <div className="min-w-0 flex-1">
+                    <ResumeAgentHeaderNotice key={agentHeaderNoticeKey} notices={agentHeaderNotices} />
+                  </div>
+                ) : (
+                  <span className="text-[13px] font-semibold text-[#243958]">AI 定岗审核</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => agent.setRightPanelCollapsed(true)}
+                  className="ml-auto inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs font-medium text-[#6d82a0] transition-colors hover:bg-[#f0f5ff] hover:text-[#243958]"
+                >
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                  收起
+                </button>
+              </div>
+              <ResumeAgentTaskPanel key={`${currentResumeId}:${agent.applicationId}:${agent.runId}`} baseData={resumeData} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
             </div>
-            <ResumeAgentTaskPanel key={`${currentResumeId}:${agent.applicationId}:${agent.runId}`} baseData={resumeData} isStale={isAgentStale || isDirty} onLocatePatch={handleLocateAgentPatch} />
-          </div>
-        ) : (
-          <div
-            ref={analysisPanelScrollRef}
-            className="h-full min-w-80 overflow-y-auto overflow-x-hidden"
-          >
-          <div className="flex min-h-full flex-col">
-            <div className="flex min-h-full flex-1 flex-col p-4">
-              <div className="mb-3 flex min-h-8 items-center gap-3">
-              {visibleNotice && (
-                <div className={`analysis-notice-compact-shell ${isRightNoticeCollapsed ? 'is-visible' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRightNoticeState({
-                        key: visibleNoticeKey,
-                        collapsed: false,
-                      })
-                    }}
-                    title="展开完整提示"
-                    aria-expanded={false}
-                    className={`flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg px-3 text-xs ring-1 transition-[filter] hover:brightness-[0.98] ${
-                      {
-                        info: 'bg-blue-50 text-blue-600 ring-blue-100',
-                        warning: 'bg-amber-50 text-amber-700 ring-amber-100',
-                        error: 'bg-red-50 text-red-600 ring-red-100',
-                      }[visibleNotice.tone]
-                    }`}
-                  >
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">{visibleNotice.message}</span>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  </button>
+          ) : (
+            <div
+              ref={analysisPanelScrollRef}
+              onScroll={rightScroll.onScroll}
+              data-scrolling={rightScroll.isScrolling ? 'true' : 'false'}
+              className="editor-immersive-scroll h-full min-w-72 overflow-y-auto overflow-x-hidden"
+            >
+              <div className="flex min-h-full flex-col">
+                <div className="flex min-h-full flex-1 flex-col p-4">
+                  <div className="mb-3 flex min-h-8 items-center gap-3 border-b border-[#edf2fa] pb-2.5">
+                    {visibleNotice ? (
+                      <div className={`analysis-notice-compact-shell ${isRightNoticeCollapsed ? 'is-visible' : ''}`}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRightNoticeState({
+                              key: visibleNoticeKey,
+                              collapsed: false,
+                            })
+                          }}
+                          title="展开完整提示"
+                          aria-expanded={false}
+                          className={`flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg px-3 text-xs ring-1 transition-[filter] hover:brightness-[0.98] ${
+                            {
+                              info: 'bg-blue-50 text-blue-600 ring-blue-100',
+                              warning: 'bg-amber-50 text-amber-700 ring-amber-100',
+                              error: 'bg-red-50 text-red-600 ring-red-100',
+                            }[visibleNotice.tone]
+                          }`}
+                        >
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate text-left">{visibleNotice.message}</span>
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[13px] font-semibold text-[#243958]">JD 匹配优化建议</span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setSession({ isRightPanelCollapsed: true })}
+                      title="收起建议"
+                      className="ml-auto inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs font-medium text-[#6d82a0] transition-colors hover:bg-[#f0f5ff] hover:text-[#243958]"
+                    >
+                      <PanelRightClose className="h-3.5 w-3.5" />
+                      收起
+                    </button>
+                  </div>
+
+                  {visibleNotice && (
+                    <div
+                      className={`analysis-notice-expanded-shell ${isRightNoticeCollapsed ? '' : 'is-visible'}`}
+                      aria-hidden={isRightNoticeCollapsed}
+                      inert={isRightNoticeCollapsed}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <AnalysisNoticeBox
+                          notice={visibleNotice}
+                          onClick={() => {
+                            setRightNoticeState({
+                              key: visibleNoticeKey,
+                              collapsed: true,
+                            })
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {visibleError && (
+                    <div className="mb-4 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="whitespace-pre-line">{visibleError}</span>
+                    </div>
+                  )}
+
+                  {visibleAnalysisResult ? (
+                    <Suggestions
+                      sectionAnalyses={visibleAnalysisResult.sectionAnalyses}
+                      resetKey={analysisDisplayVersion}
+                      activeSuggestionKey={activeSuggestionKey}
+                      getSuggestionTarget={getSuggestionTarget}
+                      onSuggestionClick={handleSuggestionClick}
+                      onApplySuggestion={handleApplySuggestion}
+                      onUndoSuggestion={handleUndoSuggestion}
+                      isSuggestionApplied={isSuggestionApplied}
+                      getApplyDisabledReason={getApplyDisabledReason}
+                      onExpandedSectionChange={handleExpandedSectionChange}
+                    />
+                  ) : (
+                    <AnalysisEmptyState isAnalyzing={visibleIsAnalyzing} />
+                  )}
                 </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setSession({ isRightPanelCollapsed: true })}
-                title="收起建议"
-                className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-white/70 px-3 text-xs font-medium text-slate-500 ring-1 ring-slate-200/70 transition-all hover:bg-white hover:text-slate-700"
-              >
-                <PanelRightClose className="h-3.5 w-3.5" />
-                收起
-              </button>
               </div>
-
-            {visibleNotice && (
-              <div
-                className={`analysis-notice-expanded-shell ${isRightNoticeCollapsed ? '' : 'is-visible'}`}
-                aria-hidden={isRightNoticeCollapsed}
-                inert={isRightNoticeCollapsed}
-              >
-                <div className="min-h-0 overflow-hidden">
-                  <AnalysisNoticeBox
-                    notice={visibleNotice}
-                    onClick={() => {
-                      setRightNoticeState({
-                        key: visibleNoticeKey,
-                        collapsed: true,
-                      })
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {visibleError && (
-              <div className="mb-4 flex items-start gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="whitespace-pre-line">{visibleError}</span>
-              </div>
-            )}
-
-            {visibleAnalysisResult ? (
-              <Suggestions
-                sectionAnalyses={visibleAnalysisResult.sectionAnalyses}
-                resetKey={analysisDisplayVersion}
-                activeSuggestionKey={activeSuggestionKey}
-                getSuggestionTarget={getSuggestionTarget}
-                onSuggestionClick={handleSuggestionClick}
-                onApplySuggestion={handleApplySuggestion}
-                onUndoSuggestion={handleUndoSuggestion}
-                isSuggestionApplied={isSuggestionApplied}
-                getApplyDisabledReason={getApplyDisabledReason}
-                onExpandedSectionChange={handleExpandedSectionChange}
-              />
-            ) : (
-              <AnalysisEmptyState isAnalyzing={visibleIsAnalyzing} />
-            )}
             </div>
-          </div>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
     </div>
   )

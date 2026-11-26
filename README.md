@@ -48,6 +48,8 @@ Vite 开发服务直接提供同源 `/render-resume-pdf`，需要已安装的 Ch
 
 编辑时使用轻量 HTML / iframe 预览，导出或后台保存时才生成 PDF。正式 PDF 通过 `/render-resume-pdf` 使用受控 Chromium、A4 页面、嵌入中文字体与矢量文字；预览分析高亮不进入正式输出。
 
+编辑器中的「导出 PDF」会等待当前版本的分页预览就绪，并按该分页生成 PDF。若预览未能就绪，界面会提示稍后重试。后台保存和 Agent 已创建版本的独立导出在缺少快照时仍可由 Chromium 分页。
+
 - 本地开发：Vite 中间件。
 - Vercel：同源路径重写到 `api/render-resume-pdf.js`，配置见 [vercel.json](./vercel.json)。
 - 独立服务：`npm run pdf:server`，前端通过可选的 `VITE_PDF_RENDER_URL` 指向服务。
