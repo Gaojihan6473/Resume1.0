@@ -99,14 +99,14 @@ export function SidebarTriggerHint({ triggerRef }: SidebarTriggerHintProps) {
         top: position.top,
       }}
     >
-      <div className="group relative w-[190px] cursor-default rounded-full border border-blue-100/80 bg-white/95 px-4 py-2.5 pr-9 text-xs leading-4 text-slate-600 shadow-[0_14px_34px_rgba(37,99,235,0.15)] ring-1 ring-blue-100/70 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01] hover:border-blue-200 hover:shadow-[0_20px_46px_rgba(37,99,235,0.22)]">
+      <div className="group relative w-[190px] cursor-default rounded-full border border-blue-100/80 bg-white px-4 py-2.5 pr-9 text-xs leading-4 text-slate-600 shadow-[0_14px_34px_rgba(37,99,235,0.15)] ring-1 ring-blue-100/70 transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01] hover:border-blue-200 hover:shadow-[0_20px_46px_rgba(37,99,235,0.22)]">
         <span
           aria-hidden
           className="pointer-events-none absolute left-5 top-[-9px] h-0 w-0 border-b-[9px] border-l-[8px] border-r-[8px] border-b-blue-100/80 border-l-transparent border-r-transparent transition-colors duration-200 group-hover:border-b-blue-200"
         />
         <span
           aria-hidden
-          className="pointer-events-none absolute left-[21px] top-[-7px] h-0 w-0 border-b-[8px] border-l-[7px] border-r-[7px] border-b-white/95 border-l-transparent border-r-transparent"
+          className="pointer-events-none absolute left-[21px] top-[-7px] h-0 w-0 border-b-[8px] border-l-[7px] border-r-[7px] border-b-white border-l-transparent border-r-transparent"
         />
         <button
           type="button"
