@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowLeft, Layers3, Plus, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useBatchStore } from '../../store/batchStore'
@@ -27,12 +28,15 @@ export function BatchSurface({ title, onClose, onBackdropClose, children, drawer
     document.addEventListener('keydown', keydown)
     return () => { window.clearTimeout(timer); document.removeEventListener('keydown', keydown); previous?.focus() }
   }, [])
-  return <div className={`fixed inset-0 z-[150] flex bg-slate-950/25 backdrop-blur-sm ${drawer ? 'justify-end' : 'items-center justify-center p-4'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) (onBackdropClose || onClose)() }}>
-    <div ref={surface} role="dialog" aria-modal="true" aria-label={title} className={`flex max-h-full flex-col bg-white shadow-2xl ${drawer ? 'h-full w-full sm:max-w-[640px]' : 'w-full max-w-lg rounded-3xl'}`}>
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-5"><h2 className="min-w-0 break-words pr-4 text-lg font-semibold text-slate-800">{title}</h2><button type="button" aria-label="关闭" onClick={onClose} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
+  const content = (
+    <div className={`fixed inset-0 z-[200] flex bg-slate-950/25 backdrop-blur-sm ${drawer ? 'justify-end' : 'items-center justify-center p-4'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) (onBackdropClose || onClose)() }}>
+      <div ref={surface} role="dialog" aria-modal="true" aria-label={title} className={`flex max-h-full flex-col bg-white shadow-2xl ${drawer ? 'h-full w-full sm:max-w-[640px]' : 'w-full max-w-lg rounded-3xl'}`}>
+        <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-5"><h2 className="min-w-0 break-words pr-4 text-lg font-semibold text-slate-800">{title}</h2><button type="button" aria-label="关闭" onClick={onClose} className="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
+      </div>
     </div>
-  </div>
+  )
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }
 
 export const batchInputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'

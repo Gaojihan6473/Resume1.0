@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceTopbar } from './WorkspaceTopbar'
 import { Sidebar } from '../Sidebar/Sidebar'
 import { useHoverSidebar } from '../Sidebar/useHoverSidebar'
-import { BatchScopeSelector } from '../Batch/BatchControls'
+import { BatchScopeSelector, BatchSurface } from '../Batch/BatchControls'
 import { ToastContainer } from '../Toast'
 import { useAuthStore } from '../../store/authStore'
 import { useBatchStore } from '../../store/batchStore'
@@ -175,5 +177,30 @@ describe('WorkspaceTopbar and floating Sidebar', () => {
     const toastNode = screen.getByText('保存成功').closest('.fixed')
     expect(toastNode?.parentElement).toBe(document.body)
     expect(toastNode).toHaveClass('z-[11000]')
+  })
+
+  it('portals BatchSurface dialogs to document.body above page shell stacking contexts', () => {
+    const { container } = render(
+      <div className="workspace-page-shell" style={{ isolation: 'isolate' }}>
+        <BatchSurface title="退出登录" onClose={vi.fn()}>
+          <p>确定退出当前账号吗？</p>
+        </BatchSurface>
+      </div>,
+    )
+
+    expect(container.textContent).not.toContain('确定退出当前账号吗？')
+    const backdrop = screen.getByRole('dialog', { name: '退出登录' }).parentElement
+    expect(backdrop).toHaveClass('fixed', 'inset-0', 'z-[200]')
+    expect(backdrop?.parentElement).toBe(document.body)
+  })
+
+  it('keeps page shell background pseudo-elements below content without overriding direct child positioning', () => {
+    const indexCss = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
+    const editorCss = readFileSync(resolve(process.cwd(), 'src/components/Editor/EditorWorkspace.css'), 'utf8')
+
+    expect(indexCss).not.toMatch(/\.workspace-page-shell\s*>\s*\*/)
+    expect(editorCss).not.toMatch(/\.editor-page-shell\s*>\s*\*/)
+    expect(indexCss).toMatch(/\.workspace-page-shell::before\s*\{[\s\S]*?z-index:\s*-1;/)
+    expect(editorCss).toMatch(/\.editor-page-shell::before\s*\{[\s\S]*?z-index:\s*-1;/)
   })
 })

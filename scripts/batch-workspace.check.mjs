@@ -174,9 +174,11 @@ try {
   await screenshot('picker-to-editor')
   await page.goto(`${origin}/?agentAction=upload`)
   await creationPicker.getByRole('button', { name: '默认批次', exact: true }).click()
-  await page.getByRole('heading', { name: '上传简历', exact: true }).waitFor()
+  const uploadDialog = page.getByRole('dialog', { name: '上传简历', exact: true })
+  await uploadDialog.waitFor()
   // Use the backdrop to dismiss the upload modal, then exercise the underlying page.
-  await page.locator('.fixed.inset-0.z-50').click({ position: { x: 5, y: 5 } })
+  await page.mouse.click(5, 5)
+  await uploadDialog.waitFor({ state: 'hidden' })
   await page.getByRole('button', { name: '管理批次', exact: true }).click()
   await page.getByRole('dialog', { name: '管理批次 · 默认批次', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭', exact: true }).click()

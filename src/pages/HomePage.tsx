@@ -1,6 +1,7 @@
 import { AgentHistoryDeleteOption } from '../components/Agent/AgentHistoryDeleteOption'
 import { useJDAnalysisHistoryStore } from '../store/jdAnalysisHistoryStore'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import {
   FilePlus,
@@ -1034,9 +1035,9 @@ function DeleteResumeConfirmModal({
 }) {
   if (!open) return null
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
       onClick={() => {
         if (!isLoading) onClose()
       }}
@@ -1070,6 +1071,8 @@ function DeleteResumeConfirmModal({
       </div>
     </div>
   )
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }
 
 function UploadResumeModal({
@@ -1095,9 +1098,9 @@ function UploadResumeModal({
 
   if (!open) return null
 
-  return (
+  const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#192d48]/28 px-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-[#192d48]/28 px-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
@@ -1136,5 +1139,7 @@ function UploadResumeModal({
       </div>
     </div>
   )
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }
 
