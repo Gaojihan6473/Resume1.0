@@ -30,14 +30,11 @@
 
 /* Blended full-width topbar aligned with workspace outer margins across all desktop screens */
 .editor-topbar {
-  width: 100%;
   max-width: none;
   margin-inline: auto;
   background: transparent;
   border-bottom: 0;
   box-shadow: none;
-  padding-inline: clamp(24px, 2vw, 48px);
-  transition: padding-inline 240ms ease;
 }
 
 .editor-topbar.is-triptych {
@@ -230,7 +227,11 @@
 
 .editor-panel-scale {
   --editor-panel-px: 20px;
-  --editor-section-py: 14px;
+  --editor-header-pt: 20px;
+  --editor-header-pb: 10px;
+  --editor-section-list-pt: 16px;
+  --editor-section-gap: 8px;
+  --editor-section-header-py: 11px;
   --editor-fs-doc-title: 15.5px;
   --editor-fs-section-title: 14px;
   --editor-fs-input: 13.5px;
@@ -244,7 +245,11 @@
 @container editor-panel (min-width: 760px) {
   .editor-panel-scale {
     --editor-panel-px: 24px;
-    --editor-section-py: 15px;
+    --editor-header-pt: 22px;
+    --editor-header-pb: 12px;
+    --editor-section-list-pt: 18px;
+    --editor-section-gap: 10px;
+    --editor-section-header-py: 12px;
     --editor-fs-doc-title: 16px;
     --editor-fs-section-title: 14.5px;
     --editor-fs-input: 14px;
@@ -259,7 +264,11 @@
 @container editor-panel (min-width: 940px) {
   .editor-panel-scale {
     --editor-panel-px: 28px;
-    --editor-section-py: 16px;
+    --editor-header-pt: 24px;
+    --editor-header-pb: 12px;
+    --editor-section-list-pt: 20px;
+    --editor-section-gap: 12px;
+    --editor-section-header-py: 13px;
     --editor-fs-doc-title: 17px;
     --editor-fs-section-title: 15px;
     --editor-fs-input: 14.5px;
@@ -272,7 +281,7 @@
 }
 
 .editor-panel-header {
-  padding-inline: var(--editor-panel-px, 20px);
+  padding: var(--editor-header-pt, 20px) var(--editor-panel-px, 20px) var(--editor-header-pb, 10px);
 }
 
 .editor-panel-body {
@@ -412,8 +421,9 @@
 .editor-section-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-top: 10px;
+  gap: var(--editor-section-gap, 8px);
+  padding-top: var(--editor-section-list-pt, 16px);
+  padding-bottom: 16px;
 }
 
 .editor-section-block {
@@ -423,17 +433,17 @@
 
 .editor-section-block.is-expanded {
   padding-bottom: 14px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .editor-section-list > div:not(:first-child) > .editor-section-block.is-expanded {
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 /* Hover-only interactive surface on module headers without altering resting layout or shape */
 .editor-section-header {
-  margin-inline: -10px;
-  padding: 8px 10px;
+  margin-inline: -12px;
+  padding: var(--editor-section-header-py, 11px) 12px;
   border-radius: 12px;
   background: transparent;
   transition: background-color 150ms ease, transform 120ms ease;
@@ -460,6 +470,7 @@
 }
 
 .editor-section-meta {
+  margin-left: 4px;
   font-size: var(--editor-fs-label, 12px);
   transition: color 150ms ease;
 }
@@ -476,10 +487,10 @@
 
 .editor-section-action {
   display: inline-flex;
-  height: 24px;
+  height: 26px;
   align-items: center;
   gap: 3px;
-  padding: 0 9px 0 7px;
+  padding: 0 10px 0 8px;
   border: 0;
   border-radius: 999px;
   background: rgba(50, 107, 237, 0.08);
@@ -638,16 +649,18 @@
 
 @media (max-width: 640px) {
   .editor-topbar {
-    gap: 6px;
+    gap: 4px;
   }
 
   .editor-top-btn-text {
-    padding: 0 7px;
+    padding: 0 6px;
+    gap: 4px;
     font-size: 12px;
   }
 
   .editor-top-btn-primary {
-    padding: 0 9px;
+    padding: 0 8px;
+    gap: 4px;
     font-size: 12px;
   }
 }
@@ -719,7 +732,7 @@
 .editor-panel-tabs {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   min-width: 0;
 }
 
@@ -728,7 +741,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 2px 10px;
+  padding: 8px 2px 12px;
   color: #778ca9;
   font-size: var(--editor-fs-tab, 13px);
   font-weight: 500;

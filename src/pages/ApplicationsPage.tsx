@@ -1,15 +1,14 @@
 import { AgentHistoryDeleteOption } from '../components/Agent/AgentHistoryDeleteOption'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Loader2, ChevronsRight, FilePlus } from 'lucide-react'
+import { Plus, Loader2, FilePlus } from 'lucide-react'
 import { useApplicationStore } from '../store/applicationStore'
 import { fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useResumeStore } from '../store/resumeStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
-import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
-import { FishLogo } from '../components/Brand/FishLogo'
+import { WorkspaceTopbar } from '../components/Layout/WorkspaceTopbar'
 import { toast } from '../components/Toast'
 import { ResumeSelector } from '../components/Application/ResumeSelector'
 import { ApplicationList } from '../components/Application/ApplicationList'
@@ -46,7 +45,7 @@ export function ApplicationsPage() {
     deleteApplication,
   } = useApplicationStore()
 
-  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
+  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, toggleSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const [resumes, setResumes] = useState<Resume[]>([])
   const [isLoadingResumes, setIsLoadingResumes] = useState(true)
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null)
@@ -262,25 +261,17 @@ const handleGoHome = () => {
   }
 
   return (
-    <div className="applications-page h-screen flex flex-col text-slate-900">
+    <div className="applications-page h-screen flex flex-col">
       {/* 顶部栏 */}
-      <header className="app-topbar h-14 shrink-0 flex items-center px-4">
-        <div
-          ref={triggerRef}
-          onMouseEnter={openSidebar}
-          onMouseLeave={scheduleCloseSidebar}
-          className="flex items-center gap-2 px-2 py-1.5"
-        >
-          <div className="flex h-8 w-8 items-center justify-center text-black">
-            <FishLogo className="h-6 w-7" />
-          </div>
-          <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />
-        </div>
-        <SidebarTriggerHint triggerRef={triggerRef} />
-        <div className="ml-auto min-w-0"><BatchScopeSelector /></div>
-
-      </header>
+      <WorkspaceTopbar
+        sidebarOpen={sidebarOpen}
+        sidebarTriggerRef={triggerRef}
+        onOpenSidebar={openSidebar}
+        onToggleSidebar={toggleSidebar}
+        onScheduleCloseSidebar={scheduleCloseSidebar}
+      >
+        <BatchScopeSelector variant="topbar" />
+      </WorkspaceTopbar>
 
       {/* 主体 */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -288,12 +279,14 @@ const handleGoHome = () => {
         <Sidebar
           open={sidebarOpen}
           sidebarRef={sidebarRef}
+          batchId={batchId}
           onClose={closeSidebar}
           onMouseEnter={openSidebar}
           onMouseLeave={scheduleCloseSidebar}
           topOffset={0}
           backdropTop={56}
           onGoHome={handleGoHome}
+          onNavigateToWorkspace={batchId ? () => navigate(`/batches/${encodeURIComponent(batchId)}`) : undefined}
           onNavigateToMe={() => navigate('/me')}
           onNavigateToApplications={() => navigate(batchPath('/applications', batchId))}
           onNavigateToAnalytics={handleNavigateToAnalytics}

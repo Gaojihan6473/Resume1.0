@@ -9,7 +9,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  ChevronsRight,
   Loader2,
   Plus,
   Pencil,
@@ -24,7 +23,7 @@ import { useAuthStore } from '../store/authStore'
 import { createDefaultResumeData, type ResumeData } from '../types/resume'
 import { Upload } from '../components/Upload/Upload'
 import { Sidebar } from '../components/Sidebar/Sidebar'
-import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
+import { WorkspaceTopbar } from '../components/Layout/WorkspaceTopbar'
 import { createResume, deleteResume, fetchResumes, isSameResumeAsset, type Resume } from '../lib/api'
 import { useApplicationStore } from '../store/applicationStore'
 import { CreateApplicationDropdown } from '../components/Application/CreateApplicationDropdown'
@@ -41,6 +40,7 @@ export interface HomePageProps {
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
   sidebarRef: RefObject<HTMLDivElement | null>
   onOpenSidebar: () => void
+  onToggleSidebar?: () => void
   onScheduleCloseSidebar: () => void
   onCloseSidebar: () => void
   onAuthRequired?: (action: 'new' | 'upload' | 'me') => void
@@ -56,7 +56,7 @@ function getGridColumnCount(containerWidth: number, cardMinWidth: number, gap: n
   return Math.max(1, Math.floor((containerWidth + gap) / (cardMinWidth + gap)))
 }
 
-export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
+export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSidebar, onToggleSidebar, onScheduleCloseSidebar, onCloseSidebar, onAuthRequired }: HomePageProps) {
   const { setResumeData, setParseStatus, setParseError, setCurrentResumeId, setIsDirty, clearCurrentFile, cachedResumes, cachedResumesLastFetched, setCachedResumes } = useResumeStore()
   const { isAuthenticated } = useAuthStore()
   const {
@@ -69,6 +69,7 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   const { batches, fetch: fetchBatches, loaded: batchesLoaded, error: batchError } = useBatchStore()
   const batch = batches.find((item) => item.id === batchId)
   const [showBatchManager, setShowBatchManager] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const parseStatus = useResumeStore((state) => state.parseStatus)
   const navigate = useNavigate()
   const location = useLocation()
@@ -434,28 +435,39 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
   }
 
   return (
-    <div className={`h-full flex flex-col text-slate-900 ${isAuthenticated ? 'bg-[#eef4ff]' : 'bg-white'}`}>
-      {/* 顶部栏 */}
-      <header className={`app-topbar h-14 shrink-0 flex items-center px-4 ${isAuthenticated ? '' : 'landing-topbar'}`}>
-        <div
-          ref={sidebarTriggerRef}
-          onMouseEnter={isAuthenticated ? onOpenSidebar : undefined}
-          onMouseLeave={isAuthenticated ? onScheduleCloseSidebar : undefined}
-          className="flex items-center gap-2 px-2 py-1.5"
-        >
-          <div className="flex h-8 w-8 items-center justify-center text-black">
-            <FishLogo className="h-6 w-7" />
+    <div className={`h-full flex flex-col ${isAuthenticated ? 'workspace-page-shell' : 'bg-white text-slate-900'}`}>
+      {/* 顶部栏：全站统一 56px 通透规范；未登录态不挂载侧栏交互 */}
+      {isAuthenticated ? (
+        <WorkspaceTopbar
+          sidebarOpen={sidebarOpen}
+          sidebarTriggerRef={sidebarTriggerRef}
+          onOpenSidebar={onOpenSidebar}
+          onToggleSidebar={onToggleSidebar}
+          onScheduleCloseSidebar={onScheduleCloseSidebar}
+          scrolled={scrolled}
+        />
+      ) : (
+        <header className={`workspace-topbar landing-topbar relative z-[100] flex h-14 min-w-0 shrink-0 items-center justify-between gap-3 ${scrolled ? 'is-scrolled' : ''}`}>
+          <div
+            ref={sidebarTriggerRef}
+            className="flex h-full shrink-0 items-center"
+          >
+            <div className="inline-flex h-9 items-center gap-2 text-[#243958]">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center text-[#243958]">
+                <FishLogo className="h-5 w-6" />
+              </span>
+              <span className="whitespace-nowrap text-[14.5px] font-semibold tracking-[-0.01em] text-[#243958]">小鱼简历</span>
+            </div>
           </div>
-          <span className="text-base font-bold text-slate-800">小鱼简历</span>
-          {isAuthenticated && <ChevronsRight className="ml-auto w-4 h-4 text-slate-400" />}
-        </div>
-        {isAuthenticated && <SidebarTriggerHint triggerRef={sidebarTriggerRef} />}
-        {!isAuthenticated && (
-          <button type="button" onClick={() => navigate('/login')} className="ml-auto inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
-            登录<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            className="workspace-top-btn-outline"
+          >
+            登录<ChevronRight className="h-3.5 w-3.5 text-[#6d82a0]" aria-hidden="true" />
           </button>
-        )}
-      </header>
+        </header>
+      )}
 
       {/* 主体 */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -463,12 +475,14 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
         {isAuthenticated && <Sidebar
           open={sidebarOpen}
           sidebarRef={sidebarRef}
+          batchId={batchId}
           onClose={onCloseSidebar}
           onMouseEnter={onOpenSidebar}
           onMouseLeave={onScheduleCloseSidebar}
           topOffset={0}
-          backdropTop={0}
+          backdropTop={56}
           onGoHome={() => { onCloseSidebar(); navigate('/') }}
+          onNavigateToWorkspace={batchId ? () => { onCloseSidebar(); navigate(`/batches/${encodeURIComponent(batchId)}`) } : undefined}
           onNavigateToMe={() => {
             if (isAuthenticated) {
               navigate('/me')
@@ -482,7 +496,10 @@ export function HomePage({ sidebarOpen, sidebarTriggerRef, sidebarRef, onOpenSid
         />}
 
         {/* 主视觉区域 */}
-        <main className={`relative flex-1 overflow-y-auto overflow-x-hidden ${isAuthenticated ? 'px-5 py-8 sm:px-8 lg:px-12 home-login-bg' : 'landing-main'}`}>
+        <main
+          onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)}
+          className={`relative flex-1 overflow-y-auto overflow-x-hidden ${isAuthenticated ? 'px-5 py-6 sm:px-8 lg:px-12' : 'landing-main'}`}
+        >
           <div ref={homeContentRef} className={`relative mx-auto w-full ${isAuthenticated ? 'max-w-[1180px]' : 'landing-content'}`}>
             {isAuthenticated ? (
               <>

@@ -11,8 +11,7 @@ import { WorkspaceHeader } from '../components/Batch/WorkspaceHeader'
 import { BatchCardArtwork } from '../components/Batch/BatchCardArtwork'
 import { BATCH_COLORS, type RecruitmentBatch } from '../types/batch'
 import { Sidebar } from '../components/Sidebar/Sidebar'
-import { FishLogo } from '../components/Brand/FishLogo'
-import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
+import { WorkspaceTopbar } from '../components/Layout/WorkspaceTopbar'
 import { RecentResumeCard, RecentApplicationCard } from '../components/Home/RecentWorkspaceCards'
 import { getRecentItems } from '../utils/batchWorkspace'
 
@@ -24,6 +23,7 @@ export function WorkspaceHomePage(props: HomePageProps) {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [manager, setManager] = useState<{ batch?: RecruitmentBatch; deleting?: boolean } | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [scrolled, setScrolled] = useState(false)
   const navigate = useNavigate()
   const retry = () => { setWorkspaceError(null); void refreshWorkspace().catch((error) => setWorkspaceError(error instanceof Error ? error.message : '内容加载失败')) }
   useEffect(() => {
@@ -40,11 +40,18 @@ export function WorkspaceHomePage(props: HomePageProps) {
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', key) }
   }, [menuId])
   if (!authenticated) return <HomePage {...props} />
-  return <div className="flex h-dvh w-full min-w-0 flex-col bg-[#eef4ff] text-slate-900">
-    <header className="app-topbar flex h-14 shrink-0 items-center px-4"><div ref={props.sidebarTriggerRef} onMouseEnter={props.onOpenSidebar} onMouseLeave={props.onScheduleCloseSidebar} className="flex items-center gap-2 px-2 py-1.5"><FishLogo className="h-6 w-7" /><span className="text-base font-bold">小鱼简历</span></div><SidebarTriggerHint triggerRef={props.sidebarTriggerRef} /></header>
+  return <div className="workspace-page-shell flex h-dvh w-full min-w-0 flex-col">
+    <WorkspaceTopbar
+      sidebarOpen={props.sidebarOpen}
+      sidebarTriggerRef={props.sidebarTriggerRef}
+      onOpenSidebar={props.onOpenSidebar}
+      onToggleSidebar={props.onToggleSidebar}
+      onScheduleCloseSidebar={props.onScheduleCloseSidebar}
+      scrolled={scrolled}
+    />
     <div className="relative flex min-h-0 flex-1">
       <Sidebar open={props.sidebarOpen} sidebarRef={props.sidebarRef} onClose={props.onCloseSidebar} onMouseEnter={props.onOpenSidebar} onMouseLeave={props.onScheduleCloseSidebar} onGoHome={() => navigate('/')} onNavigateToApplications={() => navigate('/applications')} onNavigateToAnalytics={() => navigate('/analytics')} onNavigateToMe={() => navigate('/me')} backdropTop={56} />
-      <main className="workspace-home home-login-bg min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-8 sm:px-8 lg:px-12"><div className="mx-auto w-full min-w-0 max-w-[1180px] pb-24">
+      <main onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 8)} className="workspace-home min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-6 sm:px-8 lg:px-12"><div className="mx-auto w-full min-w-0 max-w-[1180px] pb-24">
         <WorkspaceHeader actions={<button type="button" onClick={() => setManager({})} className="flex shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 sm:px-4"><Plus className="h-4 w-4" />新建批次</button>}>
           <h1 className="flex items-center gap-3 text-[19px] font-bold leading-7 tracking-tight text-slate-800 sm:text-[21px]">求职空间<span className="inline-flex h-6 min-w-6 items-center justify-center rounded-lg border border-blue-100/80 bg-white/80 px-1.5 text-xs font-medium text-slate-500">{batches.length}</span></h1>
         </WorkspaceHeader>

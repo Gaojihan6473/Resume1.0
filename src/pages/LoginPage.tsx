@@ -55,7 +55,7 @@ export function LoginPage() {
   return (
     <div className="key-login-page">
       <header className="key-login-header">
-        <button type="button" className="key-login-brand" onClick={() => navigate('/')} aria-label="小鱼简历，返回首页"><FishLogo /><span>小鱼简历</span></button>
+        <button type="button" className="key-login-brand" onClick={() => navigate('/')} aria-label="小鱼简历，返回首页"><span className="flex h-7 w-7 shrink-0 items-center justify-center"><FishLogo /></span><span>小鱼简历</span></button>
       </header>
       <main className="key-login-main">
         <div className="key-login-panel">

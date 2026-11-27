@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle, XCircle, Info, X } from 'lucide-react'
 
 export type ToastType = 'success' | 'error' | 'info'
@@ -50,8 +51,8 @@ const icons = {
 }
 
 export function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
-  return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+  const content = (
+    <div className="fixed top-4 right-4 z-[11000] flex flex-col gap-2 pointer-events-none">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -69,4 +70,6 @@ export function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; remov
       ))}
     </div>
   )
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body)
 }

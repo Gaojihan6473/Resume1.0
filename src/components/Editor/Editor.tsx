@@ -152,7 +152,7 @@ export function Editor({
     >
       <div className="editor-panel-scale flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 文档身份层：纯粹留给简历标题 + 右侧微缩页数充盈仪 */}
-        <div className="editor-panel-header shrink-0 pb-2 pt-4">
+        <div className="editor-panel-header shrink-0">
           <div className="flex items-center justify-between gap-3">
             <label className="group -ml-1.5 flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-[#f4f8ff] focus-within:bg-[#f0f5ff]">
               <input
@@ -216,7 +216,7 @@ export function Editor({
             <div />
           )}
 
-          <span className="editor-tab-hint hidden truncate pb-2.5 text-[#90a3be] sm:inline">
+          <span className="editor-tab-hint hidden truncate pb-3 text-[#90a3be] sm:inline">
             {activeTab === 'edit' ? '悬停标题行，按住左侧抓手调序' : '右侧审阅建议并与预览联动'}
           </span>
         </div>
@@ -241,7 +241,7 @@ export function Editor({
                     {parseWarnings.map((warning) => <p key={warning}>{warning}</p>)}
                   </div>
                 )}
-                <div className="editor-section-list pb-3">
+                <div className="editor-section-list">
                   <div ref={basicInfoRef}>
                     <BasicInfoEditor
                       expanded={expandedSection === 'basic'}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const SIDEBAR_CLOSE_DELAY_MS = 2000
+const SIDEBAR_CLOSE_DELAY_MS = 300
+const HOVER_TO_CLICK_GRACE_MS = 400
 
 export function useHoverSidebar(closeDelay = SIDEBAR_CLOSE_DELAY_MS) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openedByHoverAtRef = useRef<number>(0)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const sidebarRef = useRef<HTMLDivElement | null>(null)
 
@@ -17,12 +19,28 @@ export function useHoverSidebar(closeDelay = SIDEBAR_CLOSE_DELAY_MS) {
 
   const openSidebar = useCallback(() => {
     clearCloseTimer()
-    setSidebarOpen(true)
+    setSidebarOpen((open) => {
+      if (!open) openedByHoverAtRef.current = Date.now()
+      return true
+    })
   }, [clearCloseTimer])
 
   const closeSidebar = useCallback(() => {
     clearCloseTimer()
+    openedByHoverAtRef.current = 0
     setSidebarOpen(false)
+  }, [clearCloseTimer])
+
+  const toggleSidebar = useCallback(() => {
+    clearCloseTimer()
+    setSidebarOpen((open) => {
+      if (open && Date.now() - openedByHoverAtRef.current < HOVER_TO_CLICK_GRACE_MS) {
+        openedByHoverAtRef.current = 0
+        return true
+      }
+      openedByHoverAtRef.current = 0
+      return !open
+    })
   }, [clearCloseTimer])
 
   const scheduleCloseSidebar = useCallback(() => {
@@ -59,6 +77,7 @@ export function useHoverSidebar(closeDelay = SIDEBAR_CLOSE_DELAY_MS) {
     sidebarRef,
     openSidebar,
     closeSidebar,
+    toggleSidebar,
     scheduleCloseSidebar,
   }
 }

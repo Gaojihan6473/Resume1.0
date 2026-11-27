@@ -73,7 +73,7 @@ export function AppContent() {
   const { checkSession, authInitializing } = useAuthStore()
   const navigate = useNavigate()
   const previewRef = useRef<HTMLDivElement>(null)
-  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, scheduleCloseSidebar } = useHoverSidebar()
+  const { sidebarOpen, triggerRef, sidebarRef, openSidebar, closeSidebar, toggleSidebar, scheduleCloseSidebar } = useHoverSidebar()
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [pendingAction, setPendingAction] = useState<'new' | 'upload' | 'me' | null>(null)
   const [showDirtyModal, setShowDirtyModal] = useState(false)
@@ -172,6 +172,7 @@ export function AppContent() {
                   sidebarTriggerRef={triggerRef}
                   sidebarRef={sidebarRef}
                   onOpenSidebar={openSidebar}
+                  onToggleSidebar={toggleSidebar}
                   onScheduleCloseSidebar={scheduleCloseSidebar}
                   onCloseSidebar={closeSidebar}
                   onAuthRequired={(action) => {
@@ -184,6 +185,7 @@ export function AppContent() {
                   sidebarTriggerRef={triggerRef}
                   sidebarRef={sidebarRef}
                   onOpenSidebar={openSidebar}
+                  onToggleSidebar={toggleSidebar}
                   onScheduleCloseSidebar={scheduleCloseSidebar}
                   onCloseSidebar={closeSidebar}
                   onAuthRequired={(action) => {
@@ -194,8 +196,10 @@ export function AppContent() {
         <Route path="/editor" element={<ProtectedRoute><div className="editor-page-shell flex h-screen flex-col"><EditorWorkspace>                <div className="flex-1 flex flex-col overflow-hidden relative">
                   {/* 工具栏 */}
                   <Toolbar
+                    sidebarOpen={sidebarOpen}
                     sidebarTriggerRef={triggerRef}
                     onOpenSidebar={openSidebar}
+                    onToggleSidebar={toggleSidebar}
                     onScheduleCloseSidebar={scheduleCloseSidebar}
                     onLayoutPopoverChange={setEditorLayoutPopoverOpen}
                     isTriptych={editorTriptych}
@@ -207,10 +211,11 @@ export function AppContent() {
 
                   {/* 侧边栏 + 主内容，放在同一 relative 容器中 */}
                   <div className="flex-1 flex overflow-hidden relative">
-                    {/* 侧边栏：topOffset=0 因为父容器已在 toolbar 下方；backdropTop=56 对齐 toolbar 底部 */}
+                    {/* 侧边栏：悬浮浮岛对齐顶栏左侧触发器 */}
                     <Sidebar
                       open={sidebarOpen}
                       sidebarRef={sidebarRef}
+                      batchId={batchId}
                       onClose={closeSidebar}
                       onMouseEnter={openSidebar}
                       onMouseLeave={scheduleCloseSidebar}

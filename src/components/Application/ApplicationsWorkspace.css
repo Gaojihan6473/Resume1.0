@@ -4,7 +4,6 @@
   color: var(--color-workspace-text);
   background: radial-gradient(ellipse at 6% 25%, #deebff65, transparent 45%), radial-gradient(ellipse at 100% 65%, #f0eaff65, transparent 40%), #f4f8ff;
 }
-.applications-page .app-topbar { background: #f4f8ff; border-bottom: 1px solid #e6edf9; backdrop-filter: none; }
 .applications-workspace {
   position: relative;
   isolation: isolate;
@@ -17,11 +16,11 @@
   width: 100%;
   max-width: none;
   margin: 0 auto;
-  padding: 24px 28px 28px;
+  padding: 12px var(--workspace-topbar-px) 24px;
 }
 @media (min-width: 1480px) {
   .applications-workspace {
-    --application-outer-spacing: clamp(28px, 2vw, 48px);
+    --application-outer-spacing: clamp(24px, 2vw, 48px);
     /* Give the space recovered from both margins entirely to the resume panel. */
     --application-resume-growth: calc(2 * (clamp(28px, 3.5vw, 80px) - var(--application-outer-spacing)));
     grid-template-columns: calc(clamp(320px, 22vw, 480px) + var(--application-resume-growth)) minmax(0, 1fr);

@@ -51,7 +51,7 @@ export function ModuleWrapper({
         onClick={handleToggle}
         onKeyDown={handleHeaderKeyDown}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <span aria-hidden="true" className="editor-static-anchor">
             <span className="editor-static-dot" />
           </span>

@@ -6,7 +6,7 @@ import { useResumeStore } from '../../store/resumeStore'
 import { useAuthStore } from '../../store/authStore'
 import { useResumeAgentSessionStore } from '../../store/resumeAgentSessionStore'
 import { toast } from '../../components/Toast'
-import { SidebarTriggerHint } from '../Sidebar/SidebarTriggerHint'
+import { WorkspaceTopbar } from '../Layout/WorkspaceTopbar'
 import type { StyleSettings } from '../../types/resume'
 import { saveCurrentResumeToCloud } from '../../utils/saveResume'
 import {
@@ -17,15 +17,15 @@ import {
   RotateCcw,
   Save,
   FileDown,
-  ChevronsRight,
   Send,
 } from 'lucide-react'
-import { FishLogo } from '../Brand/FishLogo'
 import '../Editor/EditorWorkspace.css'
 
 interface ToolbarProps {
+  sidebarOpen?: boolean
   sidebarTriggerRef: RefObject<HTMLDivElement | null>
   onOpenSidebar: () => void
+  onToggleSidebar?: () => void
   onScheduleCloseSidebar: () => void
   onAuthRequired?: (action: 'new' | 'upload') => void
   onLayoutPopoverChange?: (open: boolean) => void
@@ -60,8 +60,10 @@ function stepDiscreteValue<T extends number>(options: readonly T[], current: num
 }
 
 export function Toolbar({
+  sidebarOpen = false,
   sidebarTriggerRef,
   onOpenSidebar,
+  onToggleSidebar,
   onScheduleCloseSidebar,
   onLayoutPopoverChange,
   isTriptych = false,
@@ -185,26 +187,16 @@ export function Toolbar({
   const iconSize = 'h-3.5 w-3.5 shrink-0'
 
   return (
-    <header className={`editor-topbar ${isTriptych ? 'is-triptych' : ''} relative z-[100] flex h-14 shrink-0 items-center justify-between gap-3 min-w-0`}>
-      {/* 左侧 Logo 与侧边栏入口：严格保持原样 */}
-      <div
-        ref={sidebarTriggerRef}
-        onMouseEnter={onOpenSidebar}
-        onMouseLeave={onScheduleCloseSidebar}
-        className="-ml-1.5 flex h-full shrink-0 items-center gap-2"
+    <>
+      <WorkspaceTopbar
+        sidebarOpen={sidebarOpen}
+        sidebarTriggerRef={sidebarTriggerRef}
+        onOpenSidebar={onOpenSidebar}
+        onToggleSidebar={onToggleSidebar}
+        onScheduleCloseSidebar={onScheduleCloseSidebar}
+        className={`editor-topbar ${isTriptych ? 'is-triptych' : ''}`.trim()}
       >
-        <div className="flex items-center gap-2 px-1.5 py-1">
-          <div className="flex h-7 w-7 items-center justify-center text-[#243958]">
-            <FishLogo className="h-5 w-6" />
-          </div>
-          <span className="whitespace-nowrap text-sm font-semibold text-[#243958]">小鱼简历</span>
-          <ChevronsRight className="ml-auto h-4 w-4 text-[#8ea2be]" />
-        </div>
-      </div>
-      <SidebarTriggerHint triggerRef={sidebarTriggerRef} />
-
-      {/* 右侧统一操作群：状态 + 排版浮层 | 保存 岗位 | Word 导出 PDF */}
-      <div className="flex min-w-0 items-center gap-1">
+        {/* 右侧统一操作群：状态 + 排版浮层 | 保存 岗位 | Word 导出 PDF */}
         <div
           className="mr-2 hidden items-center gap-1.5 text-[12px] font-medium text-[#5e7698] xl:inline-flex"
           aria-live="polite"
@@ -437,7 +429,7 @@ export function Toolbar({
           <FileDown className={iconSize} />
           <span>{isExportingPdf ? '生成中' : '导出 PDF'}</span>
         </button>
-      </div>
+      </WorkspaceTopbar>
 
       <dialog
         ref={resetStyleDialogRef}
@@ -472,6 +464,6 @@ export function Toolbar({
           </button>
         </div>
       </dialog>
-    </header>
+    </>
   )
 }

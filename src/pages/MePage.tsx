@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
-import { ChevronsRight, Cloud, FileText, Loader2, LogOut, Plus, RefreshCw, Search, User } from 'lucide-react'
+import { Cloud, FileText, Loader2, LogOut, Plus, RefreshCw, Search, User } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useResumeStore } from '../store/resumeStore'
 import { useBatchStore } from '../store/batchStore'
@@ -11,8 +11,7 @@ import { createDefaultResumeData } from '../types/resume'
 import { APPLICATION_STATUS_LABELS } from '../types/application'
 import { Sidebar } from '../components/Sidebar/Sidebar'
 import { useHoverSidebar } from '../components/Sidebar/useHoverSidebar'
-import { SidebarTriggerHint } from '../components/Sidebar/SidebarTriggerHint'
-import { FishLogo } from '../components/Brand/FishLogo'
+import { WorkspaceTopbar } from '../components/Layout/WorkspaceTopbar'
 import { CustomSelect } from '../components/Application/CustomSelect'
 import { BatchSurface } from '../components/Batch/BatchControls'
 import { useLibraryData, type ResourceState } from '../components/Me/useLibraryData'
@@ -64,6 +63,7 @@ function MePageContent({ accountId }: { accountId: string }) {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const restored = useRef<string | null>(null)
   const tab = libraryTab(params.get('tab'))
@@ -211,14 +211,18 @@ function MePageContent({ accountId }: { accountId: string }) {
     if (next >= 0) { event.preventDefault(); changeTab(tabs[next].id); document.getElementById(`library-tab-${tabs[next].id}`)?.focus() }
   }
 
-  return <div className="flex h-dvh min-w-0 flex-col bg-[#eef4ff] text-slate-900">
-    <header className="app-topbar flex h-14 shrink-0 items-center gap-3 px-4">
-      <div ref={sidebar.triggerRef} onMouseEnter={sidebar.openSidebar} onMouseLeave={sidebar.scheduleCloseSidebar} className="flex shrink-0 items-center gap-2 px-2 py-1.5"><FishLogo className="h-6 w-7" /><span className="text-base font-bold text-slate-800">小鱼简历</span><ChevronsRight className="h-4 w-4 text-slate-400" /></div>
-      <SidebarTriggerHint triggerRef={sidebar.triggerRef} />
-    </header>
+  return <div className="workspace-page-shell flex h-dvh min-w-0 flex-col">
+    <WorkspaceTopbar
+      sidebarOpen={sidebar.sidebarOpen}
+      sidebarTriggerRef={sidebar.triggerRef}
+      onOpenSidebar={sidebar.openSidebar}
+      onToggleSidebar={sidebar.toggleSidebar}
+      onScheduleCloseSidebar={sidebar.scheduleCloseSidebar}
+      scrolled={scrolled}
+    />
     <div className="relative flex min-h-0 flex-1">
       <Sidebar open={sidebar.sidebarOpen} sidebarRef={sidebar.sidebarRef} onClose={sidebar.closeSidebar} onMouseEnter={sidebar.openSidebar} onMouseLeave={sidebar.scheduleCloseSidebar} backdropTop={56} onGoHome={() => go('/')} onNavigateToMe={sidebar.closeSidebar} onNavigateToApplications={() => go('/applications')} onNavigateToAnalytics={() => go('/analytics')} />
-      <main ref={mainRef} onScroll={remember} className="workspace-home home-login-bg min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-7 sm:px-8 lg:px-10">
+      <main ref={mainRef} onScroll={(event) => { remember(); setScrolled(event.currentTarget.scrollTop > 8) }} className="workspace-home min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-8 lg:px-10">
         <div className="mx-auto w-full min-w-0 max-w-[1080px] pb-12">
           <section aria-label="账号设置" className="mb-6 flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/95 px-5 py-4"><User className="h-5 w-5 shrink-0 text-blue-400" /><div className="min-w-0 flex-1"><h2 className="text-xs text-slate-400">当前登录账号</h2><p className="mt-1 break-all text-sm text-slate-600">{user?.keyName || user?.email}</p></div><button type="button" disabled={busy || saving} onClick={() => setConfirmSignOut(true)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><LogOut className="h-4 w-4" />退出登录</button></section>
           <div className="mb-4 flex items-center justify-between gap-3"><h2 className="flex min-h-10 items-center gap-3 text-xl font-semibold tracking-tight text-slate-800"><span aria-hidden="true" className="h-8 w-1 shrink-0 rounded-full bg-[#5b7ed1]" />我的资料</h2><button type="button" aria-label="刷新资料" onClick={() => void refresh()} disabled={refreshing || busy} className="flex min-h-9 items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-500 hover:bg-white disabled:opacity-60">{refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}{refreshing ? "刷新中…" : hasError ? "重试加载" : "刷新"}</button></div>

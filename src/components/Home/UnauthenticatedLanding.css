@@ -1,7 +1,8 @@
 .landing { color: var(--color-workspace-text); }
 .landing-main { padding: 0; background: white; }
 .landing-content { max-width: none; }
-.landing-topbar { background: #f4f8ff; border-bottom-color: transparent; backdrop-filter: none; }
+.landing-topbar { background: #f4f8ff; border-bottom-color: transparent; }
+.landing-topbar.is-scrolled { background: rgba(244, 248, 255, 0.88); border-bottom-color: rgba(214, 226, 245, 0.78); }
 .landing-hero { position: relative; overflow: hidden; padding-bottom: 38px; background: radial-gradient(ellipse at 15% 43%, #dceaff90, transparent 43%), radial-gradient(ellipse at 89% 63%, #f5ebff70, transparent 40%), linear-gradient(180deg, #f4f8ff, #f7faff 65%, white); }
 .landing-hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .45; background-image: radial-gradient(#8ba8d22b .8px, transparent .8px); background-size: 24px 24px; mask-image: linear-gradient(180deg, transparent 2%, black 33%, transparent 89%); }
 .landing-copy { position: relative; max-width: 1180px; margin: auto; text-align: center; padding: 45px 24px 0; }

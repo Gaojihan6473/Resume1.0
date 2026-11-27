@@ -47,26 +47,64 @@ export function BatchFields({ value, onChange }: { value: BatchInput; onChange: 
   </div>
 }
 
-export function BatchScopeSelector({ variant = 'default' }: { variant?: 'default' | 'toolbar' }) {
+export function BatchScopeSelector({ variant = 'default' }: { variant?: 'default' | 'toolbar' | 'topbar' }) {
   const [params, setParams] = useSearchParams()
   const { batches, fetch, loaded, error } = useBatchStore()
   const navigate = useNavigate()
   const id = params.get('batch') || ''
   const compact = variant === 'toolbar'
+  const isTopbar = variant === 'topbar'
   useEffect(() => { void fetch() }, [fetch])
+
+  const handleBatchChange = (value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set('batch', value); else next.delete('batch')
+    ;['page', 'resume', 'resumeId', 'applicationId'].forEach((key) => next.delete(key))
+    setParams(next)
+  }
+
+  const options = [
+    { value: '', label: '全部批次' },
+    ...batches.map((batch) => ({ value: batch.id, label: batch.name })),
+    ...(id && !batches.some((batch) => batch.id === id) ? [{ value: id, label: loaded ? '批次已不存在' : '加载中…' }] : []),
+  ]
+
+  if (isTopbar) {
+    return (
+      <div className="flex min-w-0 items-center gap-1.5">
+        {id && (
+          <>
+            <button
+              type="button"
+              onClick={() => navigate(`/batches/${id}`)}
+              aria-label="返回批次详情"
+              title="返回批次详情"
+              className="workspace-top-btn-text"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 text-[#6d82a0]" />
+              <span className="hidden sm:inline">返回批次</span>
+            </button>
+            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#d6e2f5]" />
+          </>
+        )}
+        <CustomSelect
+          ariaLabel="当前批次"
+          value={id}
+          size="sm"
+          icon={<Layers3 className="h-3.5 w-3.5 text-[#326bed]" />}
+          onChange={handleBatchChange}
+          className="topbar-batch-select min-w-0 w-[136px] sm:w-[184px]"
+          options={options}
+        />
+        {error && <button type="button" onClick={() => void fetch()} className="text-xs text-rose-600">加载失败，重试</button>}
+      </div>
+    )
+  }
+
   return <div className={compact ? 'board-batch-scope' : 'flex min-w-0 items-center gap-2 sm:gap-3'}>
     {!compact && id && <button type="button" onClick={() => navigate(`/batches/${id}`)} aria-label="返回批次详情" className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50"><ArrowLeft className="h-4 w-4" /></button>}
     {!compact && <Layers3 className="hidden h-4 w-4 shrink-0 text-blue-500 sm:block" />}
-    <CustomSelect ariaLabel="当前批次" value={id} size={compact ? 'sm' : 'default'} icon={compact ? <Layers3 size={15} /> : undefined} onChange={(value) => {
-      const next = new URLSearchParams(params)
-      if (value) next.set('batch', value); else next.delete('batch')
-      ;['page', 'resume', 'resumeId', 'applicationId'].forEach((key) => next.delete(key))
-      setParams(next)
-    }} className={compact ? `board-filter-select board-batch-select${id ? ' is-filtered' : ''}` : 'min-w-0 w-[132px] sm:w-[200px]'} options={[
-      { value: '', label: '全部批次' },
-      ...batches.map((batch) => ({ value: batch.id, label: batch.name })),
-      ...(id && !batches.some((batch) => batch.id === id) ? [{ value: id, label: loaded ? '批次已不存在' : '加载中…' }] : []),
-    ]} />
+    <CustomSelect ariaLabel="当前批次" value={id} size={compact ? 'sm' : 'default'} icon={compact ? <Layers3 size={15} /> : undefined} onChange={handleBatchChange} className={compact ? `board-filter-select board-batch-select${id ? ' is-filtered' : ''}` : 'min-w-0 w-[132px] sm:w-[200px]'} options={options} />
     {error && <button onClick={() => void fetch()} className="text-xs text-rose-600">加载失败，重试</button>}
   </div>
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Briefcase, Grid2X2, List, Loader2, Search } from 'lucide-react'
 import type { Application, ApplicationStatus } from '../../types/application'
 import { APPLICATION_STATUS_LABELS } from '../../types/application'
@@ -154,14 +155,17 @@ export function ApplicationList({
 
   return (
     <div className="application-jobs-content">
-      {showFloatingLoading ? (
-        <div className="pointer-events-none fixed right-4 top-4 z-[9999] flex flex-col gap-2">
-          <div className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-slate-100/80 bg-white px-4 py-3 shadow-lg backdrop-blur animate-slide-in">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-            <span className="flex-1 text-sm font-medium text-slate-700">同步中...</span>
-          </div>
-        </div>
-      ) : null}
+      {showFloatingLoading && typeof document !== 'undefined'
+        ? createPortal(
+            <div className="pointer-events-none fixed right-4 top-4 z-[11000] flex flex-col gap-2">
+              <div className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-slate-100/80 bg-white px-4 py-3 shadow-lg backdrop-blur animate-slide-in">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                <span className="flex-1 text-sm font-medium text-slate-700">同步中...</span>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <div className="application-panel-heading">
         <div className="application-panel-title"><h1 id="application-jobs-title">我的岗位</h1><span className="application-count" aria-label={`${sortedApplications.length} 个岗位`}>{sortedApplications.length}</span></div>
