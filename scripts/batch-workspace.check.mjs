@@ -456,8 +456,8 @@ try {
   assert.ok(pdfTexts.includes('小鱼'))
   assert.ok(!pdfTexts.includes('默认批次'))
   await page.getByPlaceholder('请输入姓名').fill('修改未保存')
-  await page.getByText('小鱼简历', { exact: true }).hover()
-  await page.getByRole('button', { name: '首页', exact: true }).focus()
+  await page.getByRole('button', { name: '小鱼简历', exact: true }).hover()
+  await page.getByRole('navigation', { name: '主导航' }).getByTitle('返回首页', { exact: true }).focus()
   await page.keyboard.press('Enter')
   await page.getByRole('heading', { name: '有未保存的更改' }).waitFor()
   await page.getByRole('button', { name: '不保存，直接切换' }).click()
@@ -503,8 +503,8 @@ try {
   await page.getByRole('button', { name: '删除荣誉奖项第2条' }).click()
   // First save assigns a draft URL while the pending navigation is blocked.
   // The original target must still be reached after that URL replacement.
-  await page.getByText('小鱼简历', { exact: true }).hover()
-  await page.getByRole('button', { name: '首页', exact: true }).focus()
+  await page.getByRole('button', { name: '小鱼简历', exact: true }).hover()
+  await page.getByRole('navigation', { name: '主导航' }).getByTitle('返回首页', { exact: true }).focus()
   await page.keyboard.press('Enter')
   await page.getByRole('heading', { name: '有未保存的更改' }).waitFor()
   await page.getByRole('button', { name: '保存并切换', exact: true }).click()
